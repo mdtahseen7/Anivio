@@ -5,15 +5,16 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 enum class WatchProgressSource {
-    TRAKT,
-    SIMKL,
-    NUVIO_SYNC;
+    /** On-device progress, optionally mirrored through the app's own cloud sync. */
+    LOCAL,
+    ANILIST,
+    MAL;
 
     val providerId: TrackingProviderId?
         get() = when (this) {
-            TRAKT -> TrackingProviderId.TRAKT
-            SIMKL -> TrackingProviderId.SIMKL
-            NUVIO_SYNC -> null
+            LOCAL -> null
+            ANILIST -> TrackingProviderId.ANILIST
+            MAL -> TrackingProviderId.MAL
         }
 
     companion object {
@@ -22,8 +23,10 @@ enum class WatchProgressSource {
     }
 }
 
-val DEFAULT_WATCH_PROGRESS_SOURCE: WatchProgressSource = WatchProgressSource.TRAKT
-val DEFAULT_LIBRARY_SOURCE_MODE: LibrarySourceMode = LibrarySourceMode.TRAKT
+/** Local progress is the default: it works before any account is connected. */
+val DEFAULT_WATCH_PROGRESS_SOURCE: WatchProgressSource = WatchProgressSource.LOCAL
+
+val DEFAULT_LIBRARY_SOURCE_MODE: LibrarySourceMode = LibrarySourceMode.LOCAL
 
 fun librarySourceModeFromStorage(value: String?): LibrarySourceMode =
     LibrarySourceMode.entries.firstOrNull { it.name == value } ?: DEFAULT_LIBRARY_SOURCE_MODE
@@ -31,17 +34,17 @@ fun librarySourceModeFromStorage(value: String?): LibrarySourceMode =
 val LibrarySourceMode.providerId: TrackingProviderId?
     get() = when (this) {
         LibrarySourceMode.LOCAL -> null
-        LibrarySourceMode.TRAKT -> TrackingProviderId.TRAKT
-        LibrarySourceMode.SIMKL -> TrackingProviderId.SIMKL
+        LibrarySourceMode.ANILIST -> TrackingProviderId.ANILIST
+        LibrarySourceMode.MAL -> TrackingProviderId.MAL
     }
 
 fun effectiveWatchProgressSource(
     requestedSource: WatchProgressSource,
     isProviderAuthenticated: (TrackingProviderId) -> Boolean,
 ): WatchProgressSource {
-    val providerId = requestedSource.providerId ?: return WatchProgressSource.NUVIO_SYNC
+    val providerId = requestedSource.providerId ?: return WatchProgressSource.LOCAL
     return requestedSource.takeIf { isProviderAuthenticated(providerId) }
-        ?: WatchProgressSource.NUVIO_SYNC
+        ?: WatchProgressSource.LOCAL
 }
 
 fun effectiveLibrarySourceMode(

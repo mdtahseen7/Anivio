@@ -48,6 +48,10 @@ data class DiscoverUiState(
     val consecutiveDuplicatePages: Int = 0,
     val emptyStateReason: DiscoverEmptyStateReason? = null,
     val errorMessage: String? = null,
+    /** Discrete paging state. Unused by the addon-backed discover, which scrolls instead. */
+    val currentPage: Int = 1,
+    val hasPreviousPage: Boolean = false,
+    val hasNextPage: Boolean = false,
 ) {
     val selectedCatalog: DiscoverCatalogOption?
         get() = catalogOptions.firstOrNull { it.key == selectedCatalogKey }

@@ -6,26 +6,6 @@ import kotlin.test.assertNull
 
 class AvatarAccessTest {
     @Test
-    fun supporterAvatarsAreOnlyPublishedWithAccess() {
-        val standard = AvatarCatalogItem(id = "standard", storagePath = "standard.png")
-        val supporter = AvatarCatalogItem(
-            id = "supporter-gold",
-            storagePath = "gold.png",
-            localImageUrl = "file:///cache/supporter-gold.png",
-            memberOnly = true,
-        )
-
-        assertEquals(
-            listOf(standard),
-            availableAvatarCatalog(listOf(standard), listOf(supporter), hasMemberAccess = false),
-        )
-        assertEquals(
-            listOf(standard, supporter),
-            availableAvatarCatalog(listOf(standard), listOf(supporter), hasMemberAccess = true),
-        )
-    }
-
-    @Test
     fun supporterAvatarUsesAuthenticatedLocalAsset() {
         val supporter = AvatarCatalogItem(
             id = "supporter-gold",

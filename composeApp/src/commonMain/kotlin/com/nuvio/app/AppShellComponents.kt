@@ -49,6 +49,7 @@ import com.nuvio.app.features.library.LibrarySortOption
 import com.nuvio.app.features.profiles.NuvioProfile
 import com.nuvio.app.features.profiles.ProfileBackgroundBackdrop
 import com.nuvio.app.features.profiles.ProfileSwitcherTab
+import com.nuvio.app.features.search.DiscoverScreen
 import com.nuvio.app.features.search.SearchScreen
 import com.nuvio.app.features.settings.AppBrandWordmark
 import com.nuvio.app.features.settings.SettingsScreen
@@ -100,6 +101,7 @@ internal data class AppTabState(
 internal data class AppTabRequests(
     val homeScrollToTopRequests: Flow<Unit>,
     val searchScrollToTopRequests: Flow<Unit>,
+    val discoverScrollToTopRequests: Flow<Unit>,
     val libraryScrollToTopRequests: Flow<Unit>,
     val settingsRootActionRequests: Flow<Unit>,
 )
@@ -124,7 +126,8 @@ internal data class AppTabActions(
     val onAddonsSettingsClick: () -> Unit = {},
     val onPluginsSettingsClick: () -> Unit = {},
     val onAccountSettingsClick: () -> Unit = {},
-    val onSupportersContributorsSettingsClick: () -> Unit = {},
+    val onAboutSettingsClick: () -> Unit = {},
+    val onPrivacyPolicySettingsClick: () -> Unit = {},
     val onLicensesAttributionsSettingsClick: () -> Unit = {},
     val onCheckForUpdatesClick: (() -> Unit)? = null,
     val onTestUpdateBannerClick: (() -> Unit)? = null,
@@ -176,12 +179,22 @@ internal fun AppTabHost(
                     )
                 }
 
+                AppScreenTab.Discover -> {
+                    DiscoverScreen(
+                        modifier = Modifier.fillMaxSize(),
+                        scrollToTopRequests = requests.discoverScrollToTopRequests,
+                        onPosterClick = actions.onPosterClick,
+                        onPosterLongClick = actions.onPosterLongClick,
+                    )
+                }
+
                 AppScreenTab.Library -> {
                     LibraryScreen(
                         modifier = Modifier.fillMaxSize(),
                         scrollToTopRequests = requests.libraryScrollToTopRequests,
                         onPosterClick = actions.onLibraryPosterClick,
                         onPosterLongClick = actions.onLibraryPosterLongClick,
+                        onAniListPosterLongClick = actions.onPosterLongClick,
                         onSectionViewAllClick = actions.onLibrarySectionViewAllClick,
                         onCloudFilePlay = actions.onCloudFilePlay,
                         onConnectCloudClick = actions.onConnectCloudClick,
@@ -205,7 +218,8 @@ internal fun AppTabHost(
                         onAddonsClick = actions.onAddonsSettingsClick,
                         onPluginsClick = actions.onPluginsSettingsClick,
                         onAccountClick = actions.onAccountSettingsClick,
-                        onSupportersContributorsClick = actions.onSupportersContributorsSettingsClick,
+                        onAboutClick = actions.onAboutSettingsClick,
+                        onPrivacyPolicyClick = actions.onPrivacyPolicySettingsClick,
                         onLicensesAttributionsClick = actions.onLicensesAttributionsSettingsClick,
                         onCheckForUpdatesClick = actions.onCheckForUpdatesClick,
                         onTestUpdateBannerClick = actions.onTestUpdateBannerClick,

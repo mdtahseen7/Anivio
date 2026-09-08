@@ -128,7 +128,8 @@ import com.nuvio.app.features.settings.HomescreenSettingsScreen
 import com.nuvio.app.features.settings.LicensesAttributionsSettingsScreen
 import com.nuvio.app.features.settings.MetaScreenSettingsScreen
 import com.nuvio.app.features.settings.PluginsSettingsScreen
-import com.nuvio.app.features.settings.SupportersContributorsSettingsScreen
+import com.nuvio.app.features.settings.AboutSettingsScreen
+import com.nuvio.app.features.settings.PrivacyPolicySettingsScreen
 import com.nuvio.app.features.settings.ThemeSettingsRepository
 import com.nuvio.app.features.streams.BingeGroupCacheRepository
 import com.nuvio.app.features.streams.StreamAutoPlayPolicy
@@ -222,6 +223,7 @@ internal fun MainAppContent(
         var searchFocusRequestCount by remember { mutableStateOf(0) }
         val homeScrollToTopRequests = remember { MutableSharedFlow<Unit>(extraBufferCapacity = 1) }
         val searchScrollToTopRequests = remember { MutableSharedFlow<Unit>(extraBufferCapacity = 1) }
+        val discoverScrollToTopRequests = remember { MutableSharedFlow<Unit>(extraBufferCapacity = 1) }
         val searchListState = rememberLazyListState()
         val libraryScrollToTopRequests = remember { MutableSharedFlow<Unit>(extraBufferCapacity = 1) }
         val settingsRootActionRequests = remember { MutableSharedFlow<Unit>(extraBufferCapacity = 1) }
@@ -310,7 +312,8 @@ internal fun MainAppContent(
     val addonsSettingsTitle = stringResource(Res.string.compose_settings_page_addons)
     val pluginsSettingsTitle = stringResource(Res.string.compose_settings_page_plugins)
     val accountSettingsTitle = stringResource(Res.string.compose_settings_page_account)
-    val supportersSettingsTitle = stringResource(Res.string.compose_settings_page_supporters_contributors)
+    val aboutSettingsTitle = stringResource(Res.string.compose_settings_page_about)
+    val privacyPolicySettingsTitle = stringResource(Res.string.compose_settings_page_privacy_policy)
     val licensesSettingsTitle = stringResource(Res.string.compose_settings_page_licenses_attributions)
     val collectionsTitle = stringResource(Res.string.collections_header)
     val newCollectionTitle = stringResource(Res.string.collections_new)
@@ -351,6 +354,7 @@ internal fun MainAppContent(
                 searchScrollToTopRequests.tryEmit(Unit)
             }
             AppScreenTab.Library -> libraryScrollToTopRequests.tryEmit(Unit)
+            AppScreenTab.Discover -> discoverScrollToTopRequests.tryEmit(Unit)
             AppScreenTab.Settings -> settingsRootActionRequests.tryEmit(Unit)
         }
     }
@@ -1067,9 +1071,11 @@ internal fun MainAppContent(
         }
 
         val librarySectionSubtitle = when (libraryUiState.sourceMode) {
-            LibrarySourceMode.LOCAL -> stringResource(Res.string.compose_catalog_subtitle_library)
-            LibrarySourceMode.TRAKT -> stringResource(Res.string.compose_catalog_subtitle_trakt_library)
-            LibrarySourceMode.SIMKL -> stringResource(Res.string.compose_catalog_subtitle_simkl_library)
+            LibrarySourceMode.ANILIST -> stringResource(Res.string.anilist_source_name)
+            // MAL has no library integration yet, so it reads as the local library would.
+            LibrarySourceMode.LOCAL,
+            LibrarySourceMode.MAL,
+            -> stringResource(Res.string.compose_catalog_subtitle_library)
         }
 
         val onLibrarySectionViewAllClick: (LibrarySection, LibrarySortOption) -> Unit = { section, sortOption ->
@@ -1241,6 +1247,7 @@ internal fun MainAppContent(
                         requests = AppTabRequests(
                             homeScrollToTopRequests = homeScrollToTopRequests,
                             searchScrollToTopRequests = searchScrollToTopRequests,
+                discoverScrollToTopRequests = discoverScrollToTopRequests,
                             libraryScrollToTopRequests = libraryScrollToTopRequests,
                             settingsRootActionRequests = settingsRootActionRequests,
                         ),
@@ -1336,10 +1343,13 @@ internal fun MainAppContent(
                                     }
                                 },
                                 onAccountSettingsClick = { navController.navigate(AccountSettingsRoute(accountSettingsTitle)) },
-                                onSupportersContributorsSettingsClick = {
-                                    if (AppFeaturePolicy.supportersContributorsPageEnabled) {
-                                        navController.navigate(SupportersContributorsSettingsRoute(supportersSettingsTitle))
+                                onAboutSettingsClick = {
+                                    if (AppFeaturePolicy.aboutPageEnabled) {
+                                        navController.navigate(AboutSettingsRoute(aboutSettingsTitle))
                                     }
+                                },
+                                onPrivacyPolicySettingsClick = {
+                                    navController.navigate(PrivacyPolicySettingsRoute(privacyPolicySettingsTitle))
                                 },
                                 onLicensesAttributionsSettingsClick = {
                                     navController.navigate(LicensesAttributionsSettingsRoute(licensesSettingsTitle))
@@ -1524,13 +1534,18 @@ internal fun MainAppContent(
                         AccountSettingsScreen(onBack = onBack)
                     }
                 }
-                entry<SupportersContributorsSettingsRoute> { route ->
+                entry<AboutSettingsRoute> { route ->
                     SettingsDestination(route, navController) { onBack ->
-                        if (AppFeaturePolicy.supportersContributorsPageEnabled) {
-                            SupportersContributorsSettingsScreen(onBack = onBack)
+                        if (AppFeaturePolicy.aboutPageEnabled) {
+                            AboutSettingsScreen(onBack = onBack)
                         } else {
                             LaunchedEffect(Unit) { onBack() }
                         }
+                    }
+                }
+                entry<PrivacyPolicySettingsRoute> { route ->
+                    SettingsDestination(route, navController) { onBack ->
+                        PrivacyPolicySettingsScreen(onBack = onBack)
                     }
                 }
                 entry<LicensesAttributionsSettingsRoute> { route ->

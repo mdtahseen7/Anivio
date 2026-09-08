@@ -1,32 +1,20 @@
 package com.nuvio.app.core.tracking
 
-import com.nuvio.app.features.simkl.SimklAuthRepository
-import com.nuvio.app.features.simkl.SimklMutationRepository
-import com.nuvio.app.features.simkl.SimklLibraryRepository
-import com.nuvio.app.features.simkl.SimklProgressRepository
-import com.nuvio.app.features.simkl.SimklTrackingLibraryProvider
-import com.nuvio.app.features.simkl.SimklTrackingProgressProvider
-import com.nuvio.app.features.simkl.SimklWatchedSyncAdapter
-import com.nuvio.app.features.simkl.SimklSyncRepository
+import com.nuvio.app.features.anilist.AniListAuthRepository
+import com.nuvio.app.features.anilist.AniListHistoryWriter
+import com.nuvio.app.features.anilist.AniListListWriter
+import com.nuvio.app.features.anilist.AniListScrobbler
+import com.nuvio.app.features.anilist.AniListTrackingLibraryProvider
+import com.nuvio.app.features.anilist.AniListTrackingProgressProvider
+import com.nuvio.app.features.anilist.AniListWatchedSyncAdapter
 import com.nuvio.app.features.tracking.TrackingProviderRegistry
-import com.nuvio.app.features.trakt.TraktAuthRepository
-import com.nuvio.app.features.trakt.TraktScrobbleRepository
-import com.nuvio.app.features.trakt.TraktTrackingLibraryProvider
-import com.nuvio.app.features.trakt.TraktTrackingProgressProvider
-import com.nuvio.app.features.watching.sync.TraktWatchedSyncAdapter
 
 fun ensureTrackingProvidersRegistered() {
-    TraktAuthRepository.descriptor
-    TraktScrobbleRepository.ensureRegistered()
-    SimklAuthRepository.descriptor
-    SimklSyncRepository.state
-    SimklLibraryRepository.uiState
-    SimklProgressRepository.uiState
-    SimklMutationRepository.ensureRegistered()
-    TrackingProviderRegistry.registerLibraryProvider(TraktTrackingLibraryProvider)
-    TrackingProviderRegistry.registerLibraryProvider(SimklTrackingLibraryProvider)
-    TrackingProviderRegistry.registerWatchedProvider(TraktWatchedSyncAdapter)
-    TrackingProviderRegistry.registerWatchedProvider(SimklWatchedSyncAdapter)
-    TrackingProviderRegistry.registerProgressProvider(TraktTrackingProgressProvider)
-    TrackingProviderRegistry.registerProgressProvider(SimklTrackingProgressProvider)
+    AniListAuthRepository.descriptor
+    TrackingProviderRegistry.registerLibraryProvider(AniListTrackingLibraryProvider)
+    TrackingProviderRegistry.registerWatchedProvider(AniListWatchedSyncAdapter)
+    TrackingProviderRegistry.registerProgressProvider(AniListTrackingProgressProvider)
+    TrackingProviderRegistry.registerListWriter(AniListListWriter)
+    TrackingProviderRegistry.registerHistoryWriter(AniListHistoryWriter)
+    TrackingProviderRegistry.registerScrobbler(AniListScrobbler)
 }

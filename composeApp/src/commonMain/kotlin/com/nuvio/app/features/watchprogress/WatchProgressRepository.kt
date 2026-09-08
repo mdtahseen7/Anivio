@@ -242,7 +242,7 @@ object WatchProgressRepository {
     private var hasLoadedNuvioRemoteProgress = false
     private var currentProfileId: Int = 1
     private var profileGeneration: Long = 0L
-    private var activeSource: WatchProgressSource = WatchProgressSource.NUVIO_SYNC
+    private var activeSource: WatchProgressSource = WatchProgressSource.LOCAL
     private val _activeSourceState = MutableStateFlow(activeSource)
     internal val activeSourceState: StateFlow<WatchProgressSource> = _activeSourceState.asStateFlow()
     private val entriesLock = SynchronizedObject()
@@ -322,7 +322,7 @@ object WatchProgressRepository {
         hasLoadedNuvioRemoteProgress = false
         currentProfileId = 1
         profileGeneration += 1L
-        updateActiveSource(WatchProgressSource.NUVIO_SYNC)
+        updateActiveSource(WatchProgressSource.LOCAL)
         providerMetadataOverlay.clear()
         clearLocalEntries()
         lastSuccessfulPushEpochMs = 0L

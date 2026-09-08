@@ -21,8 +21,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Animation
 import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Button
@@ -35,11 +37,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,73 +47,51 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.core.ui.NuvioLoadingIndicator
 import com.nuvio.app.core.ui.NuvioTokens
 import com.nuvio.app.core.ui.nuvio
-import com.nuvio.app.features.profiles.ProfileRepository
-import com.nuvio.app.features.simkl.SimklAuthError
-import com.nuvio.app.features.simkl.SimklAuthRepository
-import com.nuvio.app.features.simkl.SimklAuthUiState
-import com.nuvio.app.features.simkl.SimklBrandAsset
-import com.nuvio.app.features.simkl.SimklConnectionMode
-import com.nuvio.app.features.simkl.SimklSyncRepository
-import com.nuvio.app.features.simkl.simklBrandPainter
-import com.nuvio.app.features.tracking.TrackingProviderId
-import com.nuvio.app.features.tracking.TrackingRefreshIntent
-import com.nuvio.app.features.trakt.TraktAuthRepository
-import com.nuvio.app.features.trakt.TraktAuthUiState
-import com.nuvio.app.features.trakt.TraktBrandAsset
-import com.nuvio.app.features.trakt.TraktConnectionMode
-import com.nuvio.app.features.trakt.traktBrandPainter
-import com.nuvio.app.features.watchprogress.WatchProgressSourceCoordinator
-import kotlinx.coroutines.launch
+import com.nuvio.app.features.anilist.AniListAuthError
+import com.nuvio.app.features.anilist.AniListAuthRepository
+import com.nuvio.app.features.anilist.AniListAuthUiState
+import com.nuvio.app.features.anilist.AniListConnectionMode
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.action_cancel
-import nuvio.composeapp.generated.resources.settings_simkl_authorization_expired
-import nuvio.composeapp.generated.resources.settings_simkl_authorization_revoked
-import nuvio.composeapp.generated.resources.settings_simkl_connect
-import nuvio.composeapp.generated.resources.settings_simkl_connected_as
-import nuvio.composeapp.generated.resources.settings_simkl_connected_description
-import nuvio.composeapp.generated.resources.settings_simkl_default_user
-import nuvio.composeapp.generated.resources.settings_simkl_disconnect
-import nuvio.composeapp.generated.resources.settings_simkl_disconnect_description
-import nuvio.composeapp.generated.resources.settings_simkl_finish_sign_in
-import nuvio.composeapp.generated.resources.settings_simkl_invalid_callback
-import nuvio.composeapp.generated.resources.settings_simkl_missing_credentials
-import nuvio.composeapp.generated.resources.settings_simkl_open_login
-import nuvio.composeapp.generated.resources.settings_simkl_sign_in_description
-import nuvio.composeapp.generated.resources.settings_simkl_sign_in_failed
-import nuvio.composeapp.generated.resources.settings_simkl_sync_info_action
-import nuvio.composeapp.generated.resources.settings_simkl_sync_now
-import nuvio.composeapp.generated.resources.settings_simkl_visit
-import nuvio.composeapp.generated.resources.settings_tracking_approval_redirect
+import nuvio.composeapp.generated.resources.rating_mal
+import nuvio.composeapp.generated.resources.settings_anilist_approval_redirect
+import nuvio.composeapp.generated.resources.settings_anilist_authorization_expired
+import nuvio.composeapp.generated.resources.settings_anilist_authorization_revoked
+import nuvio.composeapp.generated.resources.settings_anilist_connect
+import nuvio.composeapp.generated.resources.settings_anilist_connected_as
+import nuvio.composeapp.generated.resources.settings_anilist_connected_description
+import nuvio.composeapp.generated.resources.settings_anilist_default_user
+import nuvio.composeapp.generated.resources.settings_anilist_disconnect
+import nuvio.composeapp.generated.resources.settings_anilist_finish_sign_in
+import nuvio.composeapp.generated.resources.settings_anilist_invalid_callback
+import nuvio.composeapp.generated.resources.settings_anilist_missing_credentials
+import nuvio.composeapp.generated.resources.settings_anilist_open_login
+import nuvio.composeapp.generated.resources.settings_anilist_sign_in_description
+import nuvio.composeapp.generated.resources.settings_anilist_sign_in_failed
+import nuvio.composeapp.generated.resources.settings_anilist_website
+import nuvio.composeapp.generated.resources.settings_mal_coming_soon
+import nuvio.composeapp.generated.resources.settings_mal_connect
+import nuvio.composeapp.generated.resources.settings_mal_sign_in_description
+import nuvio.composeapp.generated.resources.settings_mal_website
 import nuvio.composeapp.generated.resources.settings_tracking_disconnect_description
 import nuvio.composeapp.generated.resources.settings_tracking_disconnect_title
-import nuvio.composeapp.generated.resources.settings_trakt_approval_redirect
-import nuvio.composeapp.generated.resources.settings_trakt_connect
-import nuvio.composeapp.generated.resources.settings_trakt_connected_as
-import nuvio.composeapp.generated.resources.settings_trakt_default_user
-import nuvio.composeapp.generated.resources.settings_trakt_disconnect
-import nuvio.composeapp.generated.resources.settings_trakt_disconnect_description
-import nuvio.composeapp.generated.resources.settings_trakt_failed_open_browser
-import nuvio.composeapp.generated.resources.settings_trakt_finish_sign_in
-import nuvio.composeapp.generated.resources.settings_trakt_missing_credentials
-import nuvio.composeapp.generated.resources.settings_trakt_open_login
-import nuvio.composeapp.generated.resources.settings_trakt_save_actions_description
-import nuvio.composeapp.generated.resources.settings_trakt_sign_in_description
+import nuvio.composeapp.generated.resources.settings_tracking_failed_open_browser
+import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
 internal enum class TrackingBrand(val displayName: String) {
-    NUVIO("Nuvio"),
-    TRAKT("Trakt"),
-    SIMKL("Simkl"),
+    /** The app itself: on-device library and progress. */
+    LOCAL("Anivio"),
+    ANILIST("AniList"),
+    MAL("MyAnimeList"),
     TMDB("TMDB"),
 }
 
@@ -123,184 +101,135 @@ internal enum class TrackingConnectionCardMode {
     CONNECTED,
 }
 
+/**
+ * Whether a brand can currently back the library or watch-progress source. Local is always
+ * available; AniList needs a connected account; MAL has no integration yet.
+ */
 internal fun isTrackingBrandAvailable(
     brand: TrackingBrand,
-    traktConnected: Boolean,
-    simklConnected: Boolean,
+    aniListConnected: Boolean,
 ): Boolean = when (brand) {
-    TrackingBrand.NUVIO,
+    TrackingBrand.LOCAL,
     TrackingBrand.TMDB,
     -> true
-    TrackingBrand.TRAKT -> traktConnected
-    TrackingBrand.SIMKL -> simklConnected
+    TrackingBrand.ANILIST -> aniListConnected
+    TrackingBrand.MAL -> false
 }
 
-internal fun TraktConnectionMode.toTrackingConnectionCardMode(): TrackingConnectionCardMode = when (this) {
-    TraktConnectionMode.DISCONNECTED -> TrackingConnectionCardMode.DISCONNECTED
-    TraktConnectionMode.AWAITING_APPROVAL -> TrackingConnectionCardMode.AWAITING_APPROVAL
-    TraktConnectionMode.CONNECTED -> TrackingConnectionCardMode.CONNECTED
-}
-
-internal fun SimklConnectionMode.toTrackingConnectionCardMode(): TrackingConnectionCardMode = when (this) {
-    SimklConnectionMode.DISCONNECTED -> TrackingConnectionCardMode.DISCONNECTED
-    SimklConnectionMode.AWAITING_APPROVAL -> TrackingConnectionCardMode.AWAITING_APPROVAL
-    SimklConnectionMode.CONNECTED -> TrackingConnectionCardMode.CONNECTED
+internal fun AniListConnectionMode.toTrackingConnectionCardMode(): TrackingConnectionCardMode = when (this) {
+    AniListConnectionMode.DISCONNECTED -> TrackingConnectionCardMode.DISCONNECTED
+    AniListConnectionMode.AWAITING_APPROVAL -> TrackingConnectionCardMode.AWAITING_APPROVAL
+    AniListConnectionMode.CONNECTED -> TrackingConnectionCardMode.CONNECTED
 }
 
 @Composable
 internal fun TrackingProviderCards(
     isTablet: Boolean,
-    traktUiState: TraktAuthUiState,
-    simklUiState: SimklAuthUiState,
+    aniListUiState: AniListAuthUiState,
 ) {
-    val syncState by remember {
-        SimklSyncRepository.ensureLoaded()
-        SimklSyncRepository.state
-    }.collectAsStateWithLifecycle()
-    val scope = rememberCoroutineScope()
-    var showSyncInfo by rememberSaveable { mutableStateOf(false) }
-    val onSimklSyncRequested: () -> Unit = {
-        scope.launch {
-            WatchProgressSourceCoordinator.refreshProviderAndActiveSource(
-                profileId = ProfileRepository.activeProfileId,
-                providerId = TrackingProviderId.SIMKL,
-                refreshProvider = {
-                    SimklSyncRepository.refresh(TrackingRefreshIntent.USER_INITIATED)
-                },
-            )
-        }
-    }
-
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         val useTwoColumns = maxWidth >= 600.dp
-        if (useTwoColumns) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(IntrinsicSize.Min),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                TraktProviderCard(
-                    uiState = traktUiState,
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(if (isTablet) 16.dp else 12.dp),
+        ) {
+            if (useTwoColumns) {
+                Row(
                     modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
-                )
-                SimklProviderCard(
-                    uiState = simklUiState,
-                    isSyncing = syncState.isLoading,
-                    syncErrorMessage = syncState.errorMessage,
-                    onSyncRequested = onSimklSyncRequested,
-                    onInfoRequested = { showSyncInfo = true },
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
-                )
-            }
-        } else {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(if (isTablet) 16.dp else 12.dp),
-            ) {
-                TraktProviderCard(
-                    uiState = traktUiState,
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Min),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    AniListProviderCard(
+                        uiState = aniListUiState,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                    )
+                    MalProviderCard(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                    )
+                }
+            } else {
+                AniListProviderCard(
+                    uiState = aniListUiState,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                SimklProviderCard(
-                    uiState = simklUiState,
-                    isSyncing = syncState.isLoading,
-                    syncErrorMessage = syncState.errorMessage,
-                    onSyncRequested = onSimklSyncRequested,
-                    onInfoRequested = { showSyncInfo = true },
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                MalProviderCard(modifier = Modifier.fillMaxWidth())
             }
         }
-    }
-
-    if (showSyncInfo) {
-        SimklSyncInfoDialog(onDismiss = { showSyncInfo = false })
     }
 }
 
 @Composable
-private fun TraktProviderCard(
-    uiState: TraktAuthUiState,
+private fun AniListProviderCard(
+    uiState: AniListAuthUiState,
     modifier: Modifier,
 ) {
     TrackingProviderCard(
-        brand = TrackingBrand.TRAKT,
+        brand = TrackingBrand.ANILIST,
         mode = uiState.mode.toTrackingConnectionCardMode(),
         credentialsConfigured = uiState.credentialsConfigured,
         isLoading = uiState.isLoading,
         connectedLabel = stringResource(
-            Res.string.settings_trakt_connected_as,
-            uiState.username ?: stringResource(Res.string.settings_trakt_default_user),
+            Res.string.settings_anilist_connected_as,
+            uiState.username ?: stringResource(Res.string.settings_anilist_default_user),
         ),
-        connectedDescription = stringResource(Res.string.settings_trakt_save_actions_description),
-        signInDescription = stringResource(Res.string.settings_trakt_sign_in_description),
-        finishSignInLabel = stringResource(Res.string.settings_trakt_finish_sign_in),
-        approvalDescription = stringResource(Res.string.settings_trakt_approval_redirect),
-        connectLabel = stringResource(Res.string.settings_trakt_connect),
-        openLoginLabel = stringResource(Res.string.settings_trakt_open_login),
-        disconnectLabel = stringResource(Res.string.settings_trakt_disconnect),
-        missingCredentialsMessage = stringResource(Res.string.settings_trakt_missing_credentials),
-        statusMessage = uiState.statusMessage.takeUnless {
-            uiState.mode == TraktConnectionMode.CONNECTED
-        },
-        errorMessage = uiState.errorMessage,
-        onConnectRequested = TraktAuthRepository::onConnectRequested,
+        connectedDescription = stringResource(Res.string.settings_anilist_connected_description),
+        signInDescription = stringResource(Res.string.settings_anilist_sign_in_description),
+        finishSignInLabel = stringResource(Res.string.settings_anilist_finish_sign_in),
+        approvalDescription = stringResource(Res.string.settings_anilist_approval_redirect),
+        connectLabel = stringResource(Res.string.settings_anilist_connect),
+        openLoginLabel = stringResource(Res.string.settings_anilist_open_login),
+        disconnectLabel = stringResource(Res.string.settings_anilist_disconnect),
+        missingCredentialsMessage = stringResource(Res.string.settings_anilist_missing_credentials),
+        errorMessage = aniListErrorMessage(uiState.error),
+        websiteLabel = stringResource(Res.string.settings_anilist_website),
+        websiteUrl = ANILIST_WEBSITE_URL,
+        onConnectRequested = AniListAuthRepository::onConnectRequested,
         onResumeAuthorization = {
-            TraktAuthRepository.pendingAuthorizationUrl()
-                ?: TraktAuthRepository.onConnectRequested()
+            AniListAuthRepository.pendingAuthorizationUrl()
+                ?: AniListAuthRepository.onConnectRequested()
         },
-        onCancelAuthorization = TraktAuthRepository::onCancelAuthorization,
-        onDisconnect = TraktAuthRepository::onDisconnectRequested,
+        onCancelAuthorization = AniListAuthRepository::onCancelAuthorization,
+        onDisconnect = AniListAuthRepository::onDisconnectRequested,
         modifier = modifier,
     )
 }
 
+/**
+ * Placeholder card for MyAnimeList. There is no MAL client yet, so the card sits permanently in the
+ * disconnected state with the connect action disabled — it exists so the integration has a home,
+ * and so the source pickers can list MAL without it appearing out of nowhere later.
+ */
 @Composable
-private fun SimklProviderCard(
-    uiState: SimklAuthUiState,
-    isSyncing: Boolean,
-    syncErrorMessage: String?,
-    onSyncRequested: () -> Unit,
-    onInfoRequested: () -> Unit,
+private fun MalProviderCard(
     modifier: Modifier,
 ) {
     TrackingProviderCard(
-        brand = TrackingBrand.SIMKL,
-        mode = uiState.mode.toTrackingConnectionCardMode(),
-        credentialsConfigured = uiState.credentialsConfigured,
-        isLoading = uiState.isLoading,
-        connectedLabel = stringResource(
-            Res.string.settings_simkl_connected_as,
-            uiState.username ?: stringResource(Res.string.settings_simkl_default_user),
-        ),
-        connectedDescription = stringResource(Res.string.settings_simkl_connected_description),
-        signInDescription = stringResource(Res.string.settings_simkl_sign_in_description),
-        finishSignInLabel = stringResource(Res.string.settings_simkl_finish_sign_in),
-        approvalDescription = stringResource(Res.string.settings_tracking_approval_redirect),
-        connectLabel = stringResource(Res.string.settings_simkl_connect),
-        openLoginLabel = stringResource(Res.string.settings_simkl_open_login),
-        disconnectLabel = stringResource(Res.string.settings_simkl_disconnect),
-        syncLabel = stringResource(Res.string.settings_simkl_sync_now),
-        infoLabel = stringResource(Res.string.settings_simkl_sync_info_action),
-        isSyncing = isSyncing,
-        missingCredentialsMessage = stringResource(Res.string.settings_simkl_missing_credentials),
-        errorMessage = simklErrorMessage(uiState.error) ?: syncErrorMessage,
-        websiteLabel = stringResource(Res.string.settings_simkl_visit),
-        websiteUrl = SIMKL_WEBSITE_URL,
-        onConnectRequested = SimklAuthRepository::onConnectRequested,
-        onResumeAuthorization = {
-            SimklAuthRepository.pendingAuthorizationUrl()
-                ?: SimklAuthRepository.onConnectRequested()
-        },
-        onCancelAuthorization = SimklAuthRepository::onCancelAuthorization,
-        onSyncRequested = onSyncRequested,
-        onInfoRequested = onInfoRequested,
-        onDisconnect = SimklAuthRepository::onDisconnectRequested,
+        brand = TrackingBrand.MAL,
+        mode = TrackingConnectionCardMode.DISCONNECTED,
+        // Never "configured", which is what keeps the connect button disabled and surfaces the
+        // coming-soon note in its place.
+        credentialsConfigured = false,
+        isLoading = false,
+        connectedLabel = "",
+        connectedDescription = "",
+        signInDescription = stringResource(Res.string.settings_mal_sign_in_description),
+        finishSignInLabel = "",
+        approvalDescription = "",
+        connectLabel = stringResource(Res.string.settings_mal_connect),
+        openLoginLabel = "",
+        disconnectLabel = "",
+        missingCredentialsMessage = stringResource(Res.string.settings_mal_coming_soon),
+        websiteLabel = stringResource(Res.string.settings_mal_website),
+        websiteUrl = MAL_WEBSITE_URL,
+        onConnectRequested = { null },
+        onResumeAuthorization = { null },
+        onCancelAuthorization = {},
+        onDisconnect = {},
         modifier = modifier,
     )
 }
@@ -321,9 +250,6 @@ private fun TrackingProviderCard(
     disconnectLabel: String,
     missingCredentialsMessage: String,
     modifier: Modifier = Modifier,
-    syncLabel: String? = null,
-    infoLabel: String? = null,
-    isSyncing: Boolean = false,
     statusMessage: String? = null,
     errorMessage: String? = null,
     websiteLabel: String? = null,
@@ -331,13 +257,11 @@ private fun TrackingProviderCard(
     onConnectRequested: () -> String?,
     onResumeAuthorization: () -> String?,
     onCancelAuthorization: () -> Unit,
-    onSyncRequested: (() -> Unit)? = null,
-    onInfoRequested: (() -> Unit)? = null,
     onDisconnect: () -> Unit,
 ) {
     val tokens = MaterialTheme.nuvio
     val uriHandler = LocalUriHandler.current
-    val failedOpenBrowserMessage = stringResource(Res.string.settings_trakt_failed_open_browser)
+    val failedOpenBrowserMessage = stringResource(Res.string.settings_tracking_failed_open_browser)
     var browserError by rememberSaveable { mutableStateOf(false) }
     var showDisconnectDialog by rememberSaveable { mutableStateOf(false) }
 
@@ -385,15 +309,6 @@ private fun TrackingProviderCard(
                         label = connectedLabel,
                         description = connectedDescription,
                     )
-                    if (syncLabel != null && onSyncRequested != null) {
-                        TrackingBrandPrimaryButton(
-                            label = syncLabel,
-                            loading = isSyncing,
-                            enabled = !isLoading && !isSyncing,
-                            onClick = onSyncRequested,
-                            showSyncIcon = true,
-                        )
-                    }
                 }
 
                 TrackingConnectionCardMode.AWAITING_APPROVAL -> {
@@ -445,7 +360,7 @@ private fun TrackingProviderCard(
                     if (!credentialsConfigured) {
                         TrackingBrandMessage(
                             text = missingCredentialsMessage,
-                            isError = true,
+                            isError = brand != TrackingBrand.MAL,
                         )
                     }
                 }
@@ -463,13 +378,7 @@ private fun TrackingProviderCard(
 
             val hasWebsiteAction = !websiteLabel.isNullOrBlank() && !websiteUrl.isNullOrBlank()
             val hasDisconnectAction = mode == TrackingConnectionCardMode.CONNECTED
-            val hasInfoAction = mode == TrackingConnectionCardMode.CONNECTED &&
-                infoLabel != null && onInfoRequested != null
-            val footerActionCount = listOf(
-                hasWebsiteAction,
-                hasDisconnectAction,
-                hasInfoAction,
-            ).count { it }
+            val footerActionCount = listOf(hasWebsiteAction, hasDisconnectAction).count { it }
             if (footerActionCount > 0) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -495,7 +404,7 @@ private fun TrackingProviderCard(
                         TextButton(
                             onClick = { showDisconnectDialog = true },
                             modifier = if (footerActionCount > 1) Modifier.weight(1.05f) else Modifier,
-                            enabled = !isLoading && !isSyncing,
+                            enabled = !isLoading,
                             contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp),
                             colors = ButtonDefaults.textButtonColors(
                                 contentColor = Color.White.copy(alpha = 0.84f),
@@ -510,21 +419,6 @@ private fun TrackingProviderCard(
                             )
                         }
                     }
-                    if (hasInfoAction) {
-                        TextButton(
-                            onClick = { onInfoRequested?.invoke() },
-                            modifier = if (footerActionCount > 1) Modifier.weight(1.55f) else Modifier,
-                            contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp),
-                            colors = ButtonDefaults.textButtonColors(contentColor = Color.White),
-                        ) {
-                            Text(
-                                text = infoLabel.orEmpty(),
-                                style = MaterialTheme.typography.labelMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
                 }
             }
         }
@@ -533,6 +427,7 @@ private fun TrackingProviderCard(
     if (showDisconnectDialog) {
         TrackingDisconnectDialog(
             brand = brand,
+            disconnectLabel = disconnectLabel,
             onConfirm = {
                 showDisconnectDialog = false
                 onDisconnect()
@@ -571,7 +466,6 @@ private fun TrackingBrandPrimaryButton(
     loading: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
-    showSyncIcon: Boolean = false,
 ) {
     Button(
         onClick = onClick,
@@ -586,18 +480,11 @@ private fun TrackingBrandPrimaryButton(
             disabledContentColor = Color.White.copy(alpha = 0.7f),
         ),
     ) {
-        when {
-            loading -> NuvioLoadingIndicator(
+        if (loading) {
+            NuvioLoadingIndicator(
                 color = Color(0xFF171717),
                 modifier = Modifier.size(18.dp),
             )
-            showSyncIcon -> Icon(
-                imageVector = Icons.Rounded.Sync,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-            )
-        }
-        if (loading || showSyncIcon) {
             Spacer(modifier = Modifier.width(8.dp))
         }
         Text(label)
@@ -627,6 +514,7 @@ private fun TrackingBrandMessage(
 @Composable
 private fun TrackingDisconnectDialog(
     brand: TrackingBrand,
+    disconnectLabel: String,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -650,18 +538,10 @@ private fun TrackingDisconnectDialog(
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text = when (brand) {
-                        TrackingBrand.TRAKT ->
-                            stringResource(Res.string.settings_trakt_disconnect_description)
-                        TrackingBrand.SIMKL ->
-                            stringResource(Res.string.settings_simkl_disconnect_description)
-                        TrackingBrand.NUVIO,
-                        TrackingBrand.TMDB,
-                        -> stringResource(
-                            Res.string.settings_tracking_disconnect_description,
-                            brand.displayName,
-                        )
-                    },
+                    text = stringResource(
+                        Res.string.settings_tracking_disconnect_description,
+                        brand.displayName,
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = tokens.colors.textMuted,
                 )
@@ -680,7 +560,7 @@ private fun TrackingDisconnectDialog(
                             contentColor = MaterialTheme.colorScheme.onError,
                         ),
                     ) {
-                        Text(stringResource(Res.string.settings_trakt_disconnect))
+                        Text(disconnectLabel)
                     }
                 }
             }
@@ -695,25 +575,26 @@ internal fun TrackingBrandGlyph(
     contentDescription: String? = null,
 ) {
     when (brand) {
-        TrackingBrand.TRAKT -> Image(
-            painter = traktBrandPainter(TraktBrandAsset.Glyph),
-            contentDescription = contentDescription,
-            modifier = modifier,
-            contentScale = ContentScale.Fit,
-        )
-        TrackingBrand.SIMKL -> Image(
-            painter = simklBrandPainter(SimklBrandAsset.Glyph),
-            contentDescription = contentDescription,
-            modifier = modifier,
-            contentScale = ContentScale.Fit,
-        )
         TrackingBrand.TMDB -> Image(
             painter = integrationLogoPainter(IntegrationLogo.Tmdb),
             contentDescription = contentDescription,
             modifier = modifier,
             contentScale = ContentScale.Fit,
         )
-        TrackingBrand.NUVIO -> Icon(
+        TrackingBrand.MAL -> Image(
+            painter = painterResource(Res.drawable.rating_mal),
+            contentDescription = contentDescription,
+            modifier = modifier,
+            contentScale = ContentScale.Fit,
+        )
+        // No bundled AniList asset, so use a themed icon rather than hotlinking their mark.
+        TrackingBrand.ANILIST -> Icon(
+            imageVector = Icons.Rounded.Animation,
+            contentDescription = contentDescription,
+            modifier = modifier,
+            tint = AniListBrandAccent,
+        )
+        TrackingBrand.LOCAL -> Icon(
             imageVector = Icons.Rounded.Sync,
             contentDescription = contentDescription,
             modifier = modifier,
@@ -727,58 +608,53 @@ private fun TrackingBrandWordmark(
     brand: TrackingBrand,
     contentDescription: String,
 ) {
-    val painter: Painter = when (brand) {
-        TrackingBrand.TRAKT -> traktBrandPainter(TraktBrandAsset.Wordmark)
-        TrackingBrand.SIMKL -> simklBrandPainter(SimklBrandAsset.Wordmark)
-        TrackingBrand.NUVIO,
+    when (brand) {
+        // Neither AniList nor MAL ships a wordmark we bundle, so set the name in type instead of
+        // leaving the card header empty.
+        TrackingBrand.ANILIST,
+        TrackingBrand.MAL,
+        -> Text(
+            text = brand.displayName,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Black,
+            color = Color.White,
+            modifier = Modifier.height(38.dp).wrapContentHeight(Alignment.CenterVertically),
+        )
+        TrackingBrand.LOCAL,
         TrackingBrand.TMDB,
-        -> return
+        -> Unit
     }
-    Image(
-        painter = painter,
-        contentDescription = contentDescription,
-        modifier = when (brand) {
-            TrackingBrand.TRAKT -> Modifier
-                .width(86.dp)
-                .height(38.dp)
-            TrackingBrand.SIMKL -> Modifier
-                .width(124.dp)
-                .height(30.dp)
-            TrackingBrand.NUVIO,
-            TrackingBrand.TMDB,
-            -> Modifier
-        },
-        contentScale = ContentScale.Fit,
-        alignment = Alignment.CenterStart,
-    )
 }
 
 private fun TrackingBrand.cardBrush(): Brush = when (this) {
-    TrackingBrand.TRAKT -> Brush.linearGradient(
-        colors = listOf(Color(0xFF7D279B), Color(0xFFD61F56), Color(0xFFF22125)),
+    // AniList's own palette: navy ground rising into their signature blue.
+    TrackingBrand.ANILIST -> Brush.linearGradient(
+        colors = listOf(Color(0xFF11161D), Color(0xFF12405F), Color(0xFF02A9FF)),
     )
-    TrackingBrand.SIMKL -> Brush.linearGradient(
-        colors = listOf(Color(0xFF050505), Color(0xFF292929), Color(0xFF111111)),
+    // MyAnimeList's deep blue, dimmed because the card is not actionable yet.
+    TrackingBrand.MAL -> Brush.linearGradient(
+        colors = listOf(Color(0xFF10141C), Color(0xFF1B2740), Color(0xFF2E51A2)),
     )
-    TrackingBrand.NUVIO,
+    TrackingBrand.LOCAL,
     TrackingBrand.TMDB,
     -> Brush.linearGradient(colors = listOf(Color(0xFF242424), Color(0xFF111111)))
 }
 
 @Composable
-private fun simklErrorMessage(error: SimklAuthError?): String? = when (error) {
-    null, SimklAuthError.MISSING_CLIENT_ID -> null
-    SimklAuthError.INVALID_CALLBACK,
-    SimklAuthError.INVALID_CALLBACK_STATE,
-    -> stringResource(Res.string.settings_simkl_invalid_callback)
-    SimklAuthError.AUTHORIZATION_EXPIRED ->
-        stringResource(Res.string.settings_simkl_authorization_expired)
-    SimklAuthError.TOKEN_EXCHANGE_FAILED,
-    SimklAuthError.INVALID_TOKEN_RESPONSE,
-    -> stringResource(Res.string.settings_simkl_sign_in_failed)
-    SimklAuthError.AUTHORIZATION_REVOKED ->
-        stringResource(Res.string.settings_simkl_authorization_revoked)
+private fun aniListErrorMessage(error: AniListAuthError?): String? = when (error) {
+    null, AniListAuthError.MISSING_CLIENT_ID -> null
+    AniListAuthError.INVALID_CALLBACK,
+    AniListAuthError.INVALID_CALLBACK_STATE,
+    -> stringResource(Res.string.settings_anilist_invalid_callback)
+    AniListAuthError.AUTHORIZATION_EXPIRED ->
+        stringResource(Res.string.settings_anilist_authorization_expired)
+    AniListAuthError.VIEWER_LOOKUP_FAILED ->
+        stringResource(Res.string.settings_anilist_sign_in_failed)
+    AniListAuthError.AUTHORIZATION_REVOKED ->
+        stringResource(Res.string.settings_anilist_authorization_revoked)
 }
 
 private val TrackingErrorColor = Color(0xFFFFDAD6)
-private const val SIMKL_WEBSITE_URL = "https://simkl.com"
+private val AniListBrandAccent = Color(0xFF02A9FF)
+private const val ANILIST_WEBSITE_URL = "https://anilist.co"
+private const val MAL_WEBSITE_URL = "https://myanimelist.net"

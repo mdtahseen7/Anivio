@@ -5,11 +5,22 @@ import com.nuvio.app.features.addons.AddonCatalog
 import com.nuvio.app.features.addons.AddonManifest
 import com.nuvio.app.features.addons.ManagedAddon
 import com.nuvio.app.features.addons.enabledAddons
+import com.nuvio.app.features.anilist.aniListCatalogRefreshSignature
+import com.nuvio.app.features.anilist.buildAniListCatalogDefinitions
 import com.nuvio.app.features.catalog.supportsPagination
 import kotlinx.coroutines.runBlocking
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.home_catalog_default_title
 import org.jetbrains.compose.resources.getString
+
+/** Where a home row's items come from. */
+enum class HomeCatalogSource {
+    /** A Stremio-protocol addon catalog, fetched over [HomeCatalogDefinition.manifestUrl]. */
+    ADDON,
+
+    /** AniList, queried directly by the app — no addon required. */
+    ANILIST,
+}
 
 data class HomeCatalogDefinition(
     val key: String,
@@ -21,6 +32,9 @@ data class HomeCatalogDefinition(
     val catalogId: String,
     val supportsPagination: Boolean,
     val descriptorSignature: String,
+    val source: HomeCatalogSource = HomeCatalogSource.ADDON,
+    /** Whether this row seeds the hero carousel before the user has expressed a preference. */
+    val defaultHeroSourceEnabled: Boolean = true,
 ) {
     val cacheKey: String
         get() = "$key|$descriptorSignature"
@@ -29,15 +43,25 @@ data class HomeCatalogDefinition(
         if (showCatalogType) defaultTitle else catalogName
 }
 
+/**
+ * Every home row: AniList first so it leads the home screen on a fresh install, then whatever
+ * addon catalogs the user has installed. Distinct by key, so an addon whose manifest id happened to
+ * be `anilist` could not shadow a built-in row.
+ */
+fun buildAllHomeCatalogDefinitions(addons: List<ManagedAddon>): List<HomeCatalogDefinition> =
+    (buildAniListCatalogDefinitions() + buildHomeCatalogDefinitions(addons))
+        .distinctBy(HomeCatalogDefinition::key)
+
 fun buildHomeCatalogRefreshSignature(addons: List<ManagedAddon>): List<String> =
-    addons.enabledAddons().mapNotNull { addon ->
-        val manifest = addon.manifest ?: return@mapNotNull null
-        addon to manifest
-    }.flatMap { (addon, manifest) ->
-        manifest.catalogs.map { catalog ->
-            buildHomeCatalogDescriptorSignature(addon, manifest, catalog)
-        }
-    }.sorted()
+    listOf(aniListCatalogRefreshSignature()) +
+        addons.enabledAddons().mapNotNull { addon ->
+            val manifest = addon.manifest ?: return@mapNotNull null
+            addon to manifest
+        }.flatMap { (addon, manifest) ->
+            manifest.catalogs.map { catalog ->
+                buildHomeCatalogDescriptorSignature(addon, manifest, catalog)
+            }
+        }.sorted()
 
 fun buildHomeCatalogDefinitions(addons: List<ManagedAddon>): List<HomeCatalogDefinition> =
     addons.enabledAddons().mapNotNull { addon ->

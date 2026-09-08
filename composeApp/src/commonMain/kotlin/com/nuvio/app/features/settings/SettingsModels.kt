@@ -28,7 +28,8 @@ import nuvio.composeapp.generated.resources.compose_settings_page_plugins
 import nuvio.composeapp.generated.resources.compose_settings_page_poster_customization
 import nuvio.composeapp.generated.resources.compose_settings_page_root
 import nuvio.composeapp.generated.resources.compose_settings_page_streams
-import nuvio.composeapp.generated.resources.compose_settings_page_supporters_contributors
+import nuvio.composeapp.generated.resources.compose_settings_page_about
+import nuvio.composeapp.generated.resources.compose_settings_page_privacy_policy
 import nuvio.composeapp.generated.resources.compose_settings_page_tmdb_enrichment
 import nuvio.composeapp.generated.resources.compose_settings_page_trakt
 import nuvio.composeapp.generated.resources.compose_settings_page_tracking
@@ -60,8 +61,13 @@ internal enum class SettingsPage(
         category = SettingsCategory.Account,
         parentPage = Root,
     ),
-    SupportersContributors(
-        titleRes = Res.string.compose_settings_page_supporters_contributors,
+    About(
+        titleRes = Res.string.compose_settings_page_about,
+        category = SettingsCategory.About,
+        parentPage = Root,
+    ),
+    PrivacyPolicy(
+        titleRes = Res.string.compose_settings_page_privacy_policy,
         category = SettingsCategory.About,
         parentPage = Root,
     ),

@@ -139,6 +139,8 @@ fun NuvioScreenHeader(
     modifier: Modifier = Modifier,
     includeStatusBarPadding: Boolean = true,
     topPadding: Dp? = null,
+    /** Overrides the opaque strip painted behind the title. Null keeps the theme background. */
+    backgroundColor: Color? = null,
     onBack: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
@@ -165,7 +167,7 @@ fun NuvioScreenHeader(
         Row(
             modifier = Modifier
                 .matchParentSize()
-                .background(tokens.colors.background)
+                .background(backgroundColor ?: tokens.colors.background)
                 .nuvioConsumePointerEvents(),
         ) {}
         Row(

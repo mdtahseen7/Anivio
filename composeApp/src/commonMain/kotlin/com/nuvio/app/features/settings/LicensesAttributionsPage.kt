@@ -40,16 +40,25 @@ import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
 private const val TmdbUrl = "https://www.themoviedb.org"
+private const val AniListUrl = "https://anilist.co"
+private const val AniZipUrl = "https://ani.zip"
+private const val KitsuUrl = "https://kitsu.app"
+private const val FanartUrl = "https://fanart.tv"
+private const val TvdbUrl = "https://thetvdb.com"
 private const val ImdbDatasetsUrl = "https://developer.imdb.com/non-commercial-datasets/"
-private const val TraktUrl = "https://trakt.tv"
-private const val SimklUrl = "https://simkl.com"
 private const val PremiumizeUrl = "https://www.premiumize.me"
 private const val TorboxUrl = "https://torbox.app"
 private const val MdbListUrl = "https://mdblist.com"
 private const val IntroDbUrl = "https://introdb.app/"
-private const val NuvioRepositoryUrl = "https://github.com/NuvioMedia/NuvioMobile"
 private const val MpvKitUrl = "https://github.com/mpvkit/MPVKit"
 private const val ApacheLicenseUrl = "https://www.apache.org/licenses/LICENSE-2.0"
+
+/**
+ * Several data providers ship no logo we can bundle, so the icon is fetched from the favicon
+ * service instead of adding hand-traced artwork that would misrepresent their brands.
+ */
+private fun faviconUrl(domain: String): String =
+    "https://www.google.com/s2/favicons?domain=$domain&sz=128"
 
 private data class AttributionItem(
     val titleRes: StringResource,
@@ -62,8 +71,8 @@ private data class AttributionItem(
 private data class LicenseItem(
     val titleRes: StringResource,
     val bodyRes: StringResource,
-    val licenseRes: StringResource,
-    val link: String,
+    val licenseRes: StringResource? = null,
+    val link: String? = null,
 )
 
 @Composable
@@ -103,10 +112,16 @@ private fun LicensesAttributionsBody(
             title = stringResource(Res.string.settings_licenses_attributions_section_app),
             isTablet = isTablet,
         ) {
-            LicenseRow(
-                item = appLicenseItem(),
-                isTablet = isTablet,
-            )
+            val appItems = appLicenseItems()
+            appItems.forEachIndexed { index, item ->
+                LicenseRow(
+                    item = item,
+                    isTablet = isTablet,
+                )
+                if (index != appItems.lastIndex) {
+                    PlainStackDivider()
+                }
+            }
         }
 
         PlainSettingsStack(
@@ -138,7 +153,7 @@ private fun LicensesAttributionsBody(
 }
 
 @Composable
-private fun PlainSettingsStack(
+internal fun PlainSettingsStack(
     title: String,
     isTablet: Boolean,
     content: @Composable () -> Unit,
@@ -205,23 +220,75 @@ private fun LicenseRow(
 ) {
     val uriHandler = LocalUriHandler.current
     val itemBody = stringResource(item.bodyRes)
-    val itemLicense = stringResource(item.licenseRes)
+    val itemLicense = item.licenseRes?.let { stringResource(it) }
     val body = buildString {
         append(itemBody)
-        append("\n")
-        append(itemLicense)
+        if (itemLicense != null) {
+            append("\n")
+            append(itemLicense)
+        }
     }
-    LinkedPlainRow(
-        title = stringResource(item.titleRes),
-        body = body,
-        link = item.link,
-        isTablet = isTablet,
-        onOpen = { uriHandler.openUri(item.link) },
-    )
+    val title = stringResource(item.titleRes)
+    val link = item.link
+    if (link == null) {
+        PlainRow(
+            title = title,
+            body = body,
+            isTablet = isTablet,
+        )
+    } else {
+        LinkedPlainRow(
+            title = title,
+            body = body,
+            link = link,
+            isTablet = isTablet,
+            onOpen = { uriHandler.openUri(link) },
+        )
+    }
+}
+
+/** A [LinkedPlainRow] without the trailing link line or the open-in-new affordance. */
+@Composable
+internal fun PlainRow(
+    title: String,
+    body: String,
+    isTablet: Boolean,
+    leading: (@Composable () -> Unit)? = null,
+) {
+    val verticalPadding = if (isTablet) 18.dp else 16.dp
+    val horizontalPadding = if (isTablet) 4.dp else 0.dp
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = horizontalPadding, vertical = verticalPadding),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(if (isTablet) 18.dp else 14.dp),
+    ) {
+        leading?.invoke()
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = body,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 }
 
 @Composable
-private fun LinkedPlainRow(
+internal fun LinkedPlainRow(
     title: String,
     body: String,
     link: String,
@@ -311,7 +378,7 @@ private fun ProviderLogoImage(
 }
 
 @Composable
-private fun PlainStackDivider() {
+internal fun PlainStackDivider() {
     HorizontalDivider(
         thickness = 0.5.dp,
         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.18f),
@@ -320,22 +387,45 @@ private fun PlainStackDivider() {
 
 private fun attributionItems(): List<AttributionItem> = listOf(
     AttributionItem(
+        titleRes = Res.string.settings_licenses_attributions_anilist_title,
+        bodyRes = Res.string.settings_licenses_attributions_anilist_body,
+        logo = null,
+        logoUrl = faviconUrl("anilist.co"),
+        link = AniListUrl,
+    ),
+    AttributionItem(
+        titleRes = Res.string.settings_licenses_attributions_anizip_title,
+        bodyRes = Res.string.settings_licenses_attributions_anizip_body,
+        logo = null,
+        logoUrl = faviconUrl("ani.zip"),
+        link = AniZipUrl,
+    ),
+    AttributionItem(
+        titleRes = Res.string.settings_licenses_attributions_kitsu_title,
+        bodyRes = Res.string.settings_licenses_attributions_kitsu_body,
+        logo = null,
+        logoUrl = faviconUrl("kitsu.app"),
+        link = KitsuUrl,
+    ),
+    AttributionItem(
+        titleRes = Res.string.settings_licenses_attributions_tvdb_title,
+        bodyRes = Res.string.settings_licenses_attributions_tvdb_body,
+        logo = null,
+        logoUrl = faviconUrl("thetvdb.com"),
+        link = TvdbUrl,
+    ),
+    AttributionItem(
+        titleRes = Res.string.settings_licenses_attributions_fanart_title,
+        bodyRes = Res.string.settings_licenses_attributions_fanart_body,
+        logo = null,
+        logoUrl = faviconUrl("fanart.tv"),
+        link = FanartUrl,
+    ),
+    AttributionItem(
         titleRes = Res.string.settings_licenses_attributions_tmdb_title,
         bodyRes = Res.string.settings_licenses_attributions_tmdb_body,
         logo = IntegrationLogo.Tmdb,
         link = TmdbUrl,
-    ),
-    AttributionItem(
-        titleRes = Res.string.settings_licenses_attributions_trakt_title,
-        bodyRes = Res.string.settings_licenses_attributions_trakt_body,
-        logo = IntegrationLogo.Trakt,
-        link = TraktUrl,
-    ),
-    AttributionItem(
-        titleRes = Res.string.settings_licenses_attributions_simkl_title,
-        bodyRes = Res.string.settings_licenses_attributions_simkl_body,
-        logo = IntegrationLogo.Simkl,
-        link = SimklUrl,
     ),
     AttributionItem(
         titleRes = Res.string.settings_licenses_attributions_premiumize_title,
@@ -366,18 +456,17 @@ private fun attributionItems(): List<AttributionItem> = listOf(
     AttributionItem(
         titleRes = Res.string.settings_licenses_attributions_imdb_title,
         bodyRes = Res.string.settings_licenses_attributions_imdb_body,
-        logo = null,
+        logo = IntegrationLogo.Imdb,
         link = ImdbDatasetsUrl,
     ),
 )
 
-private fun appLicenseItem(): LicenseItem =
+private fun appLicenseItems(): List<LicenseItem> = listOf(
     LicenseItem(
-        titleRes = Res.string.settings_licenses_attributions_nuvio_title,
-        bodyRes = Res.string.settings_licenses_attributions_nuvio_body,
-        licenseRes = Res.string.settings_licenses_attributions_nuvio_license,
-        link = NuvioRepositoryUrl,
-    )
+        titleRes = Res.string.settings_licenses_attributions_anivio_title,
+        bodyRes = Res.string.settings_licenses_attributions_anivio_body,
+    ),
+)
 
 private fun platformLicenseItem(): LicenseItem =
     if (isIos) {

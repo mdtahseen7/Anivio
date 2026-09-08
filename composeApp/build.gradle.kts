@@ -40,6 +40,24 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
     @get:Input
     abstract val sentryEnvironment: Property<String>
 
+    @get:Input
+    abstract val fanartApiKey: Property<String>
+
+    @get:Input
+    abstract val tvdbApiKey: Property<String>
+
+    @get:Input
+    abstract val updateGitHubOwner: Property<String>
+
+    @get:Input
+    abstract val updateGitHubRepo: Property<String>
+
+    @get:Input
+    abstract val updateChannel: Property<String>
+
+    @get:Input
+    abstract val updateUserAgent: Property<String>
+
     @TaskAction
     fun generate() {
         val props = Properties()
@@ -61,6 +79,40 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
             )
         }
 
+        outDir.resolve("com/nuvio/app/features/updater").apply {
+            mkdirs()
+            resolve("UpdateChannelConfig.kt").writeText(
+                """
+                |package com.nuvio.app.features.updater
+                |
+                |/**
+                | * Release feed the in-app updater polls. Supplied at build time so the app is not tied to
+                | * any single publisher; a blank owner or repo leaves the updater switched off entirely.
+                | */
+                |object UpdateChannelConfig {
+                |    /** GitHub account or organisation that owns the release repository. */
+                |    const val GITHUB_OWNER = "${updateGitHubOwner.get()}"
+                |
+                |    /** Repository holding the releases and their APK assets. */
+                |    const val GITHUB_REPO = "${updateGitHubRepo.get()}"
+                |
+                |    /**
+                |     * Branch name a release must target, or a marker its tag/title must contain, for the
+                |     * updater to treat it as belonging to this channel. Blank accepts any published release,
+                |     * which is what a single-channel project wants.
+                |     */
+                |    const val CHANNEL = "${updateChannel.get()}"
+                |
+                |    /** Sent as User-Agent on release-feed requests; GitHub rejects requests without one. */
+                |    const val USER_AGENT = "${updateUserAgent.get()}"
+                |
+                |    val isConfigured: Boolean
+                |        get() = GITHUB_OWNER.isNotBlank() && GITHUB_REPO.isNotBlank()
+                |}
+                """.trimMargin()
+            )
+        }
+
         outDir.resolve("com/nuvio/app/core/diagnostics").apply {
             mkdirs()
             resolve("SentryConfig.kt").writeText(
@@ -77,6 +129,60 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
 
         outDir.resolve("com/nuvio/app/features/tmdb/TmdbConfig.kt").delete()
 
+        outDir.resolve("com/nuvio/app/core/anilist").apply {
+            mkdirs()
+            resolve("TvdbConfig.kt").writeText(
+                """
+                |package com.nuvio.app.core.anilist
+                |
+                |object TvdbConfig {
+                |    /** TheTVDB v4 project API key. Blank disables every TVDB lookup. */
+                |    const val API_KEY = "${tvdbApiKey.get()}"
+                |
+                |    val isConfigured: Boolean
+                |        get() = API_KEY.isNotBlank()
+                |}
+                """.trimMargin()
+            )
+        }
+
+        outDir.resolve("com/nuvio/app/core/anilist").apply {
+            mkdirs()
+            resolve("FanartConfig.kt").writeText(
+                """
+                |package com.nuvio.app.core.anilist
+                |
+                |object FanartConfig {
+                |    /** fanart.tv personal API key. Blank disables fanart artwork lookups entirely. */
+                |    const val API_KEY = "${fanartApiKey.get()}"
+                |
+                |    val isConfigured: Boolean
+                |        get() = API_KEY.isNotBlank()
+                |}
+                """.trimMargin()
+            )
+        }
+
+        outDir.resolve("com/nuvio/app/features/anilist").apply {
+            mkdirs()
+            resolve("AniListConfig.kt").writeText(
+                """
+                |package com.nuvio.app.features.anilist
+                |
+                |object AniListConfig {
+                |    /** AniList OAuth client id. Blank leaves the tracking card in a "not configured" state. */
+                |    const val CLIENT_ID = "${props.getProperty("ANILIST_CLIENT_ID", "")}"
+                |
+                |    /** Must match the redirect URL registered on the AniList developer app exactly. */
+                |    const val REDIRECT_URI = "${props.getProperty("ANILIST_REDIRECT_URI", "nuvio://auth/anilist")}"
+                |
+                |    val isConfigured: Boolean
+                |        get() = CLIENT_ID.isNotBlank()
+                |}
+                """.trimMargin()
+            )
+        }
+
         outDir.resolve("com/nuvio/app/features/trakt").apply {
             mkdirs()
             resolve("TraktConfig.kt").writeText(
@@ -92,8 +198,7 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
             )
         }
 
-        outDir.resolve("com/nuvio/app/features/simkl").apply {
-            mkdirs()
+        outDir.resolve("com/nuvio/app/features/simkl").apply {            mkdirs()
             resolve("SimklConfig.kt").writeText(
                 """
                 |package com.nuvio.app.features.simkl
@@ -277,6 +382,13 @@ fun runtimeConfigValue(key: String, fallback: String = ""): String =
         ?: providers.environmentVariable(key).orNull?.trim()?.takeIf { it.isNotBlank() }
         ?: fallback
 
+/**
+ * Reads the first key that has a value, so Anivio-prefixed settings win while the inherited
+ * NUVIO_-prefixed names keep working for anyone with an existing local.properties.
+ */
+fun runtimeConfigValueOf(vararg keys: String, fallback: String = ""): String =
+    keys.firstNotNullOfOrNull { key -> runtimeConfigValue(key).takeIf { it.isNotBlank() } } ?: fallback
+
 fun runtimeConfigBoolean(key: String, default: Boolean): Boolean =
     when (runtimeConfigValue(key).lowercase()) {
         "1", "true", "yes", "y", "on" -> true
@@ -289,10 +401,18 @@ val generateRuntimeConfigs = tasks.register<GenerateRuntimeConfigsTask>("generat
     localPropertiesFile.set(rootProject.layout.projectDirectory.file("local.properties"))
     appVersionName.set(releaseAppVersionName)
     appVersionCode.set(releaseAppVersionCode)
-    supabaseUrl.set(runtimeConfigValue("NUVIO_SUPABASE_URL"))
-    supabaseAnonKey.set(runtimeConfigValue("NUVIO_SUPABASE_ANON_KEY"))
-    supabaseFallbackUrl.set(runtimeConfigValue("NUVIO_SUPABASE_FALLBACK_URL"))
+    supabaseUrl.set(runtimeConfigValueOf("ANIVIO_SUPABASE_URL", "NUVIO_SUPABASE_URL"))
+    supabaseAnonKey.set(runtimeConfigValueOf("ANIVIO_SUPABASE_ANON_KEY", "NUVIO_SUPABASE_ANON_KEY"))
+    supabaseFallbackUrl.set(
+        runtimeConfigValueOf("ANIVIO_SUPABASE_FALLBACK_URL", "NUVIO_SUPABASE_FALLBACK_URL")
+    )
     sentryDsn.set(runtimeConfigValue("SENTRY_DSN"))
+    fanartApiKey.set(runtimeConfigValue("FANART_API_KEY"))
+    tvdbApiKey.set(runtimeConfigValue("TVDB_API_KEY"))
+    updateGitHubOwner.set(runtimeConfigValue("ANIVIO_UPDATE_GITHUB_OWNER"))
+    updateGitHubRepo.set(runtimeConfigValue("ANIVIO_UPDATE_GITHUB_REPO"))
+    updateChannel.set(runtimeConfigValue("ANIVIO_UPDATE_CHANNEL"))
+    updateUserAgent.set(runtimeConfigValue("ANIVIO_UPDATE_USER_AGENT", fallback = "Anivio"))
     sentryEnvironment.set(
         when {
             requestedGradleTasks.any { "benchmark" in it } -> "benchmark"

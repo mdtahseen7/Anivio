@@ -233,26 +233,41 @@ fun ProfileEditScreen(
                     if (avatars.isNotEmpty()) {
                         val avatarSpacing = 10.dp
                         val minAvatarSize = 58.dp
+                        // `groupBy` keeps encounter order, so the catalogue's curated show sequence
+                        // survives into the picker without a second sort here.
+                        val avatarGroups = remember(avatars) { avatars.groupBy { it.category } }
                         BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                             val columns = (((maxWidth + avatarSpacing) / (minAvatarSize + avatarSpacing)).toInt())
                                 .coerceAtLeast(1)
                             val avatarSize = (maxWidth - avatarSpacing * (columns - 1)) / columns
 
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(avatarSpacing),
-                                verticalArrangement = Arrangement.spacedBy(avatarSpacing),
-                                maxItemsInEachRow = columns,
-                            ) {
-                                avatars.forEach { avatar ->
-                                    AvatarChoiceItem(
-                                        avatar = avatar,
-                                        size = avatarSize,
-                                        isSelected = customAvatarUrl == null && avatar.id == selectedAvatarId,
-                                        onClick = {
-                                            avatarUrl = ""
-                                            selectedAvatarId = avatar.id
-                                        },
-                                    )
+                            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                avatarGroups.forEach { (animeLabel, animeAvatars) ->
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Text(
+                                            text = animeLabel,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        FlowRow(
+                                            horizontalArrangement = Arrangement.spacedBy(avatarSpacing),
+                                            verticalArrangement = Arrangement.spacedBy(avatarSpacing),
+                                            maxItemsInEachRow = columns,
+                                        ) {
+                                            animeAvatars.forEach { avatar ->
+                                                AvatarChoiceItem(
+                                                    avatar = avatar,
+                                                    size = avatarSize,
+                                                    isSelected = customAvatarUrl == null &&
+                                                        avatar.id == selectedAvatarId,
+                                                    onClick = {
+                                                        avatarUrl = ""
+                                                        selectedAvatarId = avatar.id
+                                                    },
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }

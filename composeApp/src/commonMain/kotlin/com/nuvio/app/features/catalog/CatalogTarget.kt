@@ -30,6 +30,19 @@ sealed interface CatalogTarget {
         override val contentType: String,
         override val supportsPagination: Boolean = false,
     ) : CatalogTarget
+
+    /**
+     * A built-in AniList row, queried by the app rather than served by an addon.
+     *
+     * [searchQuery] turns this into a paginating search target: when set, [catalogId] names the
+     * content type to search rather than one of the fixed catalogs.
+     */
+    data class AniList(
+        val catalogId: String,
+        override val contentType: String,
+        override val supportsPagination: Boolean = true,
+        val searchQuery: String? = null,
+    ) : CatalogTarget
 }
 
 @Serializable

@@ -196,7 +196,7 @@ fun HomeHeroSection(
                 ) {
                     visiblePages.forEach { layer ->
                         AsyncImage(
-                            model = items[layer.page].banner ?: items[layer.page].poster,
+                            model = items[layer.page].poster ?: items[layer.page].banner,
                             contentDescription = items[layer.page].name,
                             modifier = Modifier
                                 .fillMaxSize()

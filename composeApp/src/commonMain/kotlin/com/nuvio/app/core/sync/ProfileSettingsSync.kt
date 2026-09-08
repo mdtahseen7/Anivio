@@ -27,10 +27,8 @@ import com.nuvio.app.features.streams.StreamBadgeSettingsRepository
 import com.nuvio.app.features.streams.StreamBadgeSettingsStorage
 import com.nuvio.app.features.tmdb.TmdbSettingsStorage
 import com.nuvio.app.features.tmdb.TmdbSettingsRepository
-import com.nuvio.app.features.trakt.TraktCommentsStorage
-import com.nuvio.app.features.trakt.TraktCommentsSettings
-import com.nuvio.app.features.trakt.TraktSettingsStorage
 import com.nuvio.app.features.tracking.TrackingSettingsRepository
+import com.nuvio.app.features.tracking.TrackingSettingsStorage
 import com.nuvio.app.features.watchprogress.ContinueWatchingPreferencesStorage
 import com.nuvio.app.features.watchprogress.ContinueWatchingPreferencesRepository
 import io.github.jan.supabase.postgrest.postgrest
@@ -186,8 +184,7 @@ object ProfileSettingsSync {
             MetaScreenSettingsRepository.uiState.map { "meta" },
             CollectionMobileSettingsRepository.uiState.map { "collection_mobile_settings" },
             ContinueWatchingPreferencesRepository.uiState.map { "continue_watching" },
-            TrackingSettingsRepository.uiState.map { "trakt_settings" },
-            TraktCommentsSettings.enabled.map { "trakt_comments" },
+            TrackingSettingsRepository.uiState.map { "tracking_settings" },
             EpisodeReleaseNotificationsRepository.uiState.map { "episode_release_alerts" },
         )
 
@@ -247,8 +244,7 @@ object ProfileSettingsSync {
                 metaScreenSettingsPayload = MetaScreenSettingsStorage.loadPayload().orEmpty().trim(),
                 collectionMobileSettingsPayload = CollectionMobileSettingsStorage.loadPayload().orEmpty().trim(),
                 continueWatchingSettingsPayload = ContinueWatchingPreferencesStorage.loadPayload().orEmpty().trim(),
-                traktSettingsPayload = TraktSettingsStorage.loadPayload().orEmpty().trim(),
-                traktCommentsSettings = TraktCommentsStorage.exportToSyncPayload(),
+                trackingSettings = TrackingSettingsStorage.exportToSyncPayload(),
                 notificationsSettings = NotificationsSettingsPayload(
                     episodeReleaseAlertsEnabled = EpisodeReleaseNotificationsRepository.uiState.value.isEnabled,
                 ),
@@ -318,11 +314,8 @@ object ProfileSettingsSync {
         ContinueWatchingPreferencesStorage.savePayload(blob.features.continueWatchingSettingsPayload)
         ContinueWatchingPreferencesRepository.onProfileChanged()
 
-        TraktSettingsStorage.savePayload(blob.features.traktSettingsPayload)
+        TrackingSettingsStorage.replaceFromSyncPayload(blob.features.trackingSettings)
         TrackingSettingsRepository.onProfileChanged()
-
-        TraktCommentsStorage.replaceFromSyncPayload(blob.features.traktCommentsSettings)
-        TraktCommentsSettings.onProfileChanged()
 
         EpisodeReleaseNotificationsRepository.applyFromSyncEnabled(blob.features.notificationsSettings.episodeReleaseAlertsEnabled)
     }
@@ -340,7 +333,6 @@ object ProfileSettingsSync {
         CollectionMobileSettingsRepository.ensureLoaded()
         ContinueWatchingPreferencesRepository.ensureLoaded()
         TrackingSettingsRepository.ensureLoaded()
-        TraktCommentsSettings.ensureLoaded()
         EpisodeReleaseNotificationsRepository.ensureLoaded()
     }
 
@@ -370,8 +362,7 @@ private data class MobileProfileSettingsFeatures(
     @SerialName("meta_screen_settings_payload") val metaScreenSettingsPayload: String = "",
     @SerialName("collection_mobile_settings_payload") val collectionMobileSettingsPayload: String = "",
     @SerialName("continue_watching_settings_payload") val continueWatchingSettingsPayload: String = "",
-    @SerialName("trakt_settings_payload") val traktSettingsPayload: String = "",
-    @SerialName("trakt_comments_settings") val traktCommentsSettings: JsonObject = JsonObject(emptyMap()),
+    @SerialName("tracking_settings") val trackingSettings: JsonObject = JsonObject(emptyMap()),
     @SerialName("notifications_settings") val notificationsSettings: NotificationsSettingsPayload = NotificationsSettingsPayload(),
 )
 

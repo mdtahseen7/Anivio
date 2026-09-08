@@ -6,6 +6,8 @@ import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.buildAddonResourceUrl
 import com.nuvio.app.features.addons.enabledAddons
 import com.nuvio.app.features.addons.fetchAddonResponseText
+import com.nuvio.app.features.anilist.AniListMetaSource
+import com.nuvio.app.features.anilist.isAniListId
 import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.home.filterReleasedItems
 import com.nuvio.app.features.mdblist.MdbListMetadataService
@@ -13,11 +15,6 @@ import com.nuvio.app.features.mdblist.MdbListSettingsRepository
 import com.nuvio.app.features.tmdb.TmdbMetadataService
 import com.nuvio.app.features.tmdb.TmdbService
 import com.nuvio.app.features.tmdb.TmdbSettingsRepository
-import com.nuvio.app.features.trakt.TraktAuthRepository
-import com.nuvio.app.features.trakt.TraktConnectionMode
-import com.nuvio.app.features.trakt.TraktRelatedRepository
-import com.nuvio.app.features.tracking.TrackingSettingsRepository
-import com.nuvio.app.features.trakt.shouldUseTraktMoreLikeThis
 import com.nuvio.app.features.watchprogress.CurrentDateProvider
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -87,7 +84,6 @@ object MetaDetailsRepository {
                         requestKey = requestKey,
                         meta = cachedBaseMeta,
                         fallbackItemId = id,
-                        fallbackItemType = type,
                         settings = mdbListSettings,
                         settingsFingerprint = metaScreenSettingsFingerprint,
                     )
@@ -113,6 +109,25 @@ object MetaDetailsRepository {
         _uiState.value = MetaDetailsUiState(isLoading = true)
 
         scope.launch {
+            // AniList ids are served by the built-in source, not by addons. On failure we fall
+            // through to the addon/TMDB path below rather than erroring outright.
+            if (isAniListId(id)) {
+                val aniListResult = withContext(Dispatchers.Default) {
+                    AniListMetaSource.fetchMeta(id = id, type = type)
+                }
+                if (aniListResult != null) {
+                    publishLoadedMeta(
+                        requestKey = requestKey,
+                        meta = aniListResult.meta,
+                        fallbackItemId = aniListResult.externalFallbackId ?: id,
+                        mdbListSettings = mdbListSettings,
+                        metaScreenSettingsFingerprint = metaScreenSettingsFingerprint,
+                    )
+                    return@launch
+                }
+                log.w { "AniList meta lookup failed for id=$id; falling back to addons" }
+            }
+
             val metaLookupId = resolveMetaLookupId(itemId = id, itemType = type)
             val manifests = findReadyMetaManifests(type = type, id = metaLookupId)
 
@@ -123,7 +138,6 @@ object MetaDetailsRepository {
                         requestKey = requestKey,
                         meta = tmdbMeta,
                         fallbackItemId = id,
-                        fallbackItemType = type,
                         mdbListSettings = mdbListSettings,
                         metaScreenSettingsFingerprint = metaScreenSettingsFingerprint,
                     )
@@ -147,7 +161,6 @@ object MetaDetailsRepository {
                         requestKey = requestKey,
                         meta = result,
                         fallbackItemId = metaLookupId,
-                        fallbackItemType = type,
                         mdbListSettings = mdbListSettings,
                         metaScreenSettingsFingerprint = metaScreenSettingsFingerprint,
                     )
@@ -161,7 +174,6 @@ object MetaDetailsRepository {
                     requestKey = requestKey,
                     meta = tmdbMeta,
                     fallbackItemId = id,
-                    fallbackItemType = type,
                     mdbListSettings = mdbListSettings,
                     metaScreenSettingsFingerprint = metaScreenSettingsFingerprint,
                 )
@@ -337,7 +349,6 @@ object MetaDetailsRepository {
         requestKey: String,
         meta: MetaDetails,
         fallbackItemId: String,
-        fallbackItemType: String,
         mdbListSettings: com.nuvio.app.features.mdblist.MdbListSettings,
         metaScreenSettingsFingerprint: String,
     ) {
@@ -359,7 +370,6 @@ object MetaDetailsRepository {
                 requestKey = requestKey,
                 meta = meta,
                 fallbackItemId = fallbackItemId,
-                fallbackItemType = fallbackItemType,
                 settings = mdbListSettings,
                 settingsFingerprint = metaScreenSettingsFingerprint,
             )
@@ -376,7 +386,6 @@ object MetaDetailsRepository {
         requestKey: String,
         meta: MetaDetails,
         fallbackItemId: String,
-        fallbackItemType: String,
         settings: com.nuvio.app.features.mdblist.MdbListSettings,
         settingsFingerprint: String,
     ): MetaDetails {
@@ -387,11 +396,7 @@ object MetaDetailsRepository {
                 settings = settings,
             )
         } ?: meta
-        val enrichedMeta = applyMoreLikeThisSource(
-            meta = mdbListEnrichedMeta,
-            fallbackItemId = fallbackItemId,
-            fallbackItemType = fallbackItemType,
-        )
+        val enrichedMeta = applyMoreLikeThisSource(mdbListEnrichedMeta)
 
         cachedMetaByRequestKey[requestKey] = cachedMetaByRequestKey[requestKey]
             ?.copy(
@@ -407,41 +412,13 @@ object MetaDetailsRepository {
         return enrichedMeta
     }
 
-    private suspend fun applyMoreLikeThisSource(
-        meta: MetaDetails,
-        fallbackItemId: String,
-        fallbackItemType: String,
-    ): MetaDetails {
-        TrackingSettingsRepository.ensureLoaded()
-        TraktAuthRepository.ensureLoaded()
+    private fun applyMoreLikeThisSource(meta: MetaDetails): MetaDetails {
         TmdbSettingsRepository.ensureLoaded()
 
-        val trackingSettings = TrackingSettingsRepository.uiState.value
-        val isTraktAuthenticated = TraktAuthRepository.uiState.value.mode == TraktConnectionMode.CONNECTED
-        val shouldUseTrakt = shouldUseTraktMoreLikeThis(
-            isAuthenticated = isTraktAuthenticated,
-            source = trackingSettings.moreLikeThisSource,
-        ) && supportsMoreLikeThis(meta, fallbackItemType)
-
-        if (shouldUseTrakt) {
-            val items = runCatching {
-                TraktRelatedRepository.getRelated(
-                    meta = meta,
-                    fallbackItemId = fallbackItemId,
-                    fallbackItemType = fallbackItemType,
-                )
-            }.onFailure { error ->
-                log.w { "Failed to load Trakt related titles for ${meta.id}: ${error.message}" }
-            }.getOrDefault(emptyList())
-
-            return meta.copy(
-                moreLikeThis = items,
-                moreLikeThisSource = MoreLikeThisSource.TRAKT.takeIf { items.isNotEmpty() },
-            )
-        }
-
         val tmdbSettings = TmdbSettingsRepository.snapshot()
-        if (!tmdbSettings.enabled || !tmdbSettings.useMoreLikeThis) {
+        // Only clear when there is nothing to show. Recommendations are fetched regardless of the
+        // enrichment toggle now, and wiping ones that were already resolved would undo that.
+        if ((!tmdbSettings.enabled || !tmdbSettings.useMoreLikeThis) && meta.moreLikeThis.isEmpty()) {
             return meta.copy(moreLikeThis = emptyList(), moreLikeThisSource = null)
         }
 
@@ -470,45 +447,25 @@ object MetaDetailsRepository {
     }
 
     private fun shouldApplyMoreLikeThisSource(meta: MetaDetails): Boolean {
-        TrackingSettingsRepository.ensureLoaded()
-        TraktAuthRepository.ensureLoaded()
         TmdbSettingsRepository.ensureLoaded()
 
-        val trackingSettings = TrackingSettingsRepository.uiState.value
-        val isTraktAuthenticated = TraktAuthRepository.uiState.value.mode == TraktConnectionMode.CONNECTED
         val tmdbSettings = TmdbSettingsRepository.snapshot()
-        return shouldUseTraktMoreLikeThis(
-            isAuthenticated = isTraktAuthenticated,
-            source = trackingSettings.moreLikeThisSource,
-        ) || !tmdbSettings.enabled || !tmdbSettings.useMoreLikeThis || meta.moreLikeThisSource == null && meta.moreLikeThis.isNotEmpty()
+        return !tmdbSettings.enabled ||
+            !tmdbSettings.useMoreLikeThis ||
+            meta.moreLikeThisSource == null && meta.moreLikeThis.isNotEmpty()
     }
 
     private fun buildMetaScreenSettingsFingerprint(
         settings: com.nuvio.app.features.mdblist.MdbListSettings,
     ): String {
-        TrackingSettingsRepository.ensureLoaded()
-        TraktAuthRepository.ensureLoaded()
         TmdbSettingsRepository.ensureLoaded()
         val providers = settings.enabledProvidersInPriorityOrder().joinToString(",")
-        val trackingSettings = TrackingSettingsRepository.uiState.value
-        val traktAuthMode = TraktAuthRepository.uiState.value.mode
         val tmdbSettings = TmdbSettingsRepository.snapshot()
         return buildString {
             append("${settings.enabled}:${settings.apiKey.trim()}:$providers")
-            append("|more_like=${trackingSettings.moreLikeThisSource}:$traktAuthMode")
             append("|tmdb=${tmdbSettings.enabled}:${tmdbSettings.useMoreLikeThis}:${tmdbSettings.hasApiKey}:${tmdbSettings.language}")
         }
     }
-
-    private fun supportsMoreLikeThis(meta: MetaDetails, fallbackItemType: String): Boolean =
-        normalizeMoreLikeThisType(meta.type) != null || normalizeMoreLikeThisType(fallbackItemType) != null
-
-    private fun normalizeMoreLikeThisType(value: String?): String? =
-        when (value?.trim()?.lowercase()) {
-            "movie", "film" -> "movie"
-            "series", "show", "tv", "tvshow" -> "series"
-            else -> null
-        }
 
     private fun MetaDetails.withUnreleasedFilter(): MetaDetails {
         if (!HomeCatalogSettingsRepository.snapshot().hideUnreleasedContent) return this

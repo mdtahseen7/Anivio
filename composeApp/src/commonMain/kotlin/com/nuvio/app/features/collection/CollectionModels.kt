@@ -42,20 +42,22 @@ data class CollectionSource(
     val tmdbSourceType: String? = null,
     val title: String? = null,
     val tmdbId: Int? = null,
-    val traktListId: Long? = null,
     val mediaType: String? = null,
     val sortBy: String? = null,
-    val sortHow: String? = null,
     val filters: TmdbCollectionFilters? = null,
 ) {
     val isTmdb: Boolean
         get() = provider.equals("tmdb", ignoreCase = true)
 
-    val isTrakt: Boolean
-        get() = provider.equals("trakt", ignoreCase = true)
+    /**
+     * Addon catalogs are the implicit default provider, so anything else is a source kind this
+     * build cannot resolve and simply gets ignored.
+     */
+    val isAddon: Boolean
+        get() = provider.isBlank() || provider.equals("addon", ignoreCase = true)
 
     fun addonCatalogSource(): CollectionCatalogSource? {
-        if (isTmdb || isTrakt) return null
+        if (!isAddon) return null
         val sourceAddonId = addonId?.takeIf { it.isNotBlank() } ?: return null
         val sourceType = type?.takeIf { it.isNotBlank() } ?: return null
         val sourceCatalogId = catalogId?.takeIf { it.isNotBlank() } ?: return null
@@ -74,17 +76,10 @@ internal fun CollectionSource.catalogRouteKey(): String =
             "tmdb_${tmdbSourceType}_${tmdbId}_${mediaType}_${sortBy}_${filters.hashCode()}"
         }
 
-        isTrakt -> {
-            "trakt_${traktListId}_${mediaType}_${TraktListSort.normalize(sortBy)}_${TraktSortHow.normalize(sortHow)}"
-        }
-
         else -> {
             "addon_${addonId}_${type}_${catalogId}_${genre.orEmpty()}"
         }
     }
-
-internal fun CollectionSource.hasInvalidTraktListId(): Boolean =
-    isTrakt && (traktListId == null || traktListId <= 0L)
 
 @Serializable
 enum class TmdbCollectionSourceType {
@@ -118,36 +113,6 @@ enum class TmdbCollectionSort(val value: String) {
     VOTE_COUNT_DESC("vote_count.desc"),
     RELEASE_DATE_DESC("primary_release_date.desc"),
     FIRST_AIR_DATE_DESC("first_air_date.desc"),
-}
-
-enum class TraktListSort(val value: String) {
-    RANK("rank"),
-    ADDED("added"),
-    TITLE("title"),
-    RELEASED("released"),
-    RUNTIME("runtime"),
-    POPULARITY("popularity"),
-    PERCENTAGE("percentage"),
-    VOTES("votes");
-
-    companion object {
-        fun normalize(value: String?): String {
-            val raw = value?.trim()?.lowercase().orEmpty()
-            return entries.firstOrNull { it.value == raw }?.value ?: RANK.value
-        }
-    }
-}
-
-enum class TraktSortHow(val value: String) {
-    ASC("asc"),
-    DESC("desc");
-
-    companion object {
-        fun normalize(value: String?): String {
-            val raw = value?.trim()?.lowercase().orEmpty()
-            return entries.firstOrNull { it.value == raw }?.value ?: ASC.value
-        }
-    }
 }
 
 @Immutable

@@ -35,6 +35,7 @@ data class HomeCatalogSettingsUiState(
     val heroEnabled: Boolean = true,
     val showCatalogType: Boolean = true,
     val hideUnreleasedContent: Boolean = false,
+    val adultContentEnabled: Boolean = false,
     val items: List<HomeCatalogSettingsItem> = emptyList(),
 ) {
     val signature: String
@@ -64,6 +65,7 @@ internal data class HomeCatalogSettingsSnapshot(
     val heroEnabled: Boolean,
     val showCatalogType: Boolean,
     val hideUnreleasedContent: Boolean,
+    val adultContentEnabled: Boolean,
     val preferences: Map<String, HomeCatalogPreference>,
 )
 
@@ -81,6 +83,7 @@ private data class StoredHomeCatalogSettingsPayload(
     val heroEnabled: Boolean = true,
     val showCatalogType: Boolean = true,
     val hideUnreleasedContent: Boolean = false,
+    val adultContentEnabled: Boolean = false,
     val items: List<StoredHomeCatalogPreference> = emptyList(),
 )
 
@@ -107,6 +110,7 @@ object HomeCatalogSettingsRepository {
     private var heroEnabled = true
     private var showCatalogType = true
     private var hideUnreleasedContent = false
+    private var adultContentEnabled = false
 
     fun onProfileChanged() {
         hasLoaded = false
@@ -114,6 +118,7 @@ object HomeCatalogSettingsRepository {
         heroEnabled = true
         showCatalogType = true
         hideUnreleasedContent = false
+        adultContentEnabled = false
         definitions = emptyList()
         collectionDefinitions = emptyList()
         _uiState.value = HomeCatalogSettingsUiState()
@@ -127,12 +132,13 @@ object HomeCatalogSettingsRepository {
         heroEnabled = true
         showCatalogType = true
         hideUnreleasedContent = false
+        adultContentEnabled = false
         _uiState.value = HomeCatalogSettingsUiState()
     }
 
     fun syncCatalogs(addons: List<ManagedAddon>) {
         ensureLoaded()
-        definitions = buildHomeCatalogDefinitions(addons)
+        definitions = buildAllHomeCatalogDefinitions(addons)
         collectionDefinitions = buildCollectionDefinitions(CollectionRepository.collections.value)
         if (definitions.isEmpty() && collectionDefinitions.isEmpty()) {
             publish()
@@ -160,6 +166,7 @@ object HomeCatalogSettingsRepository {
             heroEnabled = heroEnabled,
             showCatalogType = showCatalogType,
             hideUnreleasedContent = hideUnreleasedContent,
+            adultContentEnabled = adultContentEnabled,
             preferences = preferences.mapValues { (_, value) ->
                 HomeCatalogPreference(
                     customTitle = value.customTitle,
@@ -187,6 +194,22 @@ object HomeCatalogSettingsRepository {
         persist()
         HomeRepository.applyCurrentSettings()
         HomeCatalogSettingsSyncService.triggerPush()
+    }
+
+    /**
+     * Deliberately not part of [exportToSyncPayload]: whether adult titles are visible is a
+     * per-device decision, and pushing it would surface them on another signed-in device.
+     *
+     * Toggling it changes the AniList query text, so the cached rows and Discover pages keyed on the
+     * old filter have to be dropped or the previous results would linger.
+     */
+    fun setAdultContentEnabled(enabled: Boolean) {
+        ensureLoaded()
+        if (adultContentEnabled == enabled) return
+        adultContentEnabled = enabled
+        publish()
+        persist()
+        HomeRepository.applyCurrentSettings()
     }
 
     fun setHideUnreleasedContent(enabled: Boolean) {
@@ -279,6 +302,7 @@ object HomeCatalogSettingsRepository {
             heroEnabled = parsedPayload.heroEnabled
             showCatalogType = parsedPayload.showCatalogType
             hideUnreleasedContent = parsedPayload.hideUnreleasedContent
+            adultContentEnabled = parsedPayload.adultContentEnabled
             preferences = parsedPayload.items.associateBy { it.key }
             publish()
             return
@@ -323,7 +347,7 @@ object HomeCatalogSettingsRepository {
             val heroSourceEnabled = if (entry.isCollection) {
                 false
             } else {
-                (stored?.heroSourceEnabled ?: true) &&
+                (stored?.heroSourceEnabled ?: defaultHeroSourceEnabled(entry.key)) &&
                     enabledHeroSourceCount < HERO_SOURCE_SELECTION_LIMIT
             }
             if (heroSourceEnabled) {
@@ -379,6 +403,7 @@ object HomeCatalogSettingsRepository {
             heroEnabled = heroEnabled,
             showCatalogType = showCatalogType,
             hideUnreleasedContent = hideUnreleasedContent,
+            adultContentEnabled = adultContentEnabled,
             items = items,
         )
     }
@@ -390,6 +415,7 @@ object HomeCatalogSettingsRepository {
                     heroEnabled = heroEnabled,
                     showCatalogType = showCatalogType,
                     hideUnreleasedContent = hideUnreleasedContent,
+                    adultContentEnabled = adultContentEnabled,
                     items = preferences.values.sortedBy { it.order },
                 ),
             ),
@@ -564,11 +590,20 @@ object HomeCatalogSettingsRepository {
             key = key,
             enabled = true,
             heroSourceEnabled = isCatalog &&
+                defaultHeroSourceEnabled(key) &&
                 selectedHeroSourceCount(excludingKey = key) < HERO_SOURCE_SELECTION_LIMIT,
             order = _uiState.value.items.firstOrNull { it.key == key }?.order
                 ?: ((preferences.values.maxOfOrNull { it.order } ?: -1) + 1),
         )
     }
+
+    /**
+     * Whether a row should seed the hero carousel when the user has no stored preference for it.
+     * Addon rows default to true (unchanged); AniList rows opt in individually so the hero comes
+     * from the Trending row rather than whichever two rows happen to be listed first.
+     */
+    private fun defaultHeroSourceEnabled(key: String): Boolean =
+        definitions.firstOrNull { it.key == key }?.defaultHeroSourceEnabled ?: true
 
     private fun knownPreferenceKeys(): Set<String> =
         definitions.mapTo(mutableSetOf()) { it.key }.also { keys ->

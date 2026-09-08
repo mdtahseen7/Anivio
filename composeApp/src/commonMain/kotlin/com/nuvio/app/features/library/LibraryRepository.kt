@@ -4,6 +4,8 @@ import co.touchlab.kermit.Logger
 import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
 import com.nuvio.app.core.tracking.ensureTrackingProvidersRegistered
+import com.nuvio.app.features.anilist.AniListAuthRepository
+import com.nuvio.app.features.anilist.AniListListRepository
 import com.nuvio.app.features.library.sync.LibrarySyncAdapter
 import com.nuvio.app.features.library.sync.SupabaseLibrarySyncAdapter
 import com.nuvio.app.features.library.sync.consumeCursorPages
@@ -64,6 +66,28 @@ object LibraryRepository {
 
     init {
         ensureTrackingProvidersRegistered()
+        // Publish the AniList rows straight off disk so the library is not a screen of skeletons on
+        // every cold start. `ensureLoaded` reads the stored credentials on its way, which is why the
+        // connection collector starts here rather than in its own coroutine: collecting first would
+        // see the pre-load `false` and clear the rows that were just restored.
+        syncScope.launch {
+            AniListListRepository.ensureLoaded()
+            publish()
+            AniListAuthRepository.isAuthenticated.collectLatest { connected ->
+                if (connected) {
+                    AniListListRepository.refresh()
+                } else {
+                    AniListListRepository.clearLocalState()
+                }
+                publish()
+            }
+        }
+        syncScope.launch {
+            AniListListRepository.uiState
+                .map { it.snapshot }
+                .distinctUntilChanged()
+                .collectLatest { publish() }
+        }
         syncScope.launch {
             TrackingProviderRegistry.connectedProviderIds.collectLatest {
                 TrackingProviderRegistry.connectedLibraryProviders().forEach(TrackingLibraryProvider::prepare)
@@ -118,6 +142,15 @@ object LibraryRepository {
     fun onProfileChanged(profileId: Int) {
         val current = localState.snapshot()
         if (profileId == current.token.profileId && current.hasLoaded) return
+
+        // AniList credentials are per profile, so the previous profile's rows must not carry over.
+        // `isAuthenticated` does not change when both profiles are connected, so nothing else would
+        // re-read them.
+        AniListListRepository.clearLocalState()
+        syncScope.launch {
+            AniListListRepository.refresh()
+            publish()
+        }
 
         if (!loadFromDisk(profileId)) return
         TrackingProviderRegistry.libraryProviders().forEach(TrackingLibraryProvider::onProfileChanged)
@@ -582,6 +615,7 @@ object LibraryRepository {
     private fun publish() {
         val localSnapshot = localState.snapshot()
         val sourceMode = effectiveLibrarySourceMode()
+
         activeLibraryProvider(sourceMode)?.let { provider ->
             val providerSnapshot = provider.snapshot()
             val newUiState = LibraryUiState(

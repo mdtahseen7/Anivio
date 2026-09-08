@@ -2,7 +2,10 @@ package com.nuvio.app.features.home
 
 import com.nuvio.app.features.addons.ManagedAddon
 import com.nuvio.app.features.catalog.CatalogTarget
+import kotlinx.serialization.Serializable
 
+/** Serializable so the home rows can be cached on disk between launches (`HomeCatalogCache`). */
+@Serializable
 data class MetaPreview(
     val id: String,
     val type: String,

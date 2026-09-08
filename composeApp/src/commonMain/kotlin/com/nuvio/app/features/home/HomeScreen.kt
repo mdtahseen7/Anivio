@@ -22,6 +22,8 @@ import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
 import com.nuvio.app.core.network.NetworkCondition
 import com.nuvio.app.core.network.NetworkStatusRepository
+import com.nuvio.app.core.anilist.AniListServiceStatus
+import com.nuvio.app.core.ui.AniListUnavailableCard
 import com.nuvio.app.core.ui.LocalNuvioBottomNavigationOverlayPadding
 import com.nuvio.app.core.ui.NuvioScreen
 import com.nuvio.app.core.ui.NuvioNetworkOfflineCard
@@ -31,6 +33,10 @@ import com.nuvio.app.core.ui.rememberPosterCardStyleUiState
 import com.nuvio.app.core.ui.withDuplicateSafeLazyKeys
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.enabledAddons
+import com.nuvio.app.features.anilist.AniListEpisodeThumbnails
+import com.nuvio.app.features.anilist.withAniListEpisodeThumbnails
+import com.nuvio.app.features.anilist.AniListListRepository
+import com.nuvio.app.features.anilist.aniListContinueWatchingItems
 import com.nuvio.app.features.cloud.CloudLibraryContentType
 import com.nuvio.app.features.cloud.CloudLibraryRepository
 import com.nuvio.app.features.cloud.CloudLibraryUiState
@@ -296,6 +302,7 @@ fun HomeScreen(
     }
     val profileState by ProfileRepository.state.collectAsStateWithLifecycle()
     val activeProfileId = profileState.activeProfile?.profileIndex ?: 1
+    val isAniListUnavailable by AniListServiceStatus.isUnavailable.collectAsStateWithLifecycle()
     val cwCacheGeneration by ContinueWatchingEnrichmentCache.generation.collectAsStateWithLifecycle()
     var hasUserScrolledContinueWatching by remember(activeProfileId) { mutableStateOf(false) }
     var hasUserScrolledUpcoming by remember(activeProfileId) { mutableStateOf(false) }
@@ -451,6 +458,11 @@ fun HomeScreen(
         )
     }
 
+    val aniListLists by remember {
+        AniListListRepository.uiState
+    }.collectAsStateWithLifecycle()
+    val aniListEpisodeThumbnails by AniListEpisodeThumbnails.thumbnails.collectAsStateWithLifecycle()
+
     val allContinueWatchingItems = remember(
         visibleContinueWatchingEntries,
         cachedInProgressItems,
@@ -458,8 +470,10 @@ fun HomeScreen(
         nextUpSuppressedSeriesIds,
         continueWatchingPreferences.sortMode,
         cloudLibraryUiState,
+        aniListLists.snapshot,
+        aniListEpisodeThumbnails,
     ) {
-        buildHomeContinueWatchingItems(
+        val localItems = buildHomeContinueWatchingItems(
             visibleEntries = visibleContinueWatchingEntries,
             cachedInProgressByProgressKey = cachedInProgressItems,
             nextUpItemsBySeries = effectivNextUpItems,
@@ -468,6 +482,21 @@ fun HomeScreen(
             todayIsoDate = CurrentDateProvider.todayIsoDate(),
             cloudLibraryUiState = cloudLibraryUiState,
         )
+        // Append the AniList "watching" list, minus anything local progress already covers, so a
+        // show tracked both ways shows up once.
+        localItems + aniListContinueWatchingItems(
+            snapshot = aniListLists.snapshot,
+            excludeParentMetaIds = localItems.mapTo(mutableSetOf()) { it.parentMetaId },
+        ).withAniListEpisodeThumbnails(aniListEpisodeThumbnails)
+    }
+
+    // Episode stills arrive after the cards do, so the row renders on series art and upgrades in
+    // place — the same staging Luna uses on its home screen.
+    LaunchedEffect(allContinueWatchingItems) {
+        AniListEpisodeThumbnails.ensureLoaded()
+        if (AniListEpisodeThumbnails.hasUnresolved(allContinueWatchingItems)) {
+            AniListEpisodeThumbnails.resolve(allContinueWatchingItems)
+        }
     }
     val (continueWatchingItems, upcomingItems) = remember(
         allContinueWatchingItems,
@@ -551,8 +580,13 @@ fun HomeScreen(
         buildHomeCatalogRefreshSignature(enabledAddons)
     }
 
-    LaunchedEffect(catalogRefreshKey) {
-        if (catalogRefreshKey.isEmpty()) return@LaunchedEffect
+    // Keyed on the profile as well as the addon set: switching profiles clears both
+    // HomeCatalogSettingsRepository.definitions and HomeRepository.currentDefinitions, and a second
+    // profile that shares the primary addons produces an identical refresh signature, so keying on
+    // the addons alone left the effect dormant and the home screen permanently empty.
+    LaunchedEffect(catalogRefreshKey, activeProfileId) {
+        // No emptiness guard: the AniList rows are built in, so home must load even when the user
+        // has no addons installed at all.
         HomeCatalogSettingsRepository.syncCatalogs(enabledAddons)
         HomeRepository.refresh(enabledAddons)
     }
@@ -806,7 +840,6 @@ fun HomeScreen(
         }
     }
 
-    val hasActiveAddons = enabledAddons.any { it.manifest != null }
     val showHeroSlot = homeSettingsUiState.heroEnabled
     val isResolvingHeroSources = enabledAddons.any { it.isRefreshing } || homeUiState.isLoading
     val showHeroSkeleton = showHeroSlot &&
@@ -926,29 +959,8 @@ fun HomeScreen(
             }
 
             when {
-                !hasActiveAddons && !hasRenderableCollectionRows -> {
-                    homeContinueWatchingSections(
-                        preferences = continueWatchingPreferences,
-                        continueWatchingItems = continueWatchingItems,
-                        upcomingItems = upcomingItems,
-                        dataSourceKey = effectiveWatchProgressSource,
-                        sectionPadding = homeSectionPadding,
-                        layout = continueWatchingLayout,
-                        continueWatchingListState = continueWatchingListState,
-                        upcomingListState = upcomingListState,
-                        onItemClick = onContinueWatchingClick,
-                        onItemLongPress = onContinueWatchingLongPress,
-                        disintegrationRequest = continueWatchingDisintegrationRequest,
-                    )
-                    item {
-                        HomeEmptyStateCard(
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            title = stringResource(Res.string.compose_search_empty_no_active_addons_title),
-                            message = stringResource(Res.string.home_empty_no_active_addons_message),
-                        )
-                    }
-                }
-
+                // There is no "no active addons" branch any more: the AniList rows are built in,
+                // so an empty home means still-loading or genuinely-failed, both handled below.
                 homeUiState.isLoading && homeUiState.sections.isEmpty() && !hasRenderableCollectionRows -> {
                     homeContinueWatchingSections(
                         preferences = continueWatchingPreferences,
@@ -981,6 +993,19 @@ fun HomeScreen(
                                 onRetry = {
                                     NetworkStatusRepository.requestRefresh(force = true)
                                     HomeRepository.refresh(addonsUiState.addons.enabledAddons(), force = true)
+                                },
+                            )
+                        } else if (isAniListUnavailable) {
+                            // Checked before the generic empty state: every built-in row comes from
+                            // AniList, so an outage there is the reason for the emptiness and the
+                            // "no catalogs" copy would send the user to look at their addons.
+                            AniListUnavailableCard(
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                                onRetry = {
+                                    HomeRepository.refresh(
+                                        addonsUiState.addons.enabledAddons(),
+                                        force = true,
+                                    )
                                 },
                             )
                         } else {

@@ -2,7 +2,7 @@ package com.nuvio.app.core.build
 
 actual object AppFeaturePolicy {
     actual val pluginsEnabled: Boolean = false
-    actual val supportersContributorsPageEnabled: Boolean = true
+    actual val aboutPageEnabled: Boolean = true
     actual val accountDeletionEnabled: Boolean = false
     actual val personalMediaAddonCopyEnabled: Boolean = false
     actual val p2pEnabled: Boolean = false

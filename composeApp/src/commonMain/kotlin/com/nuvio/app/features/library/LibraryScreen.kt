@@ -1,5 +1,13 @@
 package com.nuvio.app.features.library
 
+import androidx.compose.ui.platform.LocalUriHandler
+import com.nuvio.app.features.anilist.ANILIST_MANGA_ID_PREFIX
+import coil3.compose.AsyncImage
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.layout.width
+import com.nuvio.app.features.anilist.AniListAuthRepository
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -58,6 +66,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -83,6 +92,7 @@ import com.nuvio.app.features.cloud.CloudLibraryItemType
 import com.nuvio.app.features.cloud.CloudLibraryRepository
 import com.nuvio.app.features.cloud.CloudLibraryUiState
 import com.nuvio.app.features.debrid.DebridSettingsRepository
+import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.home.components.HomeEmptyStateCard
 import com.nuvio.app.features.home.components.HomePosterCard
 import com.nuvio.app.features.home.components.HomeSkeletonRow
@@ -103,6 +113,11 @@ fun LibraryScreen(
     scrollToTopRequests: Flow<Unit> = emptyFlow(),
     onPosterClick: ((LibraryItem) -> Unit)? = null,
     onPosterLongClick: ((LibraryItem, LibrarySection) -> Unit)? = null,
+    /**
+     * Long-press on an AniList row card. Those rows mirror the home screen's cards rather than
+     * the local library's, so they take home's poster-actions callback instead of the library one.
+     */
+    onAniListPosterLongClick: ((MetaPreview) -> Unit)? = null,
     onSectionViewAllClick: ((LibrarySection, LibrarySortOption) -> Unit)? = null,
     onCloudFilePlay: ((CloudLibraryItem, CloudLibraryFile) -> Unit)? = null,
     onConnectCloudClick: (() -> Unit)? = null,
@@ -126,6 +141,10 @@ fun LibraryScreen(
         LibraryDisplaySettingsRepository.ensureLoaded()
         LibraryDisplaySettingsRepository.uiState
     }.collectAsStateWithLifecycle()
+    val aniListAuth by remember {
+        AniListAuthRepository.ensureLoaded()
+        AniListAuthRepository.uiState
+    }.collectAsStateWithLifecycle()
     val networkStatusUiState by NetworkStatusRepository.uiState.collectAsStateWithLifecycle()
     var observedOfflineState by remember { mutableStateOf(false) }
     var sourceModeName by rememberSaveable { mutableStateOf(LibraryViewMode.Saved.name) }
@@ -148,9 +167,20 @@ fun LibraryScreen(
         selected = displaySettings.sortOption,
         sourceMode = uiState.sourceMode,
     )
-    val sortedSections = remember(uiState.sections, displaySettings.sortOption, uiState.sourceMode) {
+    val aniListSections = remember(uiState.sections) {
+        uiState.sections.filter { section -> section.type.startsWith("anilist:") }
+    }
+    val aniListItemsById = remember(aniListSections) {
+        aniListSections.flatMap(LibrarySection::items).associateBy(LibraryItem::id)
+    }
+    val uriHandler = LocalUriHandler.current
+    val nonAniListSections = remember(uiState.sections) {
+        uiState.sections.filterNot { section -> section.type.startsWith("anilist:") }
+    }
+    val sortedSections = remember(nonAniListSections, displaySettings.sortOption, uiState.sourceMode) {
         sortLibrarySections(
-            sections = uiState.sections,
+            // AniList rows render through aniListLibraryContent, so they must not repeat here.
+            sections = nonAniListSections,
             selected = displaySettings.sortOption,
             sourceMode = uiState.sourceMode,
         )
@@ -245,10 +275,13 @@ fun LibraryScreen(
         ) {
             stickyHeader {
                 Box(modifier = Modifier.fillMaxWidth()) {
+                    // Solid black behind the whole sticky header — title, chips and status-bar
+                    // inset — rather than the theme surface, which is only black in AMOLED mode.
+                    // (This replaced the AniList profile banner backdrop that used to sit here.)
                     Box(
                         modifier = Modifier
                             .matchParentSize()
-                            .background(MaterialTheme.colorScheme.background)
+                            .background(Color.Black)
                             .nuvioConsumePointerEvents(),
                     )
                     androidx.compose.foundation.layout.Column(
@@ -260,12 +293,28 @@ fun LibraryScreen(
                             } else {
                                 when (uiState.sourceMode) {
                                     LibrarySourceMode.LOCAL -> stringResource(Res.string.library_title)
-                                    LibrarySourceMode.TRAKT -> stringResource(Res.string.library_trakt_title)
-                                    LibrarySourceMode.SIMKL -> stringResource(Res.string.library_simkl_title)
+                                    // A tracker-backed library is titled after the tracker. MAL is
+                                    // listed for exhaustiveness; it cannot become active yet.
+                                    LibrarySourceMode.ANILIST,
+                                    LibrarySourceMode.MAL,
+                                    -> stringResource(Res.string.anilist_source_name)
                                 }
                             },
                             modifier = Modifier.padding(horizontal = 16.dp),
+                            backgroundColor = Color.Black,
                             actions = {
+                                aniListAuth.avatarUrl?.takeIf { it.isNotBlank() }?.let { avatar ->
+                                    AsyncImage(
+                                        model = avatar,
+                                        contentDescription = aniListAuth.username,
+                                        modifier = Modifier
+                                            .align(Alignment.CenterVertically)
+                                            .size(36.dp)
+                                            .clip(CircleShape),
+                                        contentScale = ContentScale.Crop,
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                }
                                 if (sourceMode == LibraryViewMode.Saved) {
                                     val targetLayout = if (displaySettings.layoutMode == LibraryLayoutMode.HORIZONTAL) {
                                         LibraryLayoutMode.VERTICAL
@@ -369,11 +418,7 @@ fun LibraryScreen(
                             } else {
                                 HomeEmptyStateCard(
                                     modifier = Modifier.padding(horizontal = 16.dp),
-                                    title = when (uiState.sourceMode) {
-                                        LibrarySourceMode.LOCAL -> stringResource(Res.string.library_load_failed)
-                                        LibrarySourceMode.TRAKT -> stringResource(Res.string.library_trakt_load_failed)
-                                        LibrarySourceMode.SIMKL -> stringResource(Res.string.library_simkl_load_failed)
-                                    },
+                                    title = stringResource(Res.string.library_load_failed),
                                     message = uiState.errorMessage.orEmpty(),
                                     actionLabel = stringResource(Res.string.action_retry),
                                     onActionClick = retryLibraryLoad,
@@ -393,16 +438,8 @@ fun LibraryScreen(
                             } else {
                                 HomeEmptyStateCard(
                                     modifier = Modifier.padding(horizontal = 16.dp),
-                                    title = when (uiState.sourceMode) {
-                                        LibrarySourceMode.LOCAL -> stringResource(Res.string.library_empty_title)
-                                        LibrarySourceMode.TRAKT -> stringResource(Res.string.library_trakt_empty_title)
-                                        LibrarySourceMode.SIMKL -> stringResource(Res.string.library_simkl_empty_title)
-                                    },
-                                    message = when (uiState.sourceMode) {
-                                        LibrarySourceMode.LOCAL -> stringResource(Res.string.library_empty_message)
-                                        LibrarySourceMode.TRAKT -> stringResource(Res.string.library_trakt_empty_message)
-                                        LibrarySourceMode.SIMKL -> stringResource(Res.string.library_simkl_empty_message)
-                                    },
+                                    title = stringResource(Res.string.library_empty_title),
+                                    message = stringResource(Res.string.library_empty_message),
                                 )
                             }
                         }
@@ -426,6 +463,34 @@ fun LibraryScreen(
                                 onSortSelected = LibraryDisplaySettingsRepository::setSortOption,
                                 modifier = libraryContentTransitionModifier()
                                     .padding(horizontal = 16.dp),
+                            )
+                        }
+                        // AniList rows are laid out like the home screen and reuse its row
+                        // component, so the card style and theme options apply to both.
+                        if (aniListSections.isNotEmpty()) {
+                            aniListLibraryContent(
+                                sections = aniListSections,
+                                watchedKeys = watchedUiState.watchedKeys,
+                                fullyWatchedSeriesKeys = fullyWatchedSeriesKeys,
+                                onPosterClick = { preview ->
+                                    val item = aniListItemsById[preview.id]
+                                    when {
+                                        // Manga has no in-app page yet, so it opens on AniList.
+                                        preview.id.startsWith(ANILIST_MANGA_ID_PREFIX) ->
+                                            item?.trackingSourceUrl?.let(uriHandler::openUri)
+                                        item != null -> onPosterClick?.invoke(item)
+                                    }
+                                },
+                                onPosterLongClick = onAniListPosterLongClick?.let { callback ->
+                                    { preview ->
+                                        // Manga has no in-app page, so the poster actions (add to
+                                        // library, mark watched) mean nothing for it -- only the
+                                        // anime rows get the long-press menu.
+                                        if (!preview.id.startsWith(ANILIST_MANGA_ID_PREFIX)) {
+                                            callback(preview)
+                                        }
+                                    }
+                                },
                             )
                         }
                         when (displaySettings.layoutMode) {

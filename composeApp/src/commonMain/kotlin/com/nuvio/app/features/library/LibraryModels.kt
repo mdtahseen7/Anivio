@@ -48,8 +48,10 @@ internal fun librarySectionItemKey(sectionType: String, item: LibraryItem): Stri
 
 enum class LibrarySourceMode {
     LOCAL,
-    TRAKT,
-    SIMKL,
+    ANILIST,
+
+    /** Placeholder: selectable only once the MAL integration exists. */
+    MAL,
 }
 
 data class LibraryUiState(

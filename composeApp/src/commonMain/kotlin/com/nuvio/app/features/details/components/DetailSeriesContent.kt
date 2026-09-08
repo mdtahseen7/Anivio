@@ -278,10 +278,16 @@ fun DetailSeriesContent(
                 },
                 label = "season_episodes",
             ) { seasonForContent ->
-                val sectionTitle = if (meta.type != "series" && seasons.size == 1 && seasonForContent <= 0) {
-                    stringResource(Res.string.details_videos)
-                } else {
-                    seasonForContent.label()
+                val sectionTitle = when {
+                    meta.type != "series" && seasons.size == 1 && seasonForContent <= 0 ->
+                        stringResource(Res.string.details_videos)
+
+                    // Nothing to disambiguate with a single season — and AniList gives every anime
+                    // season its own entry, so this heading would otherwise always read "Season 1".
+                    seasons.size == 1 && seasonForContent > 0 ->
+                        stringResource(Res.string.details_episodes)
+
+                    else -> seasonForContent.label()
                 }
                 Column(
                     verticalArrangement = Arrangement.spacedBy(16.dp),

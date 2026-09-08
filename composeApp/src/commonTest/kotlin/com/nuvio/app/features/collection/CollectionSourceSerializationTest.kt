@@ -11,6 +11,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class CollectionSourceSerializationTest {
@@ -18,43 +19,6 @@ class CollectionSourceSerializationTest {
         ignoreUnknownKeys = true
         encodeDefaults = true
         prettyPrint = false
-    }
-
-    @Test
-    fun traktSourceRoundTripsWithPublicListShape() {
-        val collection = Collection(
-            id = "collection-1",
-            title = "Favorites",
-            folders = listOf(
-                CollectionFolder(
-                    id = "folder-1",
-                    title = "Lists",
-                    sources = listOf(
-                        CollectionSource(
-                            provider = "trakt",
-                            title = "Criterion Movies",
-                            traktListId = 123456L,
-                            mediaType = TmdbCollectionMediaType.MOVIE.name,
-                            sortBy = TraktListSort.ADDED.value,
-                            sortHow = TraktSortHow.DESC.value,
-                        ),
-                    ),
-                ),
-            ),
-        )
-
-        val encoded = json.encodeToString(listOf(collection))
-        assertTrue(encoded.contains(""""provider":"trakt""""))
-        assertTrue(encoded.contains(""""traktListId":123456"""))
-        assertTrue(encoded.contains(""""sortHow":"desc""""))
-
-        val decoded = json.decodeFromString<List<Collection>>(encoded)
-        val source = decoded.single().folders.single().resolvedSources.single()
-        assertTrue(source.isTrakt)
-        assertEquals(123456L, source.traktListId)
-        assertEquals(TmdbCollectionMediaType.MOVIE.name, source.mediaType)
-        assertEquals(TraktListSort.ADDED.value, source.sortBy)
-        assertEquals(TraktSortHow.DESC.value, source.sortHow)
     }
 
     @Test
@@ -111,7 +75,7 @@ class CollectionSourceSerializationTest {
     }
 
     @Test
-    fun importedTraktSourceWithoutListIdIsRejected() {
+    fun legacyTraktSourcesDecodeAndAreIgnoredInsteadOfFailingImport() {
         val payload = """
             [
               {
@@ -124,7 +88,8 @@ class CollectionSourceSerializationTest {
                     "sources": [
                       {
                         "provider": "trakt",
-                        "title": "Missing List",
+                        "title": "Criterion Movies",
+                        "traktListId": 123456,
                         "mediaType": "MOVIE",
                         "sortBy": "rank",
                         "sortHow": "asc"
@@ -136,14 +101,13 @@ class CollectionSourceSerializationTest {
             ]
         """.trimIndent()
 
-        val source = json.decodeFromString<List<Collection>>(payload)
-            .single()
-            .folders
-            .single()
-            .resolvedSources
-            .single()
+        val collections = json.decodeFromString<List<Collection>>(payload)
+        val source = collections.single().folders.single().resolvedSources.single()
 
-        assertTrue(source.hasInvalidTraktListId())
+        assertFalse(source.isTmdb)
+        assertFalse(source.isAddon)
+        assertNull(source.addonCatalogSource())
+        assertNull(validateImportModel(collections))
     }
 
     @Test
@@ -218,7 +182,7 @@ class CollectionSourceSerializationTest {
     }
 
     @Test
-    fun sourceKeyPreservationKeepsUnknownTraktFields() {
+    fun sourceKeyPreservationKeepsUnknownTmdbFields() {
         val raw = json.parseToJsonElement(
             """
                 [
@@ -231,12 +195,12 @@ class CollectionSourceSerializationTest {
                         "title": "Lists",
                         "sources": [
                           {
-                            "provider": "trakt",
+                            "provider": "tmdb",
+                            "tmdbSourceType": "LIST",
                             "title": "Criterion Movies",
-                            "traktListId": 123456,
+                            "tmdbId": 123456,
                             "mediaType": "MOVIE",
-                            "sortBy": "rank",
-                            "sortHow": "asc",
+                            "sortBy": "original",
                             "customField": "keep-me"
                           }
                         ]
@@ -255,12 +219,12 @@ class CollectionSourceSerializationTest {
                     title = "Lists",
                     sources = listOf(
                         CollectionSource(
-                            provider = "trakt",
+                            provider = "tmdb",
+                            tmdbSourceType = TmdbCollectionSourceType.LIST.name,
                             title = "Criterion Movies",
-                            traktListId = 123456L,
+                            tmdbId = 123456,
                             mediaType = TmdbCollectionMediaType.MOVIE.name,
-                            sortBy = TraktListSort.RANK.value,
-                            sortHow = TraktSortHow.ASC.value,
+                            sortBy = TmdbCollectionSort.ORIGINAL.value,
                         ),
                     ),
                 ),
@@ -269,7 +233,7 @@ class CollectionSourceSerializationTest {
 
         val merged = CollectionJsonPreserver.merge(json, raw, listOf(collection)).toString()
         assertTrue(merged.contains(""""customField":"keep-me""""))
-        assertTrue(merged.contains(""""traktListId":123456"""))
+        assertTrue(merged.contains(""""tmdbId":123456"""))
     }
 
     @Test

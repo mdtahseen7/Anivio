@@ -34,7 +34,7 @@ import kotlinx.coroutines.launch
 private const val FOREGROUND_PULL_DELAY_MS = 2500L
 private const val FOREGROUND_ACTIVITY_PULL_MIN_INTERVAL_MS = 2 * 60_000L
 private const val FULL_PULL_MIN_INTERVAL_MS = 10_000L
-private const val PERIODIC_NUVIO_SYNC_PULL_INTERVAL_MS = 15 * 60_000L
+private const val PERIODIC_LOCAL_PULL_INTERVAL_MS = 15 * 60_000L
 
 internal enum class ProfileSyncStep {
     Addons,
@@ -518,7 +518,7 @@ object SyncManager {
         periodicNuvioSyncProfileId = profileId
         periodicNuvioSyncPullJob = accountScopeSnapshot().launch {
             while (isActive) {
-                delay(PERIODIC_NUVIO_SYNC_PULL_INTERVAL_MS)
+                delay(PERIODIC_LOCAL_PULL_INTERVAL_MS)
 
                 val currentAuthState = AuthRepository.state.value
                 if (currentAuthState !is AuthState.Authenticated || currentAuthState.isAnonymous) {
@@ -539,7 +539,7 @@ object SyncManager {
                 val shouldPullWatchProgress = effectiveWatchProgressSource(
                     requestedSource = settings.watchProgressSource,
                     isProviderAuthenticated = TrackingProviderRegistry::isAuthenticated,
-                ) == WatchProgressSource.NUVIO_SYNC
+                ) == WatchProgressSource.LOCAL
 
                 if (!shouldPullLibrary && !shouldPullWatchProgress) {
                     continue

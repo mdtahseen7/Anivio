@@ -38,7 +38,7 @@ import kotlinx.coroutines.sync.withLock
 data class WatchProgressSourceTransitionState(
     val profileId: Int? = null,
     val requestedSource: WatchProgressSource = DEFAULT_WATCH_PROGRESS_SOURCE,
-    val effectiveSource: WatchProgressSource = WatchProgressSource.NUVIO_SYNC,
+    val effectiveSource: WatchProgressSource = WatchProgressSource.LOCAL,
     val isRefreshing: Boolean = false,
     val lastRefreshSucceeded: Boolean? = null,
 )

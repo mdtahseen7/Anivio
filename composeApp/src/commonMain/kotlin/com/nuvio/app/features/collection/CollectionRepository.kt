@@ -26,7 +26,6 @@ import nuvio.composeapp.generated.resources.collections_import_error_folder_blan
 import nuvio.composeapp.generated.resources.collections_import_error_folder_duplicate_id
 import nuvio.composeapp.generated.resources.collections_import_error_invalid_json
 import nuvio.composeapp.generated.resources.collections_import_error_source_blank_fields
-import nuvio.composeapp.generated.resources.collections_import_error_trakt_list_id
 import org.jetbrains.compose.resources.getString
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
@@ -273,7 +272,6 @@ internal sealed interface CollectionImportModelError {
     data class BlankFolderId(val folderIndex: Int, val collectionTitle: String) : CollectionImportModelError
     data class DuplicateFolderId(val folderId: String, val collectionTitle: String) : CollectionImportModelError
     data class BlankFolderTitle(val folderId: String, val collectionTitle: String) : CollectionImportModelError
-    data class InvalidTraktListId(val sourceIndex: Int, val folderTitle: String) : CollectionImportModelError
     data class BlankSourceFields(val sourceIndex: Int, val folderTitle: String) : CollectionImportModelError
 }
 
@@ -302,11 +300,7 @@ internal fun validateImportModel(collections: List<Collection>): CollectionImpor
                 return CollectionImportModelError.BlankFolderTitle(f.id, c.title)
             }
             f.resolvedSources.forEachIndexed { si, s ->
-                if (s.hasInvalidTraktListId()) {
-                    return CollectionImportModelError.InvalidTraktListId(si + 1, f.title)
-                }
-
-                val invalidAddon = !s.isTmdb && !s.isTrakt &&
+                val invalidAddon = s.isAddon &&
                     (s.addonId.isNullOrBlank() || s.type.isNullOrBlank() || s.catalogId.isNullOrBlank())
                 val invalidTmdb = s.isTmdb &&
                     s.tmdbSourceType.isNullOrBlank()
@@ -334,8 +328,6 @@ private fun CollectionImportModelError.localizedMessage(): String =
                 getString(Res.string.collections_import_error_folder_duplicate_id, folderId, collectionTitle)
             is CollectionImportModelError.BlankFolderTitle ->
                 getString(Res.string.collections_import_error_folder_blank_title, folderId, collectionTitle)
-            is CollectionImportModelError.InvalidTraktListId ->
-                getString(Res.string.collections_import_error_trakt_list_id, sourceIndex, folderTitle)
             is CollectionImportModelError.BlankSourceFields ->
                 getString(Res.string.collections_import_error_source_blank_fields, sourceIndex, folderTitle)
         }

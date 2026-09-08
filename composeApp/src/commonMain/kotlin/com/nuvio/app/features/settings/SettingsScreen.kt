@@ -71,11 +71,9 @@ import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.player.AndroidLibmpvVideoOutput
 import com.nuvio.app.features.player.AndroidPlaybackEngine
 import com.nuvio.app.features.profiles.ProfileRepository
-import com.nuvio.app.features.simkl.SimklAuthRepository
-import com.nuvio.app.features.simkl.SimklAuthUiState
-import com.nuvio.app.features.trakt.TraktAuthUiState
-import com.nuvio.app.features.trakt.TraktAuthRepository
-import com.nuvio.app.features.trakt.TraktCommentsSettings
+import com.nuvio.app.features.anilist.AniListAuthRepository
+import com.nuvio.app.features.anilist.AniListAuthUiState
+
 import com.nuvio.app.features.tracking.TrackingSettingsRepository
 import com.nuvio.app.features.tracking.TrackingSettingsUiState
 import com.nuvio.app.features.tmdb.TmdbSettings
@@ -98,7 +96,7 @@ private const val SettingsSearchRevealHapticDelayMillis = 90L
 
 private fun SettingsPage.isEnabledByPolicy(): Boolean =
     when (this) {
-        SettingsPage.SupportersContributors -> AppFeaturePolicy.supportersContributorsPageEnabled
+        SettingsPage.About -> AppFeaturePolicy.aboutPageEnabled
         else -> true
     }
 
@@ -130,7 +128,8 @@ fun SettingsScreen(
     onPluginsClick: () -> Unit = {},
     onDownloadsClick: () -> Unit = {},
     onAccountClick: () -> Unit = {},
-    onSupportersContributorsClick: () -> Unit = {},
+    onAboutClick: () -> Unit = {},
+    onPrivacyPolicyClick: () -> Unit = {},
     onLicensesAttributionsClick: () -> Unit = {},
     onCheckForUpdatesClick: (() -> Unit)? = null,
     onTestUpdateBannerClick: (() -> Unit)? = null,
@@ -178,17 +177,9 @@ fun SettingsScreen(
             DebridSettingsRepository.ensureLoaded()
             DebridSettingsRepository.uiState
         }.collectAsStateWithLifecycle()
-        val traktAuthUiState by remember {
-            TraktAuthRepository.ensureLoaded()
-            TraktAuthRepository.uiState
-        }.collectAsStateWithLifecycle()
-        val simklAuthUiState by remember {
-            SimklAuthRepository.ensureLoaded()
-            SimklAuthRepository.uiState
-        }.collectAsStateWithLifecycle()
-        val traktCommentsEnabled by remember {
-            TraktCommentsSettings.ensureLoaded()
-            TraktCommentsSettings.enabled
+        val aniListAuthUiState by remember {
+            AniListAuthRepository.ensureLoaded()
+            AniListAuthRepository.uiState
         }.collectAsStateWithLifecycle()
         val trackingSettingsUiState by remember {
             TrackingSettingsRepository.ensureLoaded()
@@ -325,10 +316,15 @@ fun SettingsScreen(
         } else {
             onAccountClick
         }
-        val openSupportersContributors = if (onNavigatePage != null) {
-            { openPage(SettingsPage.SupportersContributors) }
+        val openAbout = if (onNavigatePage != null) {
+            { openPage(SettingsPage.About) }
         } else {
-            onSupportersContributorsClick
+            onAboutClick
+        }
+        val openPrivacyPolicy = if (onNavigatePage != null) {
+            { openPage(SettingsPage.PrivacyPolicy) }
+        } else {
+            onPrivacyPolicyClick
         }
         val openLicensesAttributions = if (onNavigatePage != null) {
             { openPage(SettingsPage.LicensesAttributions) }
@@ -416,9 +412,7 @@ fun SettingsScreen(
                 tmdbSettings = tmdbSettings,
                 mdbListSettings = mdbListSettings,
                 debridSettings = debridSettings,
-                traktAuthUiState = traktAuthUiState,
-                simklAuthUiState = simklAuthUiState,
-                traktCommentsEnabled = traktCommentsEnabled,
+                aniListAuthUiState = aniListAuthUiState,
                 trackingSettingsUiState = trackingSettingsUiState,
                 homescreenHeroEnabled = homescreenSettingsUiState.heroEnabled,
                 homescreenShowCatalogType = homescreenSettingsUiState.showCatalogType,
@@ -429,7 +423,8 @@ fun SettingsScreen(
                 posterCardStyleUiState = posterCardStyleUiState,
                 onSwitchProfile = onSwitchProfile,
                 onDownloadsClick = onDownloadsClick,
-                onSupportersContributorsClick = openSupportersContributors,
+                onAboutClick = openAbout,
+                onPrivacyPolicyClick = openPrivacyPolicy,
                 onLicensesAttributionsClick = openLicensesAttributions,
                 onCheckForUpdatesClick = onCheckForUpdatesClick,
                 onTestUpdateBannerClick = onTestUpdateBannerClick,
@@ -480,9 +475,7 @@ fun SettingsScreen(
                 tmdbSettings = tmdbSettings,
                 mdbListSettings = mdbListSettings,
                 debridSettings = debridSettings,
-                traktAuthUiState = traktAuthUiState,
-                simklAuthUiState = simklAuthUiState,
-                traktCommentsEnabled = traktCommentsEnabled,
+                aniListAuthUiState = aniListAuthUiState,
                 trackingSettingsUiState = trackingSettingsUiState,
                 homescreenHeroEnabled = homescreenSettingsUiState.heroEnabled,
                 homescreenShowCatalogType = homescreenSettingsUiState.showCatalogType,
@@ -499,7 +492,8 @@ fun SettingsScreen(
                 onPluginsClick = openPlugins,
                 onDownloadsClick = onDownloadsClick,
                 onAccountClick = openAccount,
-                onSupportersContributorsClick = openSupportersContributors,
+                onAboutClick = openAbout,
+                onPrivacyPolicyClick = openPrivacyPolicy,
                 onLicensesAttributionsClick = openLicensesAttributions,
                 onCheckForUpdatesClick = onCheckForUpdatesClick,
                 onTestUpdateBannerClick = onTestUpdateBannerClick,
@@ -554,9 +548,7 @@ private fun MobileSettingsScreen(
     tmdbSettings: TmdbSettings,
     mdbListSettings: MdbListSettings,
     debridSettings: DebridSettings,
-    traktAuthUiState: TraktAuthUiState,
-    simklAuthUiState: SimklAuthUiState,
-    traktCommentsEnabled: Boolean,
+    aniListAuthUiState: AniListAuthUiState,
     trackingSettingsUiState: TrackingSettingsUiState,
     homescreenHeroEnabled: Boolean,
     homescreenShowCatalogType: Boolean,
@@ -573,7 +565,8 @@ private fun MobileSettingsScreen(
     onPluginsClick: () -> Unit = {},
     onDownloadsClick: () -> Unit = {},
     onAccountClick: () -> Unit = {},
-    onSupportersContributorsClick: () -> Unit = {},
+    onAboutClick: () -> Unit = {},
+    onPrivacyPolicyClick: () -> Unit = {},
     onLicensesAttributionsClick: () -> Unit = {},
     onCheckForUpdatesClick: (() -> Unit)? = null,
     onTestUpdateBannerClick: (() -> Unit)? = null,
@@ -602,7 +595,7 @@ private fun MobileSettingsScreen(
         }
         val searchEntries = settingsSearchEntries(
             pluginsEnabled = AppFeaturePolicy.pluginsEnabled,
-            supportersContributorsPageEnabled = AppFeaturePolicy.supportersContributorsPageEnabled,
+            aboutPageEnabled = AppFeaturePolicy.aboutPageEnabled,
             accountDeletionEnabled = AppFeaturePolicy.accountDeletionEnabled,
             personalMediaAddonCopyEnabled = AppFeaturePolicy.personalMediaAddonCopyEnabled,
             liquidGlassNativeTabBarSupported = liquidGlassNativeTabBarSupported,
@@ -614,11 +607,12 @@ private fun MobileSettingsScreen(
             when (target) {
                 is SettingsSearchTarget.Page -> when (target.page) {
                     SettingsPage.Account -> onAccountClick()
-                    SettingsPage.SupportersContributors -> {
-                        if (AppFeaturePolicy.supportersContributorsPageEnabled) {
-                            onSupportersContributorsClick()
+                    SettingsPage.About -> {
+                        if (AppFeaturePolicy.aboutPageEnabled) {
+                            onAboutClick()
                         }
                     }
+                    SettingsPage.PrivacyPolicy -> onPrivacyPolicyClick()
                     SettingsPage.LicensesAttributions -> onLicensesAttributionsClick()
                     SettingsPage.ContinueWatching -> onContinueWatchingClick()
                     SettingsPage.Addons -> onAddonsClick()
@@ -688,25 +682,29 @@ private fun MobileSettingsScreen(
                             onContentDiscoveryClick = { onPageChange(SettingsPage.ContentDiscovery) },
                             onIntegrationsClick = { onPageChange(SettingsPage.Integrations) },
                             onTrackingClick = { onPageChange(SettingsPage.TraktAuthentication) },
-                            onSupportersContributorsClick = onSupportersContributorsClick,
+                            onAboutClick = onAboutClick,
+                            onPrivacyPolicyClick = onPrivacyPolicyClick,
                             onLicensesAttributionsClick = onLicensesAttributionsClick,
                             onCheckForUpdatesClick = onCheckForUpdatesClick,
                             onTestUpdateBannerClick = onTestUpdateBannerClick,
                             onDownloadsClick = onDownloadsClick,
                             onAccountClick = onAccountClick,
                             onSwitchProfileClick = onSwitchProfile,
-                            showSupportersContributorsPage = AppFeaturePolicy.supportersContributorsPageEnabled,
+                            showAboutPage = AppFeaturePolicy.aboutPageEnabled,
                         )
                     }
                 }
                 SettingsPage.Account -> accountSettingsContent(
                     isTablet = false,
                 )
-                SettingsPage.SupportersContributors -> {
-                    if (AppFeaturePolicy.supportersContributorsPageEnabled) {
-                        supportersContributorsContent(isTablet = false)
+                SettingsPage.About -> {
+                    if (AppFeaturePolicy.aboutPageEnabled) {
+                        aboutContent(isTablet = false)
                     }
                 }
+                SettingsPage.PrivacyPolicy -> privacyPolicyContent(
+                    isTablet = false,
+                )
                 SettingsPage.LicensesAttributions -> licensesAttributionsContent(
                     isTablet = false,
                 )
@@ -820,11 +818,8 @@ private fun MobileSettingsScreen(
                 )
                 SettingsPage.TraktAuthentication -> trackingSettingsContent(
                     isTablet = false,
-                    traktUiState = traktAuthUiState,
-                    simklUiState = simklAuthUiState,
+                    aniListUiState = aniListAuthUiState,
                     settingsUiState = trackingSettingsUiState,
-                    commentsEnabled = traktCommentsEnabled,
-                    onCommentsEnabledChange = TraktCommentsSettings::setEnabled,
                 )
             }
         }
@@ -918,9 +913,7 @@ private fun TabletSettingsScreen(
     tmdbSettings: TmdbSettings,
     mdbListSettings: MdbListSettings,
     debridSettings: DebridSettings,
-    traktAuthUiState: TraktAuthUiState,
-    simklAuthUiState: SimklAuthUiState,
-    traktCommentsEnabled: Boolean,
+    aniListAuthUiState: AniListAuthUiState,
     trackingSettingsUiState: TrackingSettingsUiState,
     homescreenHeroEnabled: Boolean,
     homescreenShowCatalogType: Boolean,
@@ -931,7 +924,8 @@ private fun TabletSettingsScreen(
     posterCardStyleUiState: PosterCardStyleUiState,
     onSwitchProfile: (() -> Unit)? = null,
     onDownloadsClick: () -> Unit = {},
-    onSupportersContributorsClick: () -> Unit = {},
+    onAboutClick: () -> Unit = {},
+    onPrivacyPolicyClick: () -> Unit = {},
     onLicensesAttributionsClick: () -> Unit = {},
     onCheckForUpdatesClick: (() -> Unit)? = null,
     onTestUpdateBannerClick: (() -> Unit)? = null,
@@ -1004,7 +998,7 @@ private fun TabletSettingsScreen(
             val hapticScope = rememberCoroutineScope()
             val searchEntries = settingsSearchEntries(
                 pluginsEnabled = AppFeaturePolicy.pluginsEnabled,
-                supportersContributorsPageEnabled = AppFeaturePolicy.supportersContributorsPageEnabled,
+                aboutPageEnabled = AppFeaturePolicy.aboutPageEnabled,
                 accountDeletionEnabled = AppFeaturePolicy.accountDeletionEnabled,
                 personalMediaAddonCopyEnabled = AppFeaturePolicy.personalMediaAddonCopyEnabled,
                 liquidGlassNativeTabBarSupported = liquidGlassNativeTabBarSupported,
@@ -1104,7 +1098,8 @@ private fun TabletSettingsScreen(
                                 onContentDiscoveryClick = { openInlinePage(SettingsPage.ContentDiscovery) },
                                 onIntegrationsClick = { openInlinePage(SettingsPage.Integrations) },
                                 onTrackingClick = { openInlinePage(SettingsPage.TraktAuthentication) },
-                                onSupportersContributorsClick = { openInlinePage(SettingsPage.SupportersContributors) },
+                                onAboutClick = { openInlinePage(SettingsPage.About) },
+                                onPrivacyPolicyClick = { openInlinePage(SettingsPage.PrivacyPolicy) },
                                 onLicensesAttributionsClick = { openInlinePage(SettingsPage.LicensesAttributions) },
                                 onCheckForUpdatesClick = onCheckForUpdatesClick,
                                 onTestUpdateBannerClick = onTestUpdateBannerClick,
@@ -1115,18 +1110,21 @@ private fun TabletSettingsScreen(
                                 showGeneralSection = activeCategory == SettingsCategory.General,
                                 showAboutSection = activeCategory == SettingsCategory.About,
                                 showAdvancedSection = activeCategory == SettingsCategory.Advanced,
-                                showSupportersContributorsPage = AppFeaturePolicy.supportersContributorsPageEnabled,
+                                showAboutPage = AppFeaturePolicy.aboutPageEnabled,
                             )
                         }
                     }
                     SettingsPage.Account -> accountSettingsContent(
                         isTablet = true,
                     )
-                    SettingsPage.SupportersContributors -> {
-                        if (AppFeaturePolicy.supportersContributorsPageEnabled) {
-                            supportersContributorsContent(isTablet = true)
+                    SettingsPage.About -> {
+                        if (AppFeaturePolicy.aboutPageEnabled) {
+                            aboutContent(isTablet = true)
                         }
                     }
+                    SettingsPage.PrivacyPolicy -> privacyPolicyContent(
+                        isTablet = true,
+                    )
                     SettingsPage.LicensesAttributions -> licensesAttributionsContent(
                         isTablet = true,
                     )
@@ -1240,11 +1238,8 @@ private fun TabletSettingsScreen(
                     )
                     SettingsPage.TraktAuthentication -> trackingSettingsContent(
                         isTablet = true,
-                        traktUiState = traktAuthUiState,
-                        simklUiState = simklAuthUiState,
+                        aniListUiState = aniListAuthUiState,
                         settingsUiState = trackingSettingsUiState,
-                        commentsEnabled = traktCommentsEnabled,
-                        onCommentsEnabledChange = TraktCommentsSettings::setEnabled,
                     )
                 }
             }

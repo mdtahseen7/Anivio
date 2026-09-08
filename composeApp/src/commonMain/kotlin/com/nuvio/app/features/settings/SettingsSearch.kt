@@ -17,13 +17,13 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.CollectionsBookmark
 import androidx.compose.material.icons.rounded.Extension
-import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Hub
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.Policy
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.People
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -80,7 +80,7 @@ internal data class SettingsSearchEntry(
 @Composable
 internal fun settingsSearchEntries(
     pluginsEnabled: Boolean,
-    supportersContributorsPageEnabled: Boolean,
+    aboutPageEnabled: Boolean,
     accountDeletionEnabled: Boolean,
     personalMediaAddonCopyEnabled: Boolean,
     liquidGlassNativeTabBarSupported: Boolean,
@@ -102,7 +102,8 @@ internal fun settingsSearchEntries(
     val streamsPage = stringResource(Res.string.compose_settings_page_streams)
     val integrationsPage = stringResource(Res.string.compose_settings_page_integrations)
     val notificationsPage = stringResource(Res.string.compose_settings_page_notifications)
-    val supportersPage = stringResource(Res.string.compose_settings_page_supporters_contributors)
+    val aboutPage = stringResource(Res.string.compose_settings_page_about)
+    val privacyPage = stringResource(Res.string.compose_settings_page_privacy_policy)
     val licensesPage = stringResource(Res.string.compose_settings_page_licenses_attributions)
     val homeLayoutPage = stringResource(Res.string.compose_settings_page_homescreen)
     val detailPage = stringResource(Res.string.compose_settings_page_meta_screen)
@@ -265,16 +266,24 @@ internal fun settingsSearchEntries(
         description = stringResource(Res.string.compose_settings_root_notifications_description),
         icon = Icons.Rounded.Notifications,
     )
-    if (supportersContributorsPageEnabled) {
+    if (aboutPageEnabled) {
         addPage(
-            page = SettingsPage.SupportersContributors,
-            key = "supporters",
-            title = supportersPage,
-            description = stringResource(Res.string.about_supporters_contributors_subtitle),
+            page = SettingsPage.About,
+            key = "about",
+            title = aboutPage,
+            description = stringResource(Res.string.about_page_subtitle),
             category = aboutCategory,
-            icon = Icons.Rounded.Favorite,
+            icon = Icons.Rounded.Info,
         )
     }
+    addPage(
+        page = SettingsPage.PrivacyPolicy,
+        key = "privacy-policy",
+        title = privacyPage,
+        description = stringResource(Res.string.compose_settings_root_privacy_policy_description),
+        category = aboutCategory,
+        icon = Icons.Rounded.Policy,
+    )
     addPage(
         page = SettingsPage.LicensesAttributions,
         key = "licenses-attributions",
@@ -284,7 +293,12 @@ internal fun settingsSearchEntries(
         icon = Icons.Rounded.Info,
     )
     listOf(
-        PlaybackSearchRow("nuvio-license", stringResource(Res.string.settings_licenses_attributions_nuvio_title), stringResource(Res.string.settings_licenses_attributions_nuvio_license)),
+        PlaybackSearchRow("anivio-license", stringResource(Res.string.settings_licenses_attributions_anivio_title), stringResource(Res.string.settings_licenses_attributions_anivio_license)),
+        PlaybackSearchRow("anilist-attribution", stringResource(Res.string.settings_licenses_attributions_anilist_title), stringResource(Res.string.settings_licenses_attributions_anilist_body)),
+        PlaybackSearchRow("anizip-attribution", stringResource(Res.string.settings_licenses_attributions_anizip_title), stringResource(Res.string.settings_licenses_attributions_anizip_body)),
+        PlaybackSearchRow("kitsu-attribution", stringResource(Res.string.settings_licenses_attributions_kitsu_title), stringResource(Res.string.settings_licenses_attributions_kitsu_body)),
+        PlaybackSearchRow("tvdb-attribution", stringResource(Res.string.settings_licenses_attributions_tvdb_title), stringResource(Res.string.settings_licenses_attributions_tvdb_body)),
+        PlaybackSearchRow("fanart-attribution", stringResource(Res.string.settings_licenses_attributions_fanart_title), stringResource(Res.string.settings_licenses_attributions_fanart_body)),
         PlaybackSearchRow("tmdb-attribution", stringResource(Res.string.settings_licenses_attributions_tmdb_title), stringResource(Res.string.settings_licenses_attributions_tmdb_body)),
         PlaybackSearchRow("trakt-attribution", stringResource(Res.string.settings_licenses_attributions_trakt_title), stringResource(Res.string.settings_licenses_attributions_trakt_body)),
         PlaybackSearchRow("simkl-attribution", stringResource(Res.string.settings_licenses_attributions_simkl_title), stringResource(Res.string.settings_licenses_attributions_simkl_body)),
@@ -323,7 +337,7 @@ internal fun settingsSearchEntries(
             key = "check-updates",
             title = stringResource(Res.string.compose_settings_root_check_updates_title),
             description = stringResource(Res.string.compose_settings_root_check_updates_description),
-            page = if (supportersContributorsPageEnabled) supportersPage else licensesPage,
+            page = if (aboutPageEnabled) aboutPage else licensesPage,
             section = stringResource(Res.string.compose_settings_root_about_section),
             category = aboutCategory,
             icon = Icons.Rounded.CloudDownload,
@@ -874,9 +888,9 @@ internal fun settingsSearchEntries(
 
     addRow(
         page = SettingsPage.TraktAuthentication,
-        key = "trakt-authentication",
-        title = stringResource(Res.string.trakt_library_source_trakt),
-        description = stringResource(Res.string.settings_trakt_intro_description),
+        key = "anilist-authentication",
+        title = stringResource(Res.string.anilist_source_name),
+        description = stringResource(Res.string.settings_anilist_sign_in_description),
         pageLabel = trackingPage,
         section = stringResource(Res.string.settings_tracking_services),
         category = accountCategory,
@@ -884,20 +898,18 @@ internal fun settingsSearchEntries(
     )
     addRow(
         page = SettingsPage.TraktAuthentication,
-        key = "simkl-authentication",
-        title = stringResource(Res.string.tracking_source_simkl),
-        description = stringResource(Res.string.settings_simkl_sign_in_description),
+        key = "mal-authentication",
+        title = stringResource(Res.string.tracking_source_mal),
+        description = stringResource(Res.string.settings_mal_sign_in_description),
         pageLabel = trackingPage,
         section = stringResource(Res.string.settings_tracking_services),
         category = accountCategory,
         icon = Icons.Rounded.Link,
     )
     listOf(
-        PlaybackSearchRow("trakt-library-source", stringResource(Res.string.trakt_library_source_title), stringResource(Res.string.trakt_library_source_subtitle)),
-        PlaybackSearchRow("trakt-watch-progress", stringResource(Res.string.trakt_watch_progress_title), stringResource(Res.string.trakt_watch_progress_subtitle)),
-        PlaybackSearchRow("trakt-continue-watching-window", stringResource(Res.string.trakt_continue_watching_window), stringResource(Res.string.trakt_continue_watching_subtitle)),
-        PlaybackSearchRow("trakt-comments", stringResource(Res.string.settings_trakt_comments), stringResource(Res.string.settings_trakt_comments_description)),
-        PlaybackSearchRow("trakt-more-like-this-source", stringResource(Res.string.trakt_more_like_this_source_title), stringResource(Res.string.trakt_more_like_this_source_subtitle)),
+        PlaybackSearchRow("tracking-library-source", stringResource(Res.string.trakt_library_source_title), stringResource(Res.string.trakt_library_source_subtitle)),
+        PlaybackSearchRow("tracking-watch-progress", stringResource(Res.string.trakt_watch_progress_title), stringResource(Res.string.trakt_watch_progress_subtitle)),
+        PlaybackSearchRow("tracking-continue-watching-window", stringResource(Res.string.trakt_continue_watching_window), stringResource(Res.string.trakt_continue_watching_subtitle)),
     ).forEach { row ->
         addRow(
             page = SettingsPage.TraktAuthentication,

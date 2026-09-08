@@ -3,6 +3,9 @@ package com.nuvio.app.features.home
 import com.nuvio.app.features.addons.ManagedAddon
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.enabledAddons
+import com.nuvio.app.features.anilist.AniListCatalogSource
+import com.nuvio.app.features.anilist.AniListHeroArtwork
+import com.nuvio.app.features.catalog.CatalogPage
 import com.nuvio.app.features.catalog.CatalogTarget
 import com.nuvio.app.features.catalog.fetchCatalogPage
 import com.nuvio.app.features.collection.Collection
@@ -11,8 +14,8 @@ import com.nuvio.app.features.collection.CollectionSource
 import com.nuvio.app.features.collection.TmdbCollectionSourceResolver
 import com.nuvio.app.features.collection.catalogRouteKey
 import com.nuvio.app.features.collection.findCollectionCatalog
-import com.nuvio.app.features.trakt.TraktPublicListSourceResolver
 import com.nuvio.app.features.watchprogress.CurrentDateProvider
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -39,13 +42,15 @@ object HomeRepository {
     private var cachedSections: Map<String, HomeCatalogSection> = emptyMap()
     private var cachedCollectionHeroItems: List<MetaPreview> = emptyList()
     private var collectionHeroJob: Job? = null
+    private var heroArtworkJob: Job? = null
     private var collectionHeroRequestKey: String? = null
     private var lastPublishedCatalogHeroEmpty: Boolean = true
     private var lastErrorMessage: String? = null
+    private var hydratedFromCache: Boolean = false
 
     fun refresh(addons: List<ManagedAddon>, force: Boolean = false) {
         val activeAddons = addons.enabledAddons()
-        val requests = buildHomeCatalogDefinitions(activeAddons)
+        val requests = buildAllHomeCatalogDefinitions(activeAddons)
         currentDefinitions = requests
         val requestCacheKeys = requests.mapTo(mutableSetOf(), HomeCatalogDefinition::cacheKey)
         cachedSections = cachedSections.filterKeys(requestCacheKeys::contains)
@@ -77,9 +82,18 @@ object HomeRepository {
         activeJob?.cancel()
         _uiState.update { it.copy(isLoading = true, errorMessage = null) }
         activeJob = scope.launch {
+            // Paint last session's rows first: the network refresh below then happens behind
+            // content the user can already read instead of behind skeletons.
+            hydrateFromCache(requestKey = requestKey)
             val prioritizedRequests = prioritizeDefinitions(
                 definitions = requests,
                 snapshot = HomeCatalogSettingsRepository.snapshot(),
+            )
+            // One aliased GraphQL call for every AniList row, so a refresh costs one request
+            // against AniList's 30/minute budget instead of one per row.
+            val aniListPages = fetchAniListHomePages(
+                definitions = prioritizedRequests,
+                forceRefresh = force,
             )
             val loadedSections = linkedMapOf<String, HomeCatalogSection>().apply {
                 putAll(cachedSections)
@@ -92,7 +106,10 @@ object HomeRepository {
                 val results = batch.map { request ->
                     async {
                         request to runCatching {
-                            request.toSection(forceRefresh = force)
+                            request.toSection(
+                                forceRefresh = force,
+                                aniListPages = aniListPages,
+                            )
                         }
                     }
                 }.awaitAll()
@@ -135,6 +152,7 @@ object HomeRepository {
                 refreshSources = true,
                 requestKey = requestKey,
             )
+            persistCache()
         }
     }
 
@@ -162,9 +180,48 @@ object HomeRepository {
         collectionHeroJob?.cancel()
         collectionHeroJob = null
         collectionHeroRequestKey = null
+        heroArtworkJob?.cancel()
+        heroArtworkJob = null
         lastPublishedCatalogHeroEmpty = true
         lastErrorMessage = null
+        hydratedFromCache = false
         _uiState.value = HomeUiState()
+    }
+
+    /**
+     * Fills empty rows from [HomeCatalogCache] once per process, before the first network response.
+     * Rows already in memory are left alone, and a cached row whose definition is gone — uninstalled
+     * addon, changed manifest — has no matching cache key, so it cannot come back.
+     */
+    private fun hydrateFromCache(requestKey: String) {
+        if (hydratedFromCache) return
+        hydratedFromCache = true
+
+        val snapshot = HomeCatalogCache.load() ?: return
+        AniListHeroArtwork.hydrate(snapshot.heroArtwork)
+
+        val restored = currentDefinitions.mapNotNull { definition ->
+            if (cachedSections.containsKey(definition.cacheKey)) return@mapNotNull null
+            val row = snapshot.rows[definition.cacheKey]?.takeIf { it.items.isNotEmpty() }
+                ?: return@mapNotNull null
+            definition.cacheKey to definition.toSection(row)
+        }
+        if (restored.isEmpty() && snapshot.heroArtwork.isEmpty()) return
+
+        cachedSections = cachedSections + restored
+        if (activeRequestKey != requestKey) return
+        publishCurrentState(
+            isLoading = true,
+            requestKey = requestKey,
+        )
+    }
+
+    /** Writes the rows currently on screen, plus any hero artwork resolved for them, to disk. */
+    private fun persistCache() {
+        HomeCatalogCache.save(
+            sections = cachedSections,
+            heroArtwork = AniListHeroArtwork.snapshot(),
+        )
     }
 
     private fun publishCurrentState(
@@ -210,57 +267,127 @@ object HomeRepository {
         } else {
             emptyList()
         }
+        // AniList only has portrait covers and a patchy banner, so swap in the wide backdrop and
+        // title logo resolved from TMDB / fanart.tv / ani.zip once they land.
+        val heroArtwork = AniListHeroArtwork.snapshot()
+        val decoratedHeroItems = heroItems.map { item -> heroArtwork[item.stableKey()] ?: item }
 
         _uiState.value = HomeUiState(
             isLoading = isLoading,
-            heroItems = heroItems,
+            heroItems = decoratedHeroItems,
             sections = sections,
             errorMessage = if (sections.isEmpty()) lastErrorMessage else null,
         )
+
+        ensureHeroArtwork(items = decoratedHeroItems, requestKey = requestKey)
     }
 
-    private suspend fun HomeCatalogDefinition.toSection(forceRefresh: Boolean): HomeCatalogSection {
-        val page = fetchCatalogPage(
-            manifestUrl = manifestUrl,
-            type = type,
-            catalogId = catalogId,
-            maxItems = HOME_CATALOG_PREVIEW_FETCH_LIMIT,
-            forceRefresh = forceRefresh,
-        )
-        val items = page.items
-        if (items.isEmpty()) {
-            return HomeCatalogSection(
-                key = key,
-                title = defaultTitle,
-                subtitle = addonName,
-                addonName = addonName,
-                target = CatalogTarget.Addon(
-                    manifestUrl = manifestUrl,
-                    contentType = type,
+    private fun ensureHeroArtwork(items: List<MetaPreview>, requestKey: String?) {
+        if (items.isEmpty()) return
+        // Never cancel a running pass: publishes fire every couple of catalog batches, and
+        // restarting would keep pushing resolution out until loading settled.
+        if (heroArtworkJob?.isActive == true) return
+        if (!AniListHeroArtwork.hasUnresolved(items)) return
+
+        heroArtworkJob = scope.launch {
+            AniListHeroArtwork.resolve(items)
+            // Everything passed in is cached now, so this republish cannot re-trigger itself.
+            publishCurrentState(
+                isLoading = _uiState.value.isLoading,
+                requestKey = requestKey,
+            )
+            // Artwork costs several requests per title, so it is worth keeping past this launch.
+            persistCache()
+        }
+    }
+
+    private suspend fun HomeCatalogDefinition.toSection(
+        forceRefresh: Boolean,
+        aniListPages: Map<String, CatalogPage>,
+    ): HomeCatalogSection {
+        val page = when (source) {
+            // Normally already resolved by the batched query; falls back to a single-row
+            // request if that call failed.
+            HomeCatalogSource.ANILIST -> aniListPages[catalogId]
+                ?: AniListCatalogSource.resolve(
                     catalogId = catalogId,
-                    supportsPagination = supportsPagination,
-                ),
-                items = emptyList(),
-                availableItemCount = 0,
-                hasMore = false,
+                    page = 1,
+                    maxItems = HOME_CATALOG_PREVIEW_FETCH_LIMIT,
+                    forceRefresh = forceRefresh,
+                )
+
+            HomeCatalogSource.ADDON -> fetchCatalogPage(
+                manifestUrl = manifestUrl,
+                type = type,
+                catalogId = catalogId,
+                maxItems = HOME_CATALOG_PREVIEW_FETCH_LIMIT,
+                forceRefresh = forceRefresh,
             )
         }
+        val items = page.items
 
         return HomeCatalogSection(
             key = key,
             title = defaultTitle,
             subtitle = addonName,
             addonName = addonName,
-            target = CatalogTarget.Addon(
+            target = catalogTarget(),
+            items = items,
+            availableItemCount = if (items.isEmpty()) 0 else page.rawItemCount,
+            hasMore = items.isNotEmpty() && supportsPagination && page.nextSkip != null,
+        )
+    }
+
+    /** Rebuilds a row from cached items, taking everything but the items from the live definition. */
+    private fun HomeCatalogDefinition.toSection(row: HomeCatalogCachedRow): HomeCatalogSection =
+        HomeCatalogSection(
+            key = key,
+            title = defaultTitle,
+            subtitle = addonName,
+            addonName = addonName,
+            target = catalogTarget(),
+            items = row.items,
+            availableItemCount = row.availableItemCount.takeIf { it > 0 } ?: row.items.size,
+            hasMore = row.hasMore && supportsPagination,
+        )
+
+    private fun HomeCatalogDefinition.catalogTarget(): CatalogTarget =
+        when (source) {
+            HomeCatalogSource.ANILIST -> CatalogTarget.AniList(
+                catalogId = catalogId,
+                contentType = type,
+                supportsPagination = supportsPagination,
+            )
+
+            HomeCatalogSource.ADDON -> CatalogTarget.Addon(
                 manifestUrl = manifestUrl,
                 contentType = type,
                 catalogId = catalogId,
                 supportsPagination = supportsPagination,
-            ),
-            items = items,
-            availableItemCount = page.rawItemCount,
-            hasMore = supportsPagination && page.nextSkip != null,
-        )
+            )
+        }
+
+    private suspend fun fetchAniListHomePages(
+        definitions: List<HomeCatalogDefinition>,
+        forceRefresh: Boolean,
+    ): Map<String, CatalogPage> {
+        val catalogIds = definitions
+            .filter { it.source == HomeCatalogSource.ANILIST }
+            .map(HomeCatalogDefinition::catalogId)
+        if (catalogIds.isEmpty()) return emptyMap()
+
+        return try {
+            AniListCatalogSource.resolveHomeRows(
+                catalogIds = catalogIds,
+                maxItems = HOME_CATALOG_PREVIEW_FETCH_LIMIT,
+                forceRefresh = forceRefresh,
+            )
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Throwable) {
+            // Not fatal — toSection() retries each row individually and surfaces the error there.
+            emptyMap()
+        }
     }
 
     private fun ensureCollectionHeroFallback(
@@ -343,7 +470,6 @@ object HomeRepository {
     ): List<MetaPreview> {
         val page = when {
             isTmdb -> TmdbCollectionSourceResolver.resolve(source = this, page = 1)
-            isTrakt -> TraktPublicListSourceResolver.resolve(source = this, page = 1)
             else -> {
                 val catalogSource = addonCatalogSource() ?: return emptyList()
                 val resolvedCatalog = addons.findCollectionCatalog(catalogSource) ?: return emptyList()

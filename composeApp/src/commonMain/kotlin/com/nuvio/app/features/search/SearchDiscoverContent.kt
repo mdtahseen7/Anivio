@@ -1,5 +1,9 @@
 package com.nuvio.app.features.search
 
+import androidx.compose.material3.TextButton
+import nuvio.composeapp.generated.resources.discover_next_page
+import nuvio.composeapp.generated.resources.discover_page_number
+import nuvio.composeapp.generated.resources.discover_previous_page
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -42,9 +46,16 @@ internal fun LazyListScope.discoverContent(
     fullyWatchedSeriesKeys: Set<String> = emptySet(),
     onPosterClick: ((MetaPreview) -> Unit)? = null,
     onPosterLongClick: ((MetaPreview) -> Unit)? = null,
+    /** False when the host screen already shows a "Discover" title of its own. */
+    showHeader: Boolean = true,
+    /** Supplied by hosts that page explicitly instead of scrolling endlessly. */
+    onPreviousPage: (() -> Unit)? = null,
+    onNextPage: (() -> Unit)? = null,
 ) {
-    item {
-        DiscoverSectionHeader(modifier = Modifier.padding(horizontal = 16.dp))
+    if (showHeader) {
+        item {
+            DiscoverSectionHeader(modifier = Modifier.padding(horizontal = 16.dp))
+        }
     }
     item {
         DiscoverFilterRow(
@@ -111,6 +122,16 @@ internal fun LazyListScope.discoverContent(
                 item {
                     CatalogLoadingFooter(
                         modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                }
+            }
+            if (onPreviousPage != null && onNextPage != null) {
+                item(key = "discover_pager") {
+                    DiscoverPager(
+                        state = state,
+                        onPreviousPage = onPreviousPage,
+                        onNextPage = onNextPage,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                     )
                 }
             }
@@ -251,3 +272,35 @@ private fun String.displayTypeLabel(): String =
         "tv" -> stringResource(Res.string.media_tv)
         else -> replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
     }
+
+@Composable
+private fun DiscoverPager(
+    state: DiscoverUiState,
+    onPreviousPage: () -> Unit,
+    onNextPage: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TextButton(
+            onClick = onPreviousPage,
+            enabled = state.hasPreviousPage && !state.isLoading,
+        ) {
+            Text(text = stringResource(Res.string.discover_previous_page))
+        }
+        Text(
+            text = stringResource(Res.string.discover_page_number, state.currentPage),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        TextButton(
+            onClick = onNextPage,
+            enabled = state.hasNextPage && !state.isLoading,
+        ) {
+            Text(text = stringResource(Res.string.discover_next_page))
+        }
+    }
+}

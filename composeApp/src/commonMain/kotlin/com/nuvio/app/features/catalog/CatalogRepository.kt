@@ -1,5 +1,6 @@
 package com.nuvio.app.features.catalog
 
+import com.nuvio.app.features.anilist.AniListCatalogSource
 import com.nuvio.app.features.collection.CollectionRepository
 import com.nuvio.app.features.collection.TmdbCollectionSourceResolver
 import com.nuvio.app.features.collection.catalogRouteKey
@@ -8,7 +9,6 @@ import com.nuvio.app.features.library.sortLibraryItems
 import com.nuvio.app.features.library.toMetaPreview
 import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.home.filterReleasedItems
-import com.nuvio.app.features.trakt.TraktPublicListSourceResolver
 import com.nuvio.app.features.watchprogress.CurrentDateProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -165,6 +165,13 @@ object CatalogRepository {
                         page = requestedSkip.takeIf { it > 0 } ?: 1,
                     )
 
+                    is CatalogTarget.AniList -> AniListCatalogSource.resolve(
+                        catalogId = target.catalogId,
+                        page = requestedSkip.takeIf { it > 0 } ?: 1,
+                        forceRefresh = forceRefresh,
+                        searchQuery = target.searchQuery,
+                    )
+
                     is CatalogTarget.Library -> error(getString(Res.string.catalog_load_failed))
                 }.withUnreleasedFilter(request.hideUnreleasedContent)
             }.fold(
@@ -234,7 +241,6 @@ private suspend fun fetchCollectionSourcePage(
 
     return when {
         source.isTmdb -> TmdbCollectionSourceResolver.resolve(source = source, page = page)
-        source.isTrakt -> TraktPublicListSourceResolver.resolve(source = source, page = page)
         else -> error(getString(Res.string.catalog_load_failed))
     }
 }

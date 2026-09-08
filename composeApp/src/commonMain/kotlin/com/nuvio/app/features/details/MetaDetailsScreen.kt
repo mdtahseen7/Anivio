@@ -90,10 +90,8 @@ import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import com.nuvio.app.features.details.components.DetailActionButtons
 import com.nuvio.app.features.details.components.DetailSecondaryAction
-import com.nuvio.app.features.details.components.CommentDetailSheet
 import com.nuvio.app.features.details.components.DetailAdditionalInfoSection
 import com.nuvio.app.features.details.components.DetailCastSection
-import com.nuvio.app.features.details.components.DetailCommentsSection
 import com.nuvio.app.features.details.components.DetailFloatingHeader
 import com.nuvio.app.features.details.components.DetailHero
 import com.nuvio.app.features.details.components.DetailMetaInfo
@@ -115,11 +113,6 @@ import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.streams.StreamAutoPlayPolicy
 import com.nuvio.app.features.tmdb.TmdbSettingsRepository
 import com.nuvio.app.features.tmdb.TmdbService
-import com.nuvio.app.features.trakt.TraktAuthRepository
-import com.nuvio.app.features.trakt.TraktCommentReview
-import com.nuvio.app.features.trakt.TraktCommentsRepository
-import com.nuvio.app.features.trakt.TraktCommentsSettings
-import com.nuvio.app.features.trakt.TraktConnectionMode
 import com.nuvio.app.features.tracking.TrackingLibraryTab
 import com.nuvio.app.features.tracking.TrackingMembershipApplyResult
 import com.nuvio.app.features.tracking.toggleTrackingLibraryMembership
@@ -171,10 +164,6 @@ fun MetaDetailsScreen(
         MetaScreenSettingsRepository.ensureLoaded()
         MetaScreenSettingsRepository.uiState
     }.collectAsStateWithLifecycle()
-    val traktAuthUiState by remember {
-        TraktAuthRepository.ensureLoaded()
-        TraktAuthRepository.uiState
-    }.collectAsStateWithLifecycle()
     val trackingSettingsUiState by remember {
         TrackingSettingsRepository.ensureLoaded()
         TrackingSettingsRepository.uiState
@@ -210,17 +199,6 @@ fun MetaDetailsScreen(
     var selectedEpisodeZoomAnchor by remember(type, id) { mutableStateOf<PosterZoomAnchor?>(null) }
     val episodeOverlayHazeState = rememberHazeState()
     var selectedSeasonForActions by remember(type, id) { mutableStateOf<Int?>(null) }
-    val commentsEnabled by remember {
-        TraktCommentsSettings.ensureLoaded()
-        TraktCommentsSettings.enabled
-    }.collectAsStateWithLifecycle()
-    var comments by remember(type, id) { mutableStateOf<List<TraktCommentReview>>(emptyList()) }
-    var commentsCurrentPage by remember(type, id) { mutableIntStateOf(0) }
-    var commentsPageCount by remember(type, id) { mutableIntStateOf(0) }
-    var isCommentsLoading by remember(type, id) { mutableStateOf(false) }
-    var isCommentsLoadingMore by remember(type, id) { mutableStateOf(false) }
-    var commentsError by remember(type, id) { mutableStateOf<String?>(null) }
-    var selectedComment by remember(type, id) { mutableStateOf<TraktCommentReview?>(null) }
     val detailsScope = rememberCoroutineScope()
     var showLibraryListPicker by remember(type, id) { mutableStateOf(false) }
     var pickerTabs by remember(type, id) { mutableStateOf<List<TrackingLibraryTab>>(emptyList()) }
@@ -288,39 +266,12 @@ fun MetaDetailsScreen(
         }
     }
 
-    val shouldShowComments = commentsEnabled &&
-        traktAuthUiState.mode == TraktConnectionMode.CONNECTED &&
-        displayedMeta != null &&
-        displayedMeta.type.lowercase().let { it == "movie" || it == "series" || it == "show" || it == "tv" }
-
     LaunchedEffect(displayedMeta?.id) {
         deferredMetaWorkAllowed = false
         if (displayedMeta != null) {
             delay(250)
             deferredMetaWorkAllowed = true
         }
-    }
-
-    LaunchedEffect(displayedMeta?.id, shouldShowComments, deferredMetaWorkAllowed) {
-        if (displayedMeta == null || !shouldShowComments) {
-            comments = emptyList()
-            commentsCurrentPage = 0
-            commentsPageCount = 0
-            commentsError = null
-            return@LaunchedEffect
-        }
-        if (!deferredMetaWorkAllowed) return@LaunchedEffect
-        isCommentsLoading = true
-        commentsError = null
-        try {
-            val result = TraktCommentsRepository.getCommentsPage(displayedMeta, page = 1)
-            comments = result.items
-            commentsCurrentPage = result.currentPage
-            commentsPageCount = result.pageCount
-        } catch (e: Exception) {
-            commentsError = e.message ?: getString(Res.string.details_comments_load_failed)
-        }
-        isCommentsLoading = false
     }
 
     LaunchedEffect(displayedMeta?.id, displayedMeta?.videos, deferredMetaWorkAllowed) {
@@ -360,8 +311,6 @@ fun MetaDetailsScreen(
         id,
         displayedMeta?.id,
         uiState.isLoading,
-        trackingSettingsUiState.moreLikeThisSource,
-        traktAuthUiState.mode,
         tmdbSettingsUiState.enabled,
         tmdbSettingsUiState.useMoreLikeThis,
         tmdbSettingsUiState.language,
@@ -1057,45 +1006,7 @@ fun MetaDetailsScreen(
                                 hasAdditionalInfoSection = hasAdditionalInfoSection,
                                 hasCollectionSection = hasCollectionSection,
                                 hasMoreLikeThisSection = hasMoreLikeThisSection,
-                                shouldShowComments = shouldShowComments,
-                                comments = comments,
-                                isCommentsLoading = isCommentsLoading,
-                                isCommentsLoadingMore = isCommentsLoadingMore,
-                                commentsCurrentPage = commentsCurrentPage,
-                                commentsPageCount = commentsPageCount,
-                                commentsError = commentsError,
                                 episodeImdbRatings = episodeImdbRatings,
-                                onRetryComments = {
-                                    detailsScope.launch {
-                                        isCommentsLoading = true
-                                        commentsError = null
-                                        try {
-                                            val result = TraktCommentsRepository.getCommentsPage(meta, page = 1, forceRefresh = true)
-                                            comments = result.items
-                                            commentsCurrentPage = result.currentPage
-                                            commentsPageCount = result.pageCount
-                                        } catch (e: Exception) {
-                                            commentsError = e.message ?: getString(Res.string.details_comments_load_failed)
-                                        }
-                                        isCommentsLoading = false
-                                    }
-                                },
-                                onLoadMoreComments = {
-                                    detailsScope.launch {
-                                        isCommentsLoadingMore = true
-                                        try {
-                                            val nextPage = commentsCurrentPage + 1
-                                            val result = TraktCommentsRepository.getCommentsPage(meta, page = nextPage)
-                                            val existingIds = comments.map { it.id }.toSet()
-                                            val newComments = result.items.filter { it.id !in existingIds }
-                                            comments = comments + newComments
-                                            commentsCurrentPage = result.currentPage
-                                            commentsPageCount = result.pageCount
-                                        } catch (_: Exception) { }
-                                        isCommentsLoadingMore = false
-                                    }
-                                },
-                                onCommentClick = { review -> selectedComment = review },
                                 onTrailerClick = resolveTrailer,
                                 progressByVideoId = progressByVideoId,
                                 watchedKeys = watchedUiState.watchedKeys,
@@ -1375,43 +1286,6 @@ fun MetaDetailsScreen(
                             onPendingChange = { pendingTrackingRemoval = it },
                         )
 
-                        selectedComment?.let { comment ->
-                            val commentIndex = comments.indexOfFirst { it.id == comment.id }.coerceAtLeast(0)
-                            CommentDetailSheet(
-                                comment = comment,
-                                currentIndex = commentIndex,
-                                totalCount = comments.size,
-                                canGoBack = commentIndex > 0,
-                                canGoForward = commentIndex < comments.size - 1,
-                                onPrevious = {
-                                    if (commentIndex > 0) {
-                                        selectedComment = comments[commentIndex - 1]
-                                    }
-                                },
-                                onNext = {
-                                    val nextIndex = commentIndex + 1
-                                    if (nextIndex < comments.size) {
-                                        selectedComment = comments[nextIndex]
-                                    }
-                                    if (nextIndex >= comments.size - 3 && commentsCurrentPage < commentsPageCount) {
-                                        detailsScope.launch {
-                                            isCommentsLoadingMore = true
-                                            try {
-                                                val nextPage = commentsCurrentPage + 1
-                                                val result = TraktCommentsRepository.getCommentsPage(meta, page = nextPage)
-                                                val existingIds = comments.map { it.id }.toSet()
-                                                val newComments = result.items.filter { it.id !in existingIds }
-                                                comments = comments + newComments
-                                                commentsCurrentPage = result.currentPage
-                                                commentsPageCount = result.pageCount
-                                            } catch (_: Exception) { }
-                                            isCommentsLoadingMore = false
-                                        }
-                                    }
-                                },
-                                onDismiss = { selectedComment = null },
-                            )
-                        }
                     }
                 }
             }
@@ -1730,17 +1604,7 @@ private fun LazyListScope.configuredMetaSectionItems(
     hasAdditionalInfoSection: Boolean,
     hasCollectionSection: Boolean,
     hasMoreLikeThisSection: Boolean,
-    shouldShowComments: Boolean,
-    comments: List<TraktCommentReview>,
-    isCommentsLoading: Boolean,
-    isCommentsLoadingMore: Boolean,
-    commentsCurrentPage: Int,
-    commentsPageCount: Int,
-    commentsError: String?,
     episodeImdbRatings: Map<Pair<Int, Int>, Double>,
-    onRetryComments: () -> Unit,
-    onLoadMoreComments: () -> Unit,
-    onCommentClick: (TraktCommentReview) -> Unit,
     onTrailerClick: (MetaTrailer) -> Unit,
     progressByVideoId: Map<String, WatchProgressEntry>,
     watchedKeys: Set<String>,
@@ -1765,10 +1629,6 @@ private fun LazyListScope.configuredMetaSectionItems(
             hasAdditionalInfoSection = hasAdditionalInfoSection,
             hasCollectionSection = hasCollectionSection,
             hasMoreLikeThisSection = hasMoreLikeThisSection,
-            shouldShowComments = shouldShowComments,
-            comments = comments,
-            isCommentsLoading = isCommentsLoading,
-            commentsError = commentsError,
         )
 
     fun addSectionItem(
@@ -1806,17 +1666,7 @@ private fun LazyListScope.configuredMetaSectionItems(
                     hasAdditionalInfoSection = hasAdditionalInfoSection,
                     hasCollectionSection = hasCollectionSection,
                     hasMoreLikeThisSection = hasMoreLikeThisSection,
-                    shouldShowComments = shouldShowComments,
-                    comments = comments,
-                    isCommentsLoading = isCommentsLoading,
-                    isCommentsLoadingMore = isCommentsLoadingMore,
-                    commentsCurrentPage = commentsCurrentPage,
-                    commentsPageCount = commentsPageCount,
-                    commentsError = commentsError,
                     episodeImdbRatings = episodeImdbRatings,
-                    onRetryComments = onRetryComments,
-                    onLoadMoreComments = onLoadMoreComments,
-                    onCommentClick = onCommentClick,
                     onTrailerClick = onTrailerClick,
                     progressByVideoId = progressByVideoId,
                     watchedKeys = watchedKeys,
@@ -1913,17 +1763,13 @@ private fun metaSectionHasContent(
     hasAdditionalInfoSection: Boolean,
     hasCollectionSection: Boolean,
     hasMoreLikeThisSection: Boolean,
-    shouldShowComments: Boolean,
-    comments: List<TraktCommentReview>,
-    isCommentsLoading: Boolean,
-    commentsError: String?,
 ): Boolean =
     when (key) {
         MetaScreenSectionKey.ACTIONS -> true
         MetaScreenSectionKey.OVERVIEW -> true
         MetaScreenSectionKey.PRODUCTION -> hasProductionSection
         MetaScreenSectionKey.CAST -> meta.cast.isNotEmpty()
-        MetaScreenSectionKey.COMMENTS -> shouldShowComments && (isCommentsLoading || comments.isNotEmpty() || !commentsError.isNullOrBlank())
+        MetaScreenSectionKey.COMMENTS -> false
         MetaScreenSectionKey.TRAILERS -> hasTrailersSection
         MetaScreenSectionKey.EPISODES -> hasEpisodes
         MetaScreenSectionKey.DETAILS -> hasAdditionalInfoSection
@@ -1955,17 +1801,7 @@ private fun ConfiguredMetaSections(
     hasAdditionalInfoSection: Boolean,
     hasCollectionSection: Boolean,
     hasMoreLikeThisSection: Boolean,
-    shouldShowComments: Boolean,
-    comments: List<TraktCommentReview>,
-    isCommentsLoading: Boolean,
-    isCommentsLoadingMore: Boolean,
-    commentsCurrentPage: Int,
-    commentsPageCount: Int,
-    commentsError: String?,
     episodeImdbRatings: Map<Pair<Int, Int>, Double>,
-    onRetryComments: () -> Unit,
-    onLoadMoreComments: () -> Unit,
-    onCommentClick: (TraktCommentReview) -> Unit,
     onTrailerClick: (MetaTrailer) -> Unit,
     progressByVideoId: Map<String, WatchProgressEntry>,
     watchedKeys: Set<String>,
@@ -1988,7 +1824,7 @@ private fun ConfiguredMetaSections(
             MetaScreenSectionKey.OVERVIEW -> true
             MetaScreenSectionKey.PRODUCTION -> hasProductionSection
             MetaScreenSectionKey.CAST -> meta.cast.isNotEmpty()
-            MetaScreenSectionKey.COMMENTS -> shouldShowComments && (isCommentsLoading || comments.isNotEmpty() || !commentsError.isNullOrBlank())
+            MetaScreenSectionKey.COMMENTS -> false
             MetaScreenSectionKey.TRAILERS -> hasTrailersSection
             MetaScreenSectionKey.EPISODES -> hasEpisodes
             MetaScreenSectionKey.DETAILS -> hasAdditionalInfoSection
@@ -2060,22 +1896,7 @@ private fun ConfiguredMetaSections(
                     animatedVisibilityScope = animatedVisibilityScope,
                 )
             }
-            MetaScreenSectionKey.COMMENTS -> {
-                if (shouldShowComments && (isCommentsLoading || comments.isNotEmpty() || !commentsError.isNullOrBlank())) {
-                    DetailCommentsSection(
-                        comments = comments,
-                        isLoading = isCommentsLoading,
-                        isLoadingMore = isCommentsLoadingMore,
-                        canLoadMore = commentsCurrentPage < commentsPageCount,
-                        error = commentsError,
-                        onRetry = onRetryComments,
-                        onLoadMore = onLoadMoreComments,
-                        onCommentClick = onCommentClick,
-                        showHeader = showHeader,
-                        horizontalScrollPadding = horizontalScrollPadding,
-                    )
-                }
-            }
+            MetaScreenSectionKey.COMMENTS -> Unit
             MetaScreenSectionKey.TRAILERS -> {
                 if (hasTrailersSection) {
                     DetailTrailersSection(
@@ -2126,7 +1947,6 @@ private fun ConfiguredMetaSections(
                 if (hasMoreLikeThisSection) {
                     val sourceLabel = when (meta.moreLikeThisSource) {
                         MoreLikeThisSource.TMDB -> stringResource(Res.string.detail_more_like_this_powered_by_tmdb)
-                        MoreLikeThisSource.TRAKT -> stringResource(Res.string.detail_more_like_this_powered_by_trakt)
                         null -> null
                     }
                     DetailPosterRailSection(

@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -69,7 +68,6 @@ import com.nuvio.app.core.ui.NuvioSurfaceCard
 import com.nuvio.app.core.ui.nuvioSafeBottomPadding
 import com.nuvio.app.core.ui.PlatformBackHandler
 import com.nuvio.app.features.home.PosterShape
-import com.nuvio.app.features.trakt.TraktPublicListSearchResult
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
 import sh.calvin.reorderable.ReorderableCollectionItemScope
@@ -81,7 +79,6 @@ enum class CollectionEditorPage {
     FolderEditor,
     CatalogPicker,
     TmdbSourcePicker,
-    TraktSourcePicker,
 }
 
 fun disposeCollectionEditorPage(page: CollectionEditorPage) {
@@ -90,19 +87,16 @@ fun disposeCollectionEditorPage(page: CollectionEditorPage) {
         CollectionEditorPage.FolderEditor -> CollectionEditorRepository.cancelFolderEdit()
         CollectionEditorPage.CatalogPicker -> CollectionEditorRepository.hideCatalogPicker()
         CollectionEditorPage.TmdbSourcePicker -> CollectionEditorRepository.hideTmdbSourcePicker()
-        CollectionEditorPage.TraktSourcePicker -> CollectionEditorRepository.hideTraktSourcePicker()
     }
 }
 
 private val autoDismissedPickerPages = setOf(
     CollectionEditorPage.TmdbSourcePicker,
-    CollectionEditorPage.TraktSourcePicker,
 )
 
 private fun CollectionEditorUiState.activeEditorPage(): CollectionEditorPage = when {
     showCatalogPicker -> CollectionEditorPage.CatalogPicker
     showTmdbSourcePicker -> CollectionEditorPage.TmdbSourcePicker
-    showTraktSourcePicker -> CollectionEditorPage.TraktSourcePicker
     showFolderEditor && editingFolder != null -> CollectionEditorPage.FolderEditor
     else -> CollectionEditorPage.Root
 }
@@ -221,18 +215,6 @@ fun CollectionEditorScreen(
             onBack = {
                 closePage(CollectionEditorPage.TmdbSourcePicker) {
                     CollectionEditorRepository.hideTmdbSourcePicker()
-                }
-            },
-        )
-        return
-    }
-
-    if (page == CollectionEditorPage.TraktSourcePicker) {
-        TraktSourcePickerScreen(
-            state = state,
-            onBack = {
-                closePage(CollectionEditorPage.TraktSourcePicker) {
-                    CollectionEditorRepository.hideTraktSourcePicker()
                 }
             },
         )
@@ -636,8 +618,6 @@ private fun FolderEditorPage(
     val bottomInset = nuvioSafeBottomPadding()
     val catalogPickerTitle = stringResource(Res.string.collections_editor_select_catalogs)
     val tmdbSourcePickerTitle = stringResource(Res.string.collections_editor_tmdb_sources)
-    val traktSourcePickerTitle = stringResource(Res.string.collections_editor_trakt_sources)
-    val editTraktSourcePickerTitle = stringResource(Res.string.collections_editor_edit_trakt_source)
 
     PlatformBackHandler(enabled = true) {
         onBack()
@@ -821,23 +801,6 @@ private fun FolderEditorPage(
                             }
                             TextButton(
                                 onClick = {
-                                    CollectionEditorRepository.showTraktSourcePicker()
-                                    onNavigateToPage?.invoke(
-                                        CollectionEditorPage.TraktSourcePicker,
-                                        traktSourcePickerTitle,
-                                    )
-                                },
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Add,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp),
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(stringResource(Res.string.collections_editor_add_trakt_source))
-                            }
-                            TextButton(
-                                onClick = {
                                     CollectionEditorRepository.showCatalogPicker()
                                     onNavigateToPage?.invoke(
                                         CollectionEditorPage.CatalogPicker,
@@ -880,18 +843,6 @@ private fun FolderEditorPage(
                                 if (source.isTmdb) {
                                     FolderTmdbSourceCard(
                                         source = source,
-                                        onRemove = { CollectionEditorRepository.removeCatalogSource(index) },
-                                    )
-                                } else if (source.isTrakt) {
-                                    FolderTraktSourceCard(
-                                        source = source,
-                                        onEdit = {
-                                            CollectionEditorRepository.editTraktSource(index)
-                                            onNavigateToPage?.invoke(
-                                                CollectionEditorPage.TraktSourcePicker,
-                                                editTraktSourcePickerTitle,
-                                            )
-                                        },
                                         onRemove = { CollectionEditorRepository.removeCatalogSource(index) },
                                     )
                                 } else if (addonSource != null) {
@@ -1632,208 +1583,6 @@ private fun TmdbSourcePickerScreen(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun TraktSourcePickerScreen(
-    state: CollectionEditorUiState,
-    onBack: () -> Unit,
-) {
-    val bottomInset = nuvioSafeBottomPadding()
-    val searchResultsTitle = stringResource(Res.string.collections_editor_trakt_search_results)
-    val trendingTitle = stringResource(Res.string.collections_editor_trakt_trending)
-    val popularTitle = stringResource(Res.string.collections_editor_trakt_popular)
-
-    PlatformBackHandler(enabled = true) {
-        onBack()
-    }
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        NuvioScreen(modifier = Modifier.fillMaxSize()) {
-            stickyHeader {
-                NuvioScreenHeader(
-                    title = if (state.editingTraktSourceIndex != null) {
-                        stringResource(Res.string.collections_editor_edit_trakt_source)
-                    } else {
-                        stringResource(Res.string.collections_editor_trakt_sources)
-                    },
-                    onBack = onBack,
-                )
-            }
-
-            item {
-                NuvioSurfaceCard {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        TmdbLabeledField(
-                            label = stringResource(Res.string.collections_editor_trakt_list),
-                            value = state.traktInput,
-                            onValueChange = { CollectionEditorRepository.setTraktInput(it) },
-                            placeholder = stringResource(Res.string.collections_editor_trakt_input_placeholder),
-                            helper = stringResource(Res.string.collections_editor_trakt_input_helper),
-                        )
-                        TmdbLabeledField(
-                            label = stringResource(Res.string.collections_editor_tmdb_display_title),
-                            value = state.traktTitleInput,
-                            onValueChange = { CollectionEditorRepository.setTraktTitleInput(it) },
-                            placeholder = stringResource(Res.string.collections_editor_trakt_title_placeholder),
-                            helper = stringResource(Res.string.collections_editor_tmdb_title_helper),
-                        )
-                        if (state.traktSearchError != null) {
-                            Text(
-                                text = state.traktSearchError,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.error,
-                            )
-                        }
-                    }
-                }
-            }
-
-            item {
-                PickerPanel(title = stringResource(Res.string.collections_editor_tmdb_type)) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        FilterChip(
-                            selected = state.traktMediaType == TmdbCollectionMediaType.MOVIE && !state.traktMediaBoth,
-                            onClick = {
-                                CollectionEditorRepository.setTraktMediaBoth(false)
-                                CollectionEditorRepository.setTraktMediaType(TmdbCollectionMediaType.MOVIE)
-                            },
-                            label = { Text(stringResource(Res.string.collections_editor_tmdb_movies)) },
-                        )
-                        FilterChip(
-                            selected = state.traktMediaType == TmdbCollectionMediaType.TV && !state.traktMediaBoth,
-                            onClick = {
-                                CollectionEditorRepository.setTraktMediaBoth(false)
-                                CollectionEditorRepository.setTraktMediaType(TmdbCollectionMediaType.TV)
-                            },
-                            label = { Text(stringResource(Res.string.collections_editor_tmdb_series)) },
-                        )
-                        FilterChip(
-                            selected = state.traktMediaBoth,
-                            onClick = { CollectionEditorRepository.setTraktMediaBoth(true) },
-                            label = { Text(stringResource(Res.string.collections_editor_tmdb_both)) },
-                        )
-                    }
-                }
-            }
-
-            item {
-                PickerPanel(title = stringResource(Res.string.collections_editor_tmdb_sort)) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        traktSortOptions().forEach { (value, label) ->
-                            FilterChip(
-                                selected = state.traktSortBy == value,
-                                onClick = { CollectionEditorRepository.setTraktSortBy(value) },
-                                label = { Text(label) },
-                            )
-                        }
-                    }
-
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = stringResource(Res.string.collections_editor_trakt_direction),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            FilterChip(
-                                selected = state.traktSortHow == TraktSortHow.ASC.value,
-                                onClick = { CollectionEditorRepository.setTraktSortHow(TraktSortHow.ASC.value) },
-                                label = { Text(stringResource(Res.string.collections_editor_trakt_ascending)) },
-                            )
-                            FilterChip(
-                                selected = state.traktSortHow == TraktSortHow.DESC.value,
-                                onClick = { CollectionEditorRepository.setTraktSortHow(TraktSortHow.DESC.value) },
-                                label = { Text(stringResource(Res.string.collections_editor_trakt_descending)) },
-                            )
-                        }
-                    }
-                }
-            }
-
-            TraktResultSection(
-                title = searchResultsTitle,
-                results = state.traktSearchResults,
-            )
-            TraktResultSection(
-                title = trendingTitle,
-                results = state.traktTrendingResults,
-            )
-            TraktResultSection(
-                title = popularTitle,
-                results = state.traktPopularResults,
-            )
-
-            item {
-                Spacer(modifier = Modifier.height(96.dp + bottomInset))
-            }
-        }
-
-        Surface(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth(),
-            color = MaterialTheme.colorScheme.background.copy(alpha = 0.96f),
-            tonalElevation = 6.dp,
-            shadowElevation = 10.dp,
-        ) {
-            PickerActionBar(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-                    .padding(bottom = bottomInset),
-            ) {
-                TextButton(onClick = { CollectionEditorRepository.searchTraktLists() }) {
-                    Icon(
-                        imageVector = Icons.Rounded.Search,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(stringResource(Res.string.collections_editor_tmdb_search))
-                }
-                NuvioPrimaryButton(
-                    text = if (state.editingTraktSourceIndex != null) {
-                        stringResource(Res.string.collections_editor_save)
-                    } else {
-                        stringResource(Res.string.collections_editor_add_source)
-                    },
-                    modifier = Modifier.weight(1f),
-                    enabled = state.traktInput.isNotBlank(),
-                    onClick = { CollectionEditorRepository.addTraktSourceFromInput() },
-                )
-            }
-        }
-    }
-}
-
-private fun LazyListScope.TraktResultSection(
-    title: String,
-    results: List<TraktPublicListSearchResult>,
-) {
-    if (results.isEmpty()) return
-    item {
-        PickerSectionLabel(title)
-    }
-    itemsIndexed(results) { _, result ->
-        PickerOptionRow(
-            title = result.title,
-            subtitle = result.subtitle,
-            selected = false,
-            onClick = { CollectionEditorRepository.addTraktSourceFromResult(result) },
-        )
-    }
-}
-
 @Composable
 private fun PickerPanel(
     title: String,
@@ -2231,63 +1980,6 @@ private fun FolderTmdbSourceCard(
     }
 }
 
-@Composable
-private fun FolderTraktSourceCard(
-    source: CollectionSource,
-    onEdit: () -> Unit,
-    onRemove: () -> Unit,
-) {
-    NuvioSurfaceCard {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = source.title?.takeIf { it.isNotBlank() } ?: stringResource(Res.string.source_trakt),
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = stringResource(Res.string.source_trakt),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                IconButton(
-                    onClick = onEdit,
-                    modifier = Modifier.size(36.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Edit,
-                        contentDescription = stringResource(Res.string.action_edit),
-                        modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                }
-                IconButton(
-                    onClick = onRemove,
-                    modifier = Modifier.size(36.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Close,
-                        contentDescription = stringResource(Res.string.action_remove),
-                        modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.error,
-                    )
-                }
-            }
-
-            Text(
-                text = traktSourceSubtitle(source),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FolderCatalogSourceCard(
@@ -2463,53 +2155,6 @@ private fun tmdbSortLabel(sort: TmdbCollectionSort): String =
         TmdbCollectionSort.RELEASE_DATE_DESC -> stringResource(Res.string.collections_editor_tmdb_sort_recent)
         TmdbCollectionSort.FIRST_AIR_DATE_DESC -> stringResource(Res.string.collections_editor_tmdb_sort_recent)
     }
-
-@Composable
-private fun traktSortOptions(): List<Pair<String, String>> =
-    listOf(
-        TraktListSort.RANK.value to stringResource(Res.string.collections_editor_trakt_sort_list_order),
-        TraktListSort.ADDED.value to stringResource(Res.string.collections_editor_trakt_sort_recently_added),
-        TraktListSort.TITLE.value to stringResource(Res.string.collections_editor_trakt_sort_title),
-        TraktListSort.RELEASED.value to stringResource(Res.string.collections_editor_trakt_sort_released),
-        TraktListSort.RUNTIME.value to stringResource(Res.string.collections_editor_trakt_sort_runtime),
-        TraktListSort.POPULARITY.value to stringResource(Res.string.collections_editor_trakt_sort_popular),
-        TraktListSort.PERCENTAGE.value to stringResource(Res.string.collections_editor_trakt_sort_percentage),
-        TraktListSort.VOTES.value to stringResource(Res.string.collections_editor_trakt_sort_votes),
-    )
-
-@Composable
-private fun traktSortLabel(value: String?): String =
-    when (TraktListSort.normalize(value)) {
-        TraktListSort.ADDED.value -> stringResource(Res.string.collections_editor_trakt_sort_recently_added)
-        TraktListSort.TITLE.value -> stringResource(Res.string.collections_editor_trakt_sort_title)
-        TraktListSort.RELEASED.value -> stringResource(Res.string.collections_editor_trakt_sort_released)
-        TraktListSort.RUNTIME.value -> stringResource(Res.string.collections_editor_trakt_sort_runtime)
-        TraktListSort.POPULARITY.value -> stringResource(Res.string.collections_editor_trakt_sort_popular)
-        TraktListSort.PERCENTAGE.value -> stringResource(Res.string.collections_editor_trakt_sort_percentage)
-        TraktListSort.VOTES.value -> stringResource(Res.string.collections_editor_trakt_sort_votes)
-        else -> stringResource(Res.string.collections_editor_trakt_sort_list_order)
-    }
-
-@Composable
-private fun traktDirectionLabel(value: String?): String =
-    when (TraktSortHow.normalize(value)) {
-        TraktSortHow.DESC.value -> stringResource(Res.string.collections_editor_trakt_descending)
-        else -> stringResource(Res.string.collections_editor_trakt_ascending)
-    }
-
-@Composable
-private fun traktSourceSubtitle(source: CollectionSource): String {
-    val media = when (TmdbCollectionMediaType.fromString(source.mediaType)) {
-        TmdbCollectionMediaType.MOVIE -> stringResource(Res.string.collections_editor_tmdb_movies)
-        TmdbCollectionMediaType.TV -> stringResource(Res.string.collections_editor_tmdb_series)
-    }
-    return listOf(
-        media,
-        traktSortLabel(source.sortBy),
-        traktDirectionLabel(source.sortHow),
-        stringResource(Res.string.collections_editor_trakt_list_id_format, source.traktListId ?: ""),
-    ).joinToString(" • ")
-}
 
 @Composable
 private fun tmdbSourceSubtitle(source: CollectionSource): String {

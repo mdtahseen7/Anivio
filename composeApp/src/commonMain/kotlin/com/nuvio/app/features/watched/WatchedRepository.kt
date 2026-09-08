@@ -138,7 +138,7 @@ object WatchedRepository {
     private var hasLoaded = false
     private var currentProfileId: Int = 1
     private var profileGeneration: Long = 0L
-    private var activeSource: WatchProgressSource = WatchProgressSource.NUVIO_SYNC
+    private var activeSource: WatchProgressSource = WatchProgressSource.LOCAL
     private var sourceGeneration: Long = 0L
     private val itemsStore = WatchedItemsStore()
     private var nuvioFullyWatchedSeriesKeys: Set<String> = emptySet()
@@ -188,7 +188,7 @@ object WatchedRepository {
         hasLoaded = false
         currentProfileId = 1
         profileGeneration += 1L
-        activeSource = WatchProgressSource.NUVIO_SYNC
+        activeSource = WatchProgressSource.LOCAL
         sourceGeneration += 1L
         itemsStore.update { nuvioItems, providerItems, dirtyNuvioKeys, dirtyProviderKeys ->
             nuvioItems.clear()
@@ -214,7 +214,7 @@ object WatchedRepository {
     private fun loadFromDisk(profileId: Int) {
         currentProfileId = profileId
         profileGeneration += 1L
-        activeSource = WatchProgressSource.NUVIO_SYNC
+        activeSource = WatchProgressSource.LOCAL
         sourceGeneration += 1L
         hasLoaded = true
         itemsStore.update { nuvioItems, providerItems, dirtyNuvioKeys, dirtyProviderKeys ->
@@ -934,17 +934,8 @@ object WatchedRepository {
         meta: MetaDetails,
         todayIsoDate: String,
         isEpisodeWatched: (MetaVideo) -> Boolean = { episode ->
-            val keys = watchedItemKeys(meta.type, meta.id, episode.season, episode.episode)
-            if (keys.any(_uiState.value.watchedKeys::contains)) {
-                true
-            } else {
-                val episodeNumber = episode.episode
-                if (episodeNumber != null) {
-                    com.nuvio.app.features.simkl.SimklAnimeWatchedFallback.isWatched(episode.id, episodeNumber)
-                } else {
-                    false
-                }
-            }
+            watchedItemKeys(meta.type, meta.id, episode.season, episode.episode)
+                .any(_uiState.value.watchedKeys::contains)
         },
         isEpisodeCompleted: (MetaVideo) -> Boolean = { false },
     ): Boolean {
@@ -1019,11 +1010,9 @@ object WatchedRepository {
         persist()
     }
 
-    fun currentExpandedSiblingKeys(): Set<String> = expandedSiblingKeys
-
     /**
-     * Returns the base fully-watched series keys from the active source,
-     * without sibling expansion. Used by sibling expansion to avoid feedback loops.
+     * Returns the fully-watched series keys the active source reported, without any keys the badge
+     * resolver expanded on top of them.
      */
     fun baseFullyWatchedSeriesKeys(): Set<String> = fullyWatchedSeriesKeysForSource(activeSource)
 
@@ -1092,7 +1081,8 @@ object WatchedRepository {
         val watchedKeys = items.mapTo(linkedSetOf()) {
             watchedItemKey(it.type, it.id, it.season, it.episode)
         }
-        // Merge extra watched keys from providers (e.g. Simkl anime alternate IDs)
+        // Merge extra watched keys the provider reports on top of its watched items (e.g. AniList
+        // completed titles, which carry no per-episode rows).
         activeSource.providerId?.let { providerId ->
             providerExtraWatchedKeys[providerId]?.let { extraKeys -> watchedKeys += extraKeys }
         }
@@ -1124,7 +1114,7 @@ object WatchedRepository {
         }
 
     /**
-     * Observes provider extra watched keys (e.g. Simkl anime alternate IDs).
+     * Observes the extra watched keys the active provider reports.
      * When the provider's snapshot changes (after mutations, syncs), recomputes
      * extra keys, re-pulls watched items, and re-publishes so watchedKeys and
      * items stay reactive and current.

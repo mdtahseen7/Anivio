@@ -23,10 +23,7 @@ import kotlinx.coroutines.runBlocking
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.getString
 
-private const val gitHubOwner = "NuvioMedia"
-private const val gitHubRepo = "NuvioMobile"
 private const val gitHubApiBase = "https://api.github.com"
-private const val releaseChannelBranch = "cmp-rewrite"
 
 data class AppUpdate(
     val tag: String,
@@ -119,12 +116,14 @@ private object VersionUtils {
 
 private object AppUpdaterRepository {
     suspend fun getLatestChannelUpdate(): Result<AppUpdate> = runCatching {
+        val owner = UpdateChannelConfig.GITHUB_OWNER
+        val repo = UpdateChannelConfig.GITHUB_REPO
         val response = httpRequestRaw(
             method = "GET",
-            url = "$gitHubApiBase/repos/$gitHubOwner/$gitHubRepo/releases?per_page=20",
+            url = "$gitHubApiBase/repos/$owner/$repo/releases?per_page=20",
             headers = mapOf(
                 "Accept" to "application/vnd.github+json",
-                "User-Agent" to "NuvioMobile",
+                "User-Agent" to UpdateChannelConfig.USER_AGENT,
             ),
             body = "",
         )
@@ -155,7 +154,11 @@ private object AppUpdaterRepository {
     }
 
     private fun GitHubReleaseDto.matchesRequestedChannel(): Boolean {
-        val channel = releaseChannelBranch
+        // A project publishing a single stream of releases has no channel to disambiguate, so an
+        // unset channel accepts everything rather than matching nothing.
+        val channel = UpdateChannelConfig.CHANNEL.trim()
+        if (channel.isBlank()) return true
+
         if (targetCommitish?.trim()?.equals(channel, ignoreCase = true) == true) {
             return true
         }

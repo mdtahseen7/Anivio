@@ -1,5 +1,12 @@
 package com.nuvio.app
 
+import androidx.compose.material.icons.rounded.Explore
+import nuvio.composeapp.generated.resources.compose_search_discover_title
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
+import com.nuvio.app.core.ui.NuvioCircularGlassButton
+import org.jetbrains.compose.resources.painterResource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.WindowInsets
@@ -88,16 +95,16 @@ internal fun MainTabsDestination(
                             contentDescription = stringResource(Res.string.compose_nav_home),
                         )
                         NavItem(
-                            selected = selectedTab == AppScreenTab.Search,
-                            onClick = { onTabSelected(AppScreenTab.Search) },
-                            icon = Res.drawable.sidebar_search,
-                            contentDescription = stringResource(Res.string.compose_nav_search),
-                        )
-                        NavItem(
                             selected = selectedTab == AppScreenTab.Library,
                             onClick = { onTabSelected(AppScreenTab.Library) },
                             icon = Res.drawable.sidebar_library,
                             contentDescription = stringResource(Res.string.compose_nav_library),
+                        )
+                        NavItem(
+                            selected = selectedTab == AppScreenTab.Discover,
+                            onClick = { onTabSelected(AppScreenTab.Discover) },
+                            icon = Icons.Rounded.Explore,
+                            contentDescription = stringResource(Res.string.compose_search_discover_title),
                         )
                         NavItem(
                             selected = selectedTab == AppScreenTab.Settings,
@@ -132,6 +139,27 @@ internal fun MainTabsDestination(
                     )
                 }
 
+                // Search left the bottom bar, so it lives here as a floating pill-styled button in
+                // the top-right corner, above whatever tab is showing.
+                if (!isTabletLayout && selectedTab != AppScreenTab.Search) {
+                    NuvioCircularGlassButton(
+                        onClick = { onTabSelected(AppScreenTab.Search) },
+                        hazeState = if (navBarStyleSetting != NavBarStyle.CLASSIC) navBarHazeState else null,
+                        size = 48.dp,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .statusBarsPadding()
+                            .padding(top = 8.dp, end = 16.dp),
+                    ) {
+                        Icon(
+                            painter = painterResource(Res.drawable.sidebar_search),
+                            contentDescription = stringResource(Res.string.compose_nav_search),
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                }
+
                 if (isTabletLayout && !useNativeBottomTabs) {
                     TabletFloatingTopBar(
                         selectedTab = selectedTab,
@@ -160,18 +188,18 @@ internal fun MainTabsDestination(
                             label = stringResource(Res.string.compose_nav_home),
                         )
                         NavItem(
-                            selected = selectedTab == AppScreenTab.Search,
-                            onClick = { onTabSelected(AppScreenTab.Search) },
-                            icon = Res.drawable.sidebar_search,
-                            contentDescription = stringResource(Res.string.compose_nav_search),
-                            label = stringResource(Res.string.compose_nav_search),
-                        )
-                        NavItem(
                             selected = selectedTab == AppScreenTab.Library,
                             onClick = { onTabSelected(AppScreenTab.Library) },
                             icon = Res.drawable.sidebar_library,
                             contentDescription = stringResource(Res.string.compose_nav_library),
                             label = stringResource(Res.string.compose_nav_library),
+                        )
+                        NavItem(
+                            selected = selectedTab == AppScreenTab.Discover,
+                            onClick = { onTabSelected(AppScreenTab.Discover) },
+                            icon = Icons.Rounded.Explore,
+                            contentDescription = stringResource(Res.string.compose_search_discover_title),
+                            label = stringResource(Res.string.compose_search_discover_title),
                         )
                         NavItem(
                             selected = selectedTab == AppScreenTab.Settings,

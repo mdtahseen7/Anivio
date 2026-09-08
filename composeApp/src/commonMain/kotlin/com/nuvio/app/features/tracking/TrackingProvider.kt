@@ -16,8 +16,10 @@ import kotlinx.atomicfu.locks.synchronized
 enum class TrackingProviderId(
     val storageId: String,
 ) {
-    TRAKT("trakt"),
-    SIMKL("simkl");
+    ANILIST("anilist"),
+
+    /** Placeholder: the card and source entry exist, the integration does not yet. */
+    MAL("mal");
 
     companion object {
         fun fromStorage(value: String?): TrackingProviderId? =
