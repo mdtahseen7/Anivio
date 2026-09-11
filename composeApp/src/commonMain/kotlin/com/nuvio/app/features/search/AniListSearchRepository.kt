@@ -1,6 +1,7 @@
 package com.nuvio.app.features.search
 
 import co.touchlab.kermit.Logger
+import com.nuvio.app.features.anime.PublicAnimeSource
 import com.nuvio.app.features.anilist.ANILIST_ADDON_ID
 import com.nuvio.app.features.anilist.ANILIST_SEARCH_MOVIE_TYPE
 import com.nuvio.app.features.anilist.ANILIST_SEARCH_SERIES_TYPE
@@ -108,8 +109,9 @@ object AniListSearchRepository {
         contentType: String,
         forceRefresh: Boolean,
     ): HomeCatalogSection? {
-        val page = AniListCatalogSource.resolve(
+        val page = PublicAnimeSource.catalog(
             catalogId = contentType,
+            contentType = contentType,
             page = 1,
             maxItems = SEARCH_PER_PAGE,
             forceRefresh = forceRefresh,

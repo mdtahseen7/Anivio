@@ -143,7 +143,12 @@ internal actual object EpisodeReleaseNotificationPlatform {
             val scheduledIds = mutableListOf<String>()
 
             requests.forEach { request ->
-                val triggerAtEpochMs = triggerAtEpochMs(request.releaseDateIso) ?: return@forEach
+                // The published broadcast instant when there is one, otherwise the morning of the
+                // air date. For anime the former is the only correct choice: a 23:30 JST episode is
+                // already "tomorrow" in Japan and still "today" in Europe.
+                val triggerAtEpochMs = request.airingAtEpochMs
+                    ?: triggerAtEpochMs(request.releaseDateIso)
+                    ?: return@forEach
                 val initialDelayMs = triggerAtEpochMs - nowEpochMs
                 if (initialDelayMs <= 0L) return@forEach
 

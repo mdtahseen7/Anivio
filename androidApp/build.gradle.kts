@@ -106,7 +106,10 @@ android {
         abi {
             isEnable = buildsReleaseApks
             reset()
-            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+            // arm64-v8a only. Every 64-bit Android device since 2015 is arm64, and dropping the
+            // other three cuts the release build from four APKs to one — no more picking the right
+            // file out of the output directory. Add an ABI back here if a target device needs it.
+            include("arm64-v8a")
             isUniversalApk = false
         }
     }

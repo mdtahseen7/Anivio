@@ -18,7 +18,6 @@ enum class TrackingProviderId(
 ) {
     ANILIST("anilist"),
 
-    /** Placeholder: the card and source entry exist, the integration does not yet. */
     MAL("mal");
 
     companion object {

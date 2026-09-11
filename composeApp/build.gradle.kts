@@ -47,6 +47,12 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
     abstract val tvdbApiKey: Property<String>
 
     @get:Input
+    abstract val malClientId: Property<String>
+
+    @get:Input
+    abstract val malRedirectUri: Property<String>
+
+    @get:Input
     abstract val updateGitHubOwner: Property<String>
 
     @get:Input
@@ -175,6 +181,24 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
                 |
                 |    /** Must match the redirect URL registered on the AniList developer app exactly. */
                 |    const val REDIRECT_URI = "${props.getProperty("ANILIST_REDIRECT_URI", "nuvio://auth/anilist")}"
+                |
+                |    val isConfigured: Boolean
+                |        get() = CLIENT_ID.isNotBlank()
+                |}
+                """.trimMargin()
+            )
+        }
+
+        outDir.resolve("com/nuvio/app/features/mal").apply {
+            mkdirs()
+            resolve("MalConfig.kt").writeText(
+                """
+                |package com.nuvio.app.features.mal
+                |
+                |object MalConfig {
+                |    /** MAL OAuth client id. Blank leaves MAL authentication disabled. */
+                |    const val CLIENT_ID = "${malClientId.get()}"
+                |    const val REDIRECT_URI = "${malRedirectUri.get()}"
                 |
                 |    val isConfigured: Boolean
                 |        get() = CLIENT_ID.isNotBlank()
@@ -409,6 +433,8 @@ val generateRuntimeConfigs = tasks.register<GenerateRuntimeConfigsTask>("generat
     sentryDsn.set(runtimeConfigValue("SENTRY_DSN"))
     fanartApiKey.set(runtimeConfigValue("FANART_API_KEY"))
     tvdbApiKey.set(runtimeConfigValue("TVDB_API_KEY"))
+    malClientId.set(runtimeConfigValue("MAL_CLIENT_ID"))
+    malRedirectUri.set(runtimeConfigValue("MAL_REDIRECT_URI", fallback = "nuvio://auth/mal"))
     updateGitHubOwner.set(runtimeConfigValue("ANIVIO_UPDATE_GITHUB_OWNER"))
     updateGitHubRepo.set(runtimeConfigValue("ANIVIO_UPDATE_GITHUB_REPO"))
     updateChannel.set(runtimeConfigValue("ANIVIO_UPDATE_CHANNEL"))

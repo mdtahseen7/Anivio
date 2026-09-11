@@ -21,6 +21,15 @@ private data class StoredContinueWatchingPreferences(
     @SerialName("blur_continue_watching_next_up")
     val blurNextUp: Boolean = false,
     val dismissedNextUpKeys: Set<String> = emptySet(),
+    /**
+     * Series removed from Continue Watching outright, as opposed to a single seed being dismissed.
+     *
+     * Needed because deleting an in-progress entry is exactly what lets the watched-history-derived
+     * Next Up card for the same episode appear: seed-scoped dismissal cannot express "this show is
+     * gone" when the seed it would use does not exist yet.
+     */
+    @SerialName("dismissed_next_up_content_ids")
+    val dismissedNextUpContentIds: Set<String> = emptySet(),
     val showResumePromptOnLaunch: Boolean = true,
     @SerialName("sort_mode")
     val sortMode: ContinueWatchingSortMode = ContinueWatchingSortMode.DEFAULT,
@@ -98,6 +107,7 @@ object ContinueWatchingPreferencesRepository {
                 showUnairedNextUp = stored.showUnairedNextUp,
                 blurNextUp = stored.blurNextUp,
                 dismissedNextUpKeys = stored.dismissedNextUpKeys,
+                dismissedNextUpContentIds = stored.dismissedNextUpContentIds,
                 showResumePromptOnLaunch = stored.showResumePromptOnLaunch,
                 sortMode = stored.sortMode,
             )
@@ -165,14 +175,36 @@ object ContinueWatchingPreferencesRepository {
         persist()
     }
 
+    /** Removes a whole series from Continue Watching until new progress for it is recorded. */
+    fun addDismissedNextUpContent(contentId: String) {
+        ensureLoaded()
+        val normalizedContentId = contentId.trim()
+        if (normalizedContentId.isBlank()) return
+        val current = _uiState.value.dismissedNextUpContentIds
+        if (normalizedContentId in current) return
+        _uiState.value = _uiState.value.copy(dismissedNextUpContentIds = current + normalizedContentId)
+        persist()
+    }
+
     fun removeDismissedNextUpKeysForContent(contentId: String) {
         ensureLoaded()
         val normalizedContentId = contentId.trim()
         if (normalizedContentId.isBlank()) return
         val prefix = "$normalizedContentId|"
         val filtered = _uiState.value.dismissedNextUpKeys.filterNot { it.startsWith(prefix) }.toSet()
-        if (filtered == _uiState.value.dismissedNextUpKeys) return
-        _uiState.value = _uiState.value.copy(dismissedNextUpKeys = filtered)
+        // Playing the show again is an explicit signal the user wants it back, so the content-level
+        // removal is lifted here too. This is called from every series progress write.
+        val filteredContentIds = _uiState.value.dismissedNextUpContentIds - normalizedContentId
+        if (
+            filtered == _uiState.value.dismissedNextUpKeys &&
+            filteredContentIds == _uiState.value.dismissedNextUpContentIds
+        ) {
+            return
+        }
+        _uiState.value = _uiState.value.copy(
+            dismissedNextUpKeys = filtered,
+            dismissedNextUpContentIds = filteredContentIds,
+        )
         persist()
     }
 
@@ -187,6 +219,7 @@ object ContinueWatchingPreferencesRepository {
                     showUnairedNextUp = _uiState.value.showUnairedNextUp,
                     blurNextUp = _uiState.value.blurNextUp,
                     dismissedNextUpKeys = _uiState.value.dismissedNextUpKeys,
+                    dismissedNextUpContentIds = _uiState.value.dismissedNextUpContentIds,
                     showResumePromptOnLaunch = _uiState.value.showResumePromptOnLaunch,
                     sortMode = _uiState.value.sortMode,
                 ),

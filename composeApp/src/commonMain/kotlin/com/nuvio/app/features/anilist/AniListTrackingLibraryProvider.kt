@@ -8,6 +8,7 @@ import com.nuvio.app.features.tracking.TrackingLibraryProvider
 import com.nuvio.app.features.tracking.TrackingLibrarySnapshot
 import com.nuvio.app.features.tracking.TrackingLibraryTab
 import com.nuvio.app.features.tracking.TrackingLibraryTabKind
+import com.nuvio.app.features.tracking.TrackingListStatus
 import com.nuvio.app.features.tracking.TrackingMembershipResolution
 import com.nuvio.app.features.tracking.TrackingProviderId
 import com.nuvio.app.features.tracking.TrackingRefreshIntent
@@ -40,6 +41,7 @@ internal data class AniListStatusTab(
     val wireStatus: String,
     val titleResource: StringResource,
     val kind: TrackingLibraryTabKind,
+    val semanticStatus: TrackingListStatus,
 ) {
     val key: String get() = "$ANILIST_STATUS_TAB_PREFIX$wireStatus"
 }
@@ -49,27 +51,32 @@ internal val aniListStatusTabs = listOf(
         wireStatus = AniListListStatus.CURRENT,
         titleResource = Res.string.anilist_status_watching,
         kind = TrackingLibraryTabKind.STATUS,
+        semanticStatus = TrackingListStatus.WATCHING,
     ),
     // Planning is AniList's watchlist, so it is what a plain "add to library" tap targets.
     AniListStatusTab(
         wireStatus = AniListListStatus.PLANNING,
         titleResource = Res.string.anilist_status_planning,
         kind = TrackingLibraryTabKind.WATCHLIST,
+        semanticStatus = TrackingListStatus.PLAN_TO_WATCH,
     ),
     AniListStatusTab(
         wireStatus = AniListListStatus.COMPLETED,
         titleResource = Res.string.anilist_status_completed,
         kind = TrackingLibraryTabKind.STATUS,
+        semanticStatus = TrackingListStatus.COMPLETED,
     ),
     AniListStatusTab(
         wireStatus = AniListListStatus.PAUSED,
         titleResource = Res.string.anilist_status_paused,
         kind = TrackingLibraryTabKind.STATUS,
+        semanticStatus = TrackingListStatus.ON_HOLD,
     ),
     AniListStatusTab(
         wireStatus = AniListListStatus.DROPPED,
         titleResource = Res.string.anilist_status_dropped,
         kind = TrackingLibraryTabKind.STATUS,
+        semanticStatus = TrackingListStatus.DROPPED,
     ),
 )
 
@@ -123,6 +130,7 @@ object AniListTrackingLibraryProvider : TrackingLibraryProvider {
                 providerId = TrackingProviderId.ANILIST,
                 kind = tab.kind,
                 selectionGroup = ANILIST_STATUS_SELECTION_GROUP,
+                semanticStatus = tab.semanticStatus,
             )
         }
     }

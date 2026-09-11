@@ -1,6 +1,7 @@
 package com.nuvio.app.features.watched
 
 import co.touchlab.kermit.Logger
+import com.nuvio.app.core.sync.AppVisibilityState
 import com.nuvio.app.features.details.MetaDetailsRepository
 import com.nuvio.app.features.watchprogress.CurrentDateProvider
 import com.nuvio.app.features.watchprogress.WatchProgressEntry
@@ -39,6 +40,14 @@ suspend fun resolveWatchedBadgesBulk(
     // tracking provider reports on top of its watched items.
     val watchedKeys = WatchedRepository.uiState.value.watchedKeys
 
+    // A badge is a visual affordance. Resolving the whole watch history for one while the app is not
+    // on screen buys nothing, and when the screen has just gone off the radio is usually already
+    // torn down, so every fetch in the walk fails in turn. Recomputed on the next foreground change.
+    if (!AppVisibilityState.isForeground) {
+        log.d { "Skipping bulk badge resolution while backgrounded" }
+        return
+    }
+
     log.i { "Bulk badge resolution starting: ${touchedSeriesIds.size} series candidates" }
 
     withContext(Dispatchers.Default) {
@@ -46,7 +55,16 @@ suspend fun resolveWatchedBadgesBulk(
         val resolvedIds = mutableSetOf<String>()
         val resolvedStates = linkedMapOf<String, Boolean>()
 
+        var completedWalk = true
+
         for (contentId in touchedSeriesIds) {
+            // Checked per item, not once: the walk is long enough that the app can be backgrounded
+            // partway through, which is exactly when the requests start failing.
+            if (!AppVisibilityState.isForeground) {
+                log.d { "Stopping bulk badge resolution at ${resolvedIds.size}; app backgrounded" }
+                completedWalk = false
+                break
+            }
             semaphore.withPermit {
                 val meta = try {
                     MetaDetailsRepository.fetch(type = "series", id = contentId, cacheResult = false)
@@ -82,7 +100,11 @@ suspend fun resolveWatchedBadgesBulk(
 
         // No connected source aliases a title under more than one content id — local keys and
         // AniList media ids are both one per title — so any expansion still on disk is stale.
-        WatchedRepository.setExpandedFullyWatchedSeriesKeys(emptySet())
+        // Only safe to conclude that from a walk that actually finished; after an early exit the
+        // unvisited ids are indistinguishable from resolved-and-absent ones.
+        if (completedWalk) {
+            WatchedRepository.setExpandedFullyWatchedSeriesKeys(emptySet())
+        }
     }
 }
 

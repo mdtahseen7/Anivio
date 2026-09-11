@@ -1,0 +1,208 @@
+{
+  "name": "Anivio Custom Plugins",
+  "version": "1.1.0",
+  "description": "Custom anime, hentai, and torrent stream providers for Anivio.",
+  "scrapers": [
+    {
+      "id": "anibd",
+      "name": "AniBD",
+      "description": "AniBD anime provider with direct HLS stream extraction and multi-server resolution.",
+      "version": "1.0.0",
+      "filename": "anibd.js",
+      "logo": "https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/crunchyroll.png",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "enabled": true,
+      "hasSettings": true,
+      "contentLanguage": [
+        "ja",
+        "en"
+      ],
+      "supportedFormats": [
+        "hls"
+      ],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "kickassanime",
+      "name": "KickAssAnime",
+      "description": "KickAssAnime provider with direct 1080p HLS stream extraction via CatStream.",
+      "version": "1.0.0",
+      "filename": "kickassanime.js",
+      "logo": "https://kaa.lt/favicon.ico",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "enabled": true,
+      "hasSettings": true,
+      "contentLanguage": [
+        "ja",
+        "en"
+      ],
+      "supportedFormats": [
+        "hls"
+      ],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "mkissa",
+      "name": "MKissa",
+      "description": "MKissa provider via Anivexa API with SUB/DUB streams.",
+      "version": "1.0.0",
+      "filename": "mkissa.js",
+      "logo": "https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/jellyfin.png",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "enabled": true,
+      "hasSettings": true,
+      "contentLanguage": [
+        "ja",
+        "en"
+      ],
+      "supportedFormats": [
+        "hls",
+        "mp4"
+      ],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "oppaistream",
+      "name": "OppaiStream",
+      "description": "OppaiStream provider for uncensored anime and hentai with multi-quality MP4/WebM streams.",
+      "version": "1.0.0",
+      "filename": "oppaistream.js",
+      "logo": "https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/plex.png",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "enabled": true,
+      "hasSettings": true,
+      "contentLanguage": [
+        "ja",
+        "en"
+      ],
+      "supportedFormats": [
+        "mp4",
+        "hls"
+      ],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "hentaigasm",
+      "name": "Hentaigasm",
+      "description": "Hentaigasm provider with high-quality MP4 video streams.",
+      "version": "1.0.0",
+      "filename": "hentaigasm.js",
+      "logo": "https://hentaigasm.com/favicon.ico",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "enabled": true,
+      "hasSettings": true,
+      "contentLanguage": [
+        "ja",
+        "en"
+      ],
+      "supportedFormats": [
+        "mp4"
+      ],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "watchhentai",
+      "name": "WatchHentai",
+      "description": "WatchHentai provider with decrypted direct video streams.",
+      "version": "1.0.0",
+      "filename": "watchhentai.js",
+      "logo": "https://watchhentai.net/favicon.ico",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "enabled": true,
+      "hasSettings": true,
+      "contentLanguage": [
+        "ja",
+        "en"
+      ],
+      "supportedFormats": [
+        "mp4",
+        "hls"
+      ],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "anikoto",
+      "name": "Anikoto",
+      "description": "Anikoto provider with SUB and DUB streams.",
+      "version": "1.0.0",
+      "filename": "anikoto.js",
+      "logo": "https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/emby.png",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "enabled": true,
+      "hasSettings": true,
+      "contentLanguage": [
+        "ja",
+        "en"
+      ],
+      "supportedFormats": [
+        "hls"
+      ],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "megaplay",
+      "name": "MegaPlay",
+      "description": "MegaPlay provider with SUB and DUB streams.",
+      "version": "1.0.0",
+      "filename": "megaplay.js",
+      "logo": "https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/kodi.png",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "enabled": true,
+      "hasSettings": true,
+      "contentLanguage": [
+        "ja",
+        "en"
+      ],
+      "supportedFormats": [
+        "hls"
+      ],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "torrentio",
+      "name": "Torrentio",
+      "description": "Torrentio torrent provider (Nyaa, HorribleSubs, TokyoTosho) with native P2P BitTorrent streaming.",
+      "version": "1.0.0",
+      "filename": "torrentio.js",
+      "logo": "https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/stremio.png",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "enabled": true,
+      "hasSettings": true,
+      "contentLanguage": [
+        "ja",
+        "en"
+      ],
+      "supportedFormats": [
+        "torrent"
+      ],
+      "supportsExternalPlayer": true
+    }
+  ]
+}

@@ -61,6 +61,7 @@ object AniListCatalogSource {
                 catalog.pageSelection(alias, page, perPage, nowSeconds, includeAdult) +
                 "\n}",
             forceRefresh = forceRefresh,
+            cacheTtlMs = catalog.cacheTtlMs(),
         )
 
         data.readCatalogPage(alias, catalog, page, maxItems, includeAdult)
@@ -98,6 +99,10 @@ object AniListCatalogSource {
         val data = AniListClient.query(
             query = "query {\n" + selections.joinToString(separator = "\n") + "\n}",
             forceRefresh = forceRefresh,
+            // One request carries every row, so the shortest TTL among them wins. Otherwise the
+            // recently-released row would inherit Popular's ten minutes purely because they share a
+            // request.
+            cacheTtlMs = catalogs.minOf { it.cacheTtlMs() },
         )
 
         catalogs.mapIndexedNotNull { index, catalog ->

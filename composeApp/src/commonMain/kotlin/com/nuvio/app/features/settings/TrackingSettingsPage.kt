@@ -25,12 +25,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.core.ui.NuvioLoadingIndicator
 import com.nuvio.app.core.ui.nuvio
 import com.nuvio.app.features.anilist.AniListAuthUiState
-import com.nuvio.app.features.anilist.AniListConnectionMode
+import com.nuvio.app.features.mal.MalAuthUiState
 import com.nuvio.app.features.library.LibrarySourceMode
 import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.tracking.CONTINUE_WATCHING_DAYS_CAP_ALL
 import com.nuvio.app.features.tracking.CONTINUE_WATCHING_DAYS_CAP_OPTIONS
+import com.nuvio.app.features.tracking.TrackingCapability
 import com.nuvio.app.features.tracking.TrackingProviderId
+import com.nuvio.app.features.tracking.TrackingProviderRegistry
 import com.nuvio.app.features.tracking.TrackingSettingsRepository
 import com.nuvio.app.features.tracking.TrackingSettingsUiState
 import com.nuvio.app.features.tracking.WatchProgressSource
@@ -43,7 +45,9 @@ import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.action_retry
 import nuvio.composeapp.generated.resources.anilist_source_name
 import nuvio.composeapp.generated.resources.settings_tracking_anilist_library_description
+import nuvio.composeapp.generated.resources.settings_tracking_anilist_local_progress_description
 import nuvio.composeapp.generated.resources.settings_tracking_anilist_progress_description
+import nuvio.composeapp.generated.resources.tracking_source_anilist_local
 import nuvio.composeapp.generated.resources.settings_tracking_connect_first
 import nuvio.composeapp.generated.resources.settings_tracking_continue_watching_days_all
 import nuvio.composeapp.generated.resources.settings_tracking_continue_watching_days_value
@@ -74,6 +78,7 @@ import org.jetbrains.compose.resources.stringResource
 internal fun LazyListScope.trackingSettingsContent(
     isTablet: Boolean,
     aniListUiState: AniListAuthUiState,
+    malUiState: MalAuthUiState,
     settingsUiState: TrackingSettingsUiState,
 ) {
     item {
@@ -84,6 +89,7 @@ internal fun LazyListScope.trackingSettingsContent(
             TrackingProviderCards(
                 isTablet = isTablet,
                 aniListUiState = aniListUiState,
+                malUiState = malUiState,
             )
         }
     }
@@ -96,7 +102,6 @@ internal fun LazyListScope.trackingSettingsContent(
             TrackingDataSources(
                 isTablet = isTablet,
                 settingsUiState = settingsUiState,
-                aniListConnected = aniListUiState.mode == AniListConnectionMode.CONNECTED,
             )
         }
     }
@@ -123,7 +128,6 @@ private enum class TrackingDataPicker {
 private fun TrackingDataSources(
     isTablet: Boolean,
     settingsUiState: TrackingSettingsUiState,
-    aniListConnected: Boolean,
 ) {
     var activePickerName by rememberSaveable { mutableStateOf<String?>(null) }
     val activePicker = activePickerName?.let(TrackingDataPicker::valueOf)
@@ -132,13 +136,25 @@ private fun TrackingDataSources(
         WatchProgressSourceCoordinator.ensureStarted()
         WatchProgressSourceCoordinator.uiState
     }.collectAsStateWithLifecycle()
-    val isProviderConnected: (TrackingProviderId) -> Boolean = { provider ->
-        provider == TrackingProviderId.ANILIST && aniListConnected
+    val libraryAvailable: (TrackingProviderId) -> Boolean = { provider ->
+        TrackingProviderRegistry.isAuthenticated(provider) &&
+            TrackingProviderRegistry.libraryProvider(provider) != null &&
+            TrackingProviderRegistry.providersWith(TrackingCapability.LIBRARY_READ)
+                .any { it.providerId == provider }
+    }
+    val progressAvailable: (TrackingProviderId) -> Boolean = { provider ->
+        TrackingProviderRegistry.isAuthenticated(provider) &&
+            TrackingProviderRegistry.progressProvider(provider) != null &&
+            TrackingProviderRegistry.watchedProvider(provider) != null &&
+            TrackingProviderRegistry.providersWith(TrackingCapability.PROGRESS_READ)
+                .any { it.providerId == provider } &&
+            TrackingProviderRegistry.providersWith(TrackingCapability.WATCHED_READ)
+                .any { it.providerId == provider }
     }
     val effectiveLibrarySource =
-        effectiveLibrarySourceMode(settingsUiState.librarySourceMode, isProviderConnected)
+        effectiveLibrarySourceMode(settingsUiState.librarySourceMode, libraryAvailable)
     val effectiveProgressSource =
-        effectiveWatchProgressSource(settingsUiState.watchProgressSource, isProviderConnected)
+        effectiveWatchProgressSource(settingsUiState.watchProgressSource, progressAvailable)
 
     val libraryFallback = if (effectiveLibrarySource != settingsUiState.librarySourceMode) {
         stringResource(
@@ -198,7 +214,10 @@ private fun TrackingDataSources(
             title = stringResource(Res.string.trakt_library_source_dialog_title),
             subtitle = stringResource(Res.string.trakt_library_source_dialog_subtitle),
             selectedValue = effectiveLibrarySource,
-            options = librarySourceOptions(aniListConnected),
+            options = librarySourceOptions(
+                aniListAvailable = libraryAvailable(TrackingProviderId.ANILIST),
+                malAvailable = libraryAvailable(TrackingProviderId.MAL),
+            ),
             onSelected = TrackingSettingsRepository::setLibrarySourceMode,
             onDismiss = { activePickerName = null },
         )
@@ -207,7 +226,10 @@ private fun TrackingDataSources(
             title = stringResource(Res.string.trakt_watch_progress_dialog_title),
             subtitle = stringResource(Res.string.tracking_watch_progress_dialog_subtitle),
             selectedValue = effectiveProgressSource,
-            options = watchProgressSourceOptions(aniListConnected),
+            options = watchProgressSourceOptions(
+                aniListAvailable = progressAvailable(TrackingProviderId.ANILIST),
+                malAvailable = progressAvailable(TrackingProviderId.MAL),
+            ),
             onSelected = { source ->
                 scope.launch {
                     WatchProgressSourceCoordinator.selectSource(
@@ -326,9 +348,9 @@ private fun TrackingInlineErrorRow(
 
 @Composable
 private fun librarySourceOptions(
-    aniListConnected: Boolean,
+    aniListAvailable: Boolean,
+    malAvailable: Boolean,
 ): List<TrackingPickerOption<LibrarySourceMode>> {
-    val aniListAvailable = isTrackingBrandAvailable(TrackingBrand.ANILIST, aniListConnected)
     return listOf(
         TrackingPickerOption(
             value = LibrarySourceMode.LOCAL,
@@ -346,17 +368,17 @@ private fun librarySourceOptions(
             value = LibrarySourceMode.MAL,
             title = stringResource(Res.string.tracking_source_mal),
             description = stringResource(Res.string.settings_tracking_mal_source_description),
-            enabled = false,
-            unavailableReason = stringResource(Res.string.settings_tracking_mal_source_description),
+            enabled = malAvailable,
+            unavailableReason = trackingUnavailableReason(TrackingBrand.MAL, malAvailable),
         ),
     )
 }
 
 @Composable
 private fun watchProgressSourceOptions(
-    aniListConnected: Boolean,
+    aniListAvailable: Boolean,
+    malAvailable: Boolean,
 ): List<TrackingPickerOption<WatchProgressSource>> {
-    val aniListAvailable = isTrackingBrandAvailable(TrackingBrand.ANILIST, aniListConnected)
     return listOf(
         TrackingPickerOption(
             value = WatchProgressSource.LOCAL,
@@ -371,11 +393,18 @@ private fun watchProgressSourceOptions(
             unavailableReason = trackingUnavailableReason(TrackingBrand.ANILIST, aniListAvailable),
         ),
         TrackingPickerOption(
+            value = WatchProgressSource.ANILIST_LOCAL,
+            title = stringResource(Res.string.tracking_source_anilist_local),
+            description = stringResource(Res.string.settings_tracking_anilist_local_progress_description),
+            enabled = aniListAvailable,
+            unavailableReason = trackingUnavailableReason(TrackingBrand.ANILIST, aniListAvailable),
+        ),
+        TrackingPickerOption(
             value = WatchProgressSource.MAL,
             title = stringResource(Res.string.tracking_source_mal),
             description = stringResource(Res.string.settings_tracking_mal_source_description),
-            enabled = false,
-            unavailableReason = stringResource(Res.string.settings_tracking_mal_source_description),
+            enabled = malAvailable,
+            unavailableReason = trackingUnavailableReason(TrackingBrand.MAL, malAvailable),
         ),
     )
 }
@@ -410,6 +439,7 @@ private fun librarySourceModeLabel(source: LibrarySourceMode): String = when (so
 private fun watchProgressSourceLabel(source: WatchProgressSource): String = when (source) {
     WatchProgressSource.LOCAL -> stringResource(Res.string.tracking_source_local)
     WatchProgressSource.ANILIST -> stringResource(Res.string.anilist_source_name)
+    WatchProgressSource.ANILIST_LOCAL -> stringResource(Res.string.tracking_source_anilist_local)
     WatchProgressSource.MAL -> stringResource(Res.string.tracking_source_mal)
 }
 

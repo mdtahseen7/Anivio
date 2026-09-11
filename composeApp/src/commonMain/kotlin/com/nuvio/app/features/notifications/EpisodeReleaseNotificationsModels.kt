@@ -22,6 +22,16 @@ data class EpisodeReleaseNotificationsUiState(
     val isSendingTest: Boolean = false,
     val statusMessage: String? = null,
     val errorMessage: String? = null,
+    /**
+     * Keys of the shows the user explicitly asked to be notified about, as built by
+     * [buildTrackedShowKey].
+     *
+     * Notifications used to cover every series in the library, which for an anime library is
+     * hundreds of finished shows that will never air again. Subscription is now opt-in per show from
+     * the details screen.
+     */
+    val subscribedShowKeys: Set<String> = emptySet(),
+    val subscribedShowCount: Int = 0,
 )
 
 @Serializable
@@ -35,6 +45,14 @@ internal data class TrackedFollowedShow(
     val contentId: String,
     val contentType: String,
     val followedOnIsoDate: String,
+    /**
+     * Cached at subscribe time so the settings list and the test notification can name a show without
+     * a metadata round trip. Nullable because entries persisted before per-show subscriptions existed
+     * have neither.
+     */
+    val title: String? = null,
+    val posterUrl: String? = null,
+    val backdropUrl: String? = null,
 )
 
 internal data class EpisodeReleaseNotificationRequest(
@@ -44,6 +62,14 @@ internal data class EpisodeReleaseNotificationRequest(
     val releaseDateIso: String,
     val deepLinkUrl: String,
     val backdropUrl: String? = null,
+    /**
+     * Exact broadcast instant when the source published one, which for anime it usually does.
+     *
+     * Without it the only option is [EpisodeReleaseNotificationHour] on [releaseDateIso], and for
+     * anime that is reliably wrong: a late-night Japanese broadcast lands on a different calendar day
+     * in most of the world, so a 09:00 reminder fires before the episode is out.
+     */
+    val airingAtEpochMs: Long? = null,
 )
 
 internal const val EpisodeReleaseNotificationHour = 9

@@ -1,0 +1,125 @@
+﻿To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.4.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+Calculating task graph as configuration cache cannot be reused because properties file C:\Users\mdtah\OneDrive\Desktop\Projects\Anivio\Anivio\local.properties has changed.
+Type-safe project accessors is an incubating feature.
+
+> Configure project :composeApp
+w: Native task 'iosSimulatorArm64Test' is disabled
+Task 'iosSimulatorArm64Test' for target 'ios_simulator_arm64' cannot run on the current host (windows-x86_64).
+Reason: simulator tests require macOS
+Solution: To suppress this warning, add 'kotlin.native.ignoreDisabledTargets=true' to gradle.properties.
+
+w: Cross Compilation with Cinterop Not Supported in Project 'composeApp'
+In project 'composeApp', cross compilation to target 'iosArm64' has been disabled because it contains cinterops: 'commoncrypto' which cannot be processed on host 'mingw_x64'.
+Cinterop libraries require platform-specific native toolchains that aren't available on the current host system.
+Solutions:
+ * Remove the cinterop dependencies 'commoncrypto' from target 'iosArm64'
+ * Build on a compatible host platform for this target/cinterop combination
+ * To disable klib cross compilation entirely, add 'kotlin.native.enableKlibsCrossCompilation=false' to your Gradle properties
+
+w: Cross Compilation with Cinterop Not Supported in Project 'composeApp'
+In project 'composeApp', cross compilation to target 'iosSimulatorArm64' has been disabled because it contains cinterops: 'commoncrypto' which cannot be processed on host 'mingw_x64'.
+Cinterop libraries require platform-specific native toolchains that aren't available on the current host system.
+Solutions:
+ * Remove the cinterop dependencies 'commoncrypto' from target 'iosSimulatorArm64'
+ * Build on a compatible host platform for this target/cinterop combination
+ * To disable klib cross compilation entirely, add 'kotlin.native.enableKlibsCrossCompilation=false' to your Gradle properties
+
+w: Disabled Kotlin/Native Targets
+The following Kotlin/Native targets cannot be built on this machine and are disabled:
+iosArm64, iosSimulatorArm64
+Solution: To hide this message, add 'kotlin.native.ignoreDisabledTargets=true' to the Gradle properties.
+
+
+> Task :composeApp:androidPreBuild UP-TO-DATE
+> Task :composeApp:preAndroidMainBuild UP-TO-DATE
+> Task :composeApp:preAndroidHostTestBuild UP-TO-DATE
+> Task :composeApp:copyNonXmlValueResourcesForAndroidHostTest NO-SOURCE
+> Task :composeApp:copyNonXmlValueResourcesForCommonTest NO-SOURCE
+> Task :composeApp:convertXmlValueResourcesForAndroidMain NO-SOURCE
+> Task :composeApp:processAndroidHostTestJavaRes NO-SOURCE
+> Task :composeApp:copyNonXmlValueResourcesForAndroidMain NO-SOURCE
+> Task :composeApp:convertXmlValueResourcesForAndroidHostTest NO-SOURCE
+> Task :composeApp:convertXmlValueResourcesForCommonTest NO-SOURCE
+> Task :composeApp:prepareComposeResourcesTaskForAndroidMain NO-SOURCE
+> Task :composeApp:prepareComposeResourcesTaskForAndroidHostTest NO-SOURCE
+> Task :composeApp:prepareComposeResourcesTaskForCommonTest NO-SOURCE
+> Task :composeApp:generateResourceAccessorsForAndroidHostTest NO-SOURCE
+> Task :composeApp:generateResourceAccessorsForCommonTest NO-SOURCE
+> Task :composeApp:generateResourceAccessorsForAndroidMain NO-SOURCE
+> Task :composeApp:kmpPartiallyResolvedDependenciesChecker
+> Task :composeApp:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :composeApp:generateExpectResourceCollectorsForCommonMain UP-TO-DATE
+> Task :composeApp:generateComposeResClass UP-TO-DATE
+> Task :composeApp:androidJar UP-TO-DATE
+> Task :composeApp:convertXmlValueResourcesForCommonMain UP-TO-DATE
+> Task :composeApp:generateRuntimeConfigs UP-TO-DATE
+> Task :composeApp:generateAndroidMainEmptyResourceFiles UP-TO-DATE
+> Task :composeApp:copyNonXmlValueResourcesForCommonMain UP-TO-DATE
+> Task :composeApp:prepareComposeResourcesTaskForCommonMain UP-TO-DATE
+> Task :composeApp:generateResourceAccessorsForCommonMain UP-TO-DATE
+> Task :composeApp:generateActualResourceCollectorsForAndroidMain UP-TO-DATE
+> Task :composeApp:copyAndroidMainComposeResourcesToAndroidAssets UP-TO-DATE
+> Task :composeApp:packageAndroidMainResources UP-TO-DATE
+> Task :composeApp:parseAndroidMainLocalResources UP-TO-DATE
+> Task :composeApp:generateAndroidMainRFile UP-TO-DATE
+> Task :composeApp:compileAndroidMain FAILED
+
+[Incubating] Problems report is available at: file:///C:/Users/mdtah/OneDrive/Desktop/Projects/Anivio/Anivio/build/reports/problems/problems-report.html
+gradlew.bat : 
+At line:1 char:302
++ ... tch {} } }; & "C:\Users\mdtah\OneDrive\Desktop\Projects\Anivio\Anivio ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':composeApp:compileAndroidMain'.
+> java.io.IOException: Unable to delete directory 
+'C:\Users\mdtah\OneDrive\Desktop\Projects\Anivio\Anivio\composeApp\build\classes\kotlin\android\main'
+    Failed to delete some children. This might happen because a process has files open or has its working directory set in the target directory.
+    - C:\Users\mdtah\OneDrive\Desktop\Projects\Anivio\Anivio\composeApp\build\classes\kotlin\android\main\com\nuvio\app\features\profiles\AniLis
+tCharacter.class
+    - C:\Users\mdtah\OneDrive\Desktop\Projects\Anivio\Anivio\composeApp\build\classes\kotlin\android\main\com\nuvio\app\features\profiles\AniLis
+tCharacterAvatarsKt$fetchAniListCharacterAvatars$1.class
+    - C:\Users\mdtah\OneDrive\Desktop\Projects\Anivio\Anivio\composeApp\build\classes\kotlin\android\main\com\nuvio\app\features\profiles\AniLis
+tCharacterAvatarsKt.class
+    - C:\Users\mdtah\OneDrive\Desktop\Projects\Anivio\Anivio\composeApp\build\classes\kotlin\android\main\com\nuvio\app\features\profiles\Avatar
+AnimeSource.class
+    - C:\Users\mdtah\OneDrive\Desktop\Projects\Anivio\Anivio\composeApp\build\classes\kotlin\android\main\com\nuvio\app\features\profiles\Avatar
+CatalogItem$$serializer.class
+    - C:\Users\mdtah\OneDrive\Desktop\Projects\Anivio\Anivio\composeApp\build\classes\kotlin\android\main\com\nuvio\app\features\profiles\Avatar
+CatalogItem$Companion.class
+    - C:\Users\mdtah\OneDrive\Desktop\Projects\Anivio\Anivio\composeApp\build\classes\kotlin\android\main\com\nuvio\app\features\profiles\Avatar
+CatalogItem.class
+    - C:\Users\mdtah\OneDrive\Desktop\Projects\Anivio\Anivio\composeApp\build\classes\kotlin\android\main\com\nuvio\app\features\profiles\Avatar
+Repository$fetchCatalog$1.class
+    - C:\Users\mdtah\OneDrive\Desktop\Projects\Anivio\Anivio\composeApp\build\classes\kotlin\android\main\com\nuvio\app\features\profiles\Avatar
+Repository.class
+    - C:\Users\mdtah\OneDrive\Desktop\Projects\Anivio\Anivio\composeApp\build\classes\kotlin\android\main\com\nuvio\app\features\profiles\Avatar
+RepositoryKt.class
+    - C:\Users\mdtah\OneDrive\Desktop\Projects\Anivio\Anivio\composeApp\build\classes\kotlin\android\main\com\nuvio\app\features\profiles\Avatar
+Storage.class
+    - C:\Users\mdtah\OneDrive\Desktop\Projects\Anivio\Anivio\composeApp\build\classes\kotlin\android\main\com\nuvio\app\features\profiles\Cached
+ProfilePinPayload$$serializer.class
+    - C:\Users\mdtah\OneDrive\Desktop\Projects\Anivio\Anivio\composeApp\build\classes\kotlin\android\main\com\nuvio\app\features\profiles\Cached
+ProfilePinPayload$Companion.class
+    - C:\Users\mdtah\OneDrive\Desktop\Projects\Anivio\Anivio\composeApp\build\classes\kotlin\android\main\com\nuvio\app\features\profiles\Cached
+ProfilePinPayload.class
+    - C:\Users\mdtah\OneDrive\Desktop\Projects\Anivio\Anivio\composeApp\build\classes\kotlin\android\main\com\nuvio\app\features\profiles\Compos
+ableSingletons$ProfileEditScreenKt.class
+    - C:\Users\mdtah\OneDrive\Desktop\Projects\Anivio\Anivio\composeApp\build\classes\kotlin\android\main\com\nuvio\app\features\profiles\NuvioP
+rofile$$serializer.class
+    - and more ...
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 22s
+16 actionable tasks: 2 executed, 14 up-to-date
+Configuration cache entry stored.

@@ -53,6 +53,9 @@ import com.nuvio.app.features.settings.ThemeSettingsStorage
 import com.nuvio.app.core.anilist.TvdbSettingsStorage
 import com.nuvio.app.features.anilist.AniListAuthStorage
 import com.nuvio.app.features.anilist.AniListCacheStorage
+import com.nuvio.app.features.mal.MalAuthStorage
+import com.nuvio.app.features.mal.MalCacheStorage
+import com.nuvio.app.features.mal.MalTrackingBootstrap
 import com.nuvio.app.features.tmdb.TmdbSettingsStorage
 import com.nuvio.app.features.tracking.TrackingSettingsStorage
 import com.nuvio.app.features.updater.AndroidAppUpdaterPlatform
@@ -115,6 +118,9 @@ open class MainActivity : AppCompatActivity() {
         TrackingSettingsStorage.initialize(applicationContext)
         AniListAuthStorage.initialize(applicationContext)
         AniListCacheStorage.initialize(applicationContext)
+        MalAuthStorage.initialize(applicationContext)
+        MalCacheStorage.initialize(applicationContext)
+        MalTrackingBootstrap.install()
         TvdbSettingsStorage.initialize(applicationContext)
         LibraryDisplaySettingsStorage.initialize(applicationContext)
         ContinueWatchingPreferencesStorage.initialize(applicationContext)

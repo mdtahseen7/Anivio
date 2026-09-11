@@ -35,6 +35,8 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CheckCircleOutline
 import androidx.compose.material.icons.filled.DoneAll
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlaylistAddCheckCircle
 import androidx.compose.material3.Button
@@ -104,6 +106,7 @@ import com.nuvio.app.features.details.components.SeasonWatchedActionSheet
 import com.nuvio.app.features.details.components.TrailerPlayerPopup
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.library.LibraryRepository
+import com.nuvio.app.features.notifications.EpisodeReleaseNotificationsRepository
 import com.nuvio.app.features.library.PendingTrackingMembershipRemoval
 import com.nuvio.app.features.library.TrackingMembershipRemovalConfirmationHost
 import com.nuvio.app.features.library.executeTrackingMembershipOperation
@@ -179,6 +182,10 @@ fun MetaDetailsScreen(
     val watchedUiState by remember {
         WatchedRepository.ensureLoaded()
         WatchedRepository.uiState
+    }.collectAsStateWithLifecycle()
+    val episodeNotificationsUiState by remember {
+        EpisodeReleaseNotificationsRepository.ensureLoaded()
+        EpisodeReleaseNotificationsRepository.uiState
     }.collectAsStateWithLifecycle()
     val fullyWatchedSeriesKeys by WatchedRepository.fullyWatchedSeriesKeys.collectAsStateWithLifecycle()
     val watchProgressUiState by remember {
@@ -420,6 +427,42 @@ fun MetaDetailsScreen(
                         item = metaPreview,
                         fullyWatchedSeriesKeys = fullyWatchedSeriesKeys,
                     )
+                }
+                // Only a show with episodes still to come has anything to announce. `hasScheduledVideos`
+                // is AniList's `nextAiringEpisode`, so it is exactly "still airing"; an unaired episode
+                // date covers shows between cours where AniList has dropped the next-airing pointer.
+                val canNotifyNewEpisodes = remember(meta.id, meta.type, meta.videos, todayIsoDate) {
+                    !meta.type.equals("movie", ignoreCase = true) && (
+                        meta.hasScheduledVideos ||
+                            meta.videos.any { video ->
+                                video.airingAtEpochMs != null ||
+                                    (video.released?.takeIf { it.isNotBlank() }?.let { it > todayIsoDate } == true)
+                            }
+                        )
+                }
+                val isNotifySubscribed = remember(
+                    episodeNotificationsUiState.subscribedShowKeys,
+                    meta.id,
+                    meta.type,
+                ) {
+                    EpisodeReleaseNotificationsRepository.isSubscribed(meta.type, meta.id)
+                }
+                val toggleEpisodeNotifications: (() -> Unit)? = if (!canNotifyNewEpisodes) {
+                    null
+                } else {
+                    remember(meta.id, meta.type, isNotifySubscribed) {
+                        {
+                            EpisodeReleaseNotificationsRepository.setSubscribed(
+                                contentType = meta.type,
+                                contentId = meta.id,
+                                subscribed = !isNotifySubscribed,
+                                title = meta.name,
+                                posterUrl = meta.poster,
+                                backdropUrl = meta.background,
+                            )
+                            Unit
+                        }
+                    }
                 }
                 val openLibraryListPicker = remember(meta) {
                     {
@@ -992,11 +1035,13 @@ fun MetaDetailsScreen(
                                 playButtonLabel = playButtonLabel,
                                 isSaved = isSaved,
                                 isWatched = isWatched,
+                                isNotifySubscribed = isNotifySubscribed,
                                 onPrimaryPlayClick = onPrimaryPlayClick,
                                 onPrimaryPlayLongClick = onPrimaryPlayLongClick,
                                 onSaveClick = toggleSaved,
                                 onSaveLongClick = openLibraryListPicker,
                                 onWatchedClick = toggleWatched,
+                                onNotifyClick = toggleEpisodeNotifications,
                                 showManualPlayOption = showManualPlayOption,
                                 preferredEpisodeSeasonNumber = seriesAction?.seasonNumber,
                                 preferredEpisodeNumber = seriesAction?.episodeNumber,
@@ -1590,11 +1635,14 @@ private fun LazyListScope.configuredMetaSectionItems(
     playButtonLabel: String,
     isSaved: Boolean,
     isWatched: Boolean,
+    isNotifySubscribed: Boolean,
     onPrimaryPlayClick: () -> Unit,
     onPrimaryPlayLongClick: (() -> Unit)?,
     onSaveClick: () -> Unit,
     onSaveLongClick: (() -> Unit)?,
     onWatchedClick: () -> Unit,
+    /** Null hides the entry — nothing to notify about for a film or a finished-and-dated show. */
+    onNotifyClick: (() -> Unit)?,
     showManualPlayOption: Boolean,
     preferredEpisodeSeasonNumber: Int?,
     preferredEpisodeNumber: Int?,
@@ -1652,11 +1700,13 @@ private fun LazyListScope.configuredMetaSectionItems(
                     playButtonLabel = playButtonLabel,
                     isSaved = isSaved,
                     isWatched = isWatched,
+                    isNotifySubscribed = isNotifySubscribed,
                     onPrimaryPlayClick = onPrimaryPlayClick,
                     onPrimaryPlayLongClick = onPrimaryPlayLongClick,
                     onSaveClick = onSaveClick,
                     onSaveLongClick = onSaveLongClick,
                     onWatchedClick = onWatchedClick,
+                    onNotifyClick = onNotifyClick,
                     showManualPlayOption = showManualPlayOption,
                     preferredEpisodeSeasonNumber = preferredEpisodeSeasonNumber,
                     preferredEpisodeNumber = preferredEpisodeNumber,
@@ -1787,11 +1837,13 @@ private fun ConfiguredMetaSections(
     playButtonLabel: String,
     isSaved: Boolean,
     isWatched: Boolean,
+    isNotifySubscribed: Boolean,
     onPrimaryPlayClick: () -> Unit,
     onPrimaryPlayLongClick: (() -> Unit)?,
     onSaveClick: () -> Unit,
     onSaveLongClick: (() -> Unit)?,
     onWatchedClick: () -> Unit,
+    onNotifyClick: (() -> Unit)?,
     showManualPlayOption: Boolean,
     preferredEpisodeSeasonNumber: Int?,
     preferredEpisodeNumber: Int?,
@@ -1869,6 +1921,22 @@ private fun ConfiguredMetaSections(
                             onClick = onSaveClick,
                             onLongClick = onSaveLongClick,
                         ))
+                        if (onNotifyClick != null) {
+                            add(DetailSecondaryAction(
+                                label = if (isNotifySubscribed) {
+                                    stringResource(Res.string.details_notify_subscribed)
+                                } else {
+                                    stringResource(Res.string.details_notify_new_episodes)
+                                },
+                                icon = if (isNotifySubscribed) {
+                                    Icons.Default.NotificationsActive
+                                } else {
+                                    Icons.Default.NotificationsNone
+                                },
+                                isActive = isNotifySubscribed,
+                                onClick = onNotifyClick,
+                            ))
+                        }
                     },
                     isTablet = isTablet,
                     onPlayClick = onPrimaryPlayClick,
@@ -1947,6 +2015,8 @@ private fun ConfiguredMetaSections(
                 if (hasMoreLikeThisSection) {
                     val sourceLabel = when (meta.moreLikeThisSource) {
                         MoreLikeThisSource.TMDB -> stringResource(Res.string.detail_more_like_this_powered_by_tmdb)
+                        MoreLikeThisSource.ANILIST ->
+                            stringResource(Res.string.detail_more_like_this_powered_by_anilist)
                         null -> null
                     }
                     DetailPosterRailSection(

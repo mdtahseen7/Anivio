@@ -48,6 +48,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -76,10 +77,12 @@ import com.nuvio.app.features.details.MetaVideo
 import com.nuvio.app.features.details.SeasonViewMode
 import com.nuvio.app.features.details.SeasonViewModeStorage
 import com.nuvio.app.features.details.formatRuntimeFromMinutes
+import com.nuvio.app.features.details.isReleasedBy
 import com.nuvio.app.features.details.metaVideoSeasonEpisodeComparator
 import com.nuvio.app.features.details.normalizeSeasonNumber
 import com.nuvio.app.features.details.preferredEpisodeNumberForSeason
 import com.nuvio.app.features.details.seasonSortKey
+import com.nuvio.app.features.watchprogress.CurrentDateProvider
 import com.nuvio.app.features.watchprogress.WatchProgressEntry
 import com.nuvio.app.features.watchprogress.buildPlaybackVideoId
 import com.nuvio.app.features.watching.application.WatchingState
@@ -92,6 +95,15 @@ import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
 
 private val log = Logger.withTag("SeriesContent")
+
+/**
+ * How much an episode that has not aired yet is faded.
+ *
+ * Deliberately mild. The card still has to be legible and tappable — long-pressing an unaired episode
+ * to mark it, or opening it to read the synopsis, are both reasonable — so this reads as "not yet"
+ * rather than "disabled".
+ */
+private const val UnreleasedEpisodeAlpha = 0.45f
 
 @Composable
 fun DetailSeriesContent(
@@ -296,9 +308,13 @@ fun DetailSeriesContent(
                         title = sectionTitle,
                     )
                     val seasonEpisodes = groupedEpisodes.getValue(seasonForContent)
+                    // Recomputed here rather than passed in: it is only ever a display concern, and
+                    // it has to re-evaluate as the day rolls over while the screen is open.
+                    val todayIsoDate = CurrentDateProvider.todayIsoDate()
                     if (episodeCardStyle == MetaEpisodeCardStyle.Horizontal) {
                         EpisodeHorizontalRow(
                             episodes = seasonEpisodes,
+                            todayIsoDate = todayIsoDate,
                             maxWidthDp = containerWidthDp,
                             horizontalScrollPadding = horizontalScrollPadding,
                             parentMetaId = meta.id,
@@ -340,6 +356,7 @@ fun DetailSeriesContent(
                                             episode = episode,
                                         ),
                                     blurUnwatchedEpisodes = blurUnwatchedEpisodes,
+                                    isUnreleased = !episode.isReleasedBy(todayIsoDate),
                                     sizing = sizing,
                                     onClick = { onEpisodeClick?.invoke(episode) },
                                     onLongPress = { onEpisodeLongPress?.invoke(episode) },
@@ -605,6 +622,7 @@ private fun SeasonPosterButton(
 @Composable
 private fun EpisodeHorizontalRow(
     episodes: List<MetaVideo>,
+    todayIsoDate: String,
     maxWidthDp: Float,
     horizontalScrollPadding: Dp,
     parentMetaId: String,
@@ -672,6 +690,7 @@ private fun EpisodeHorizontalRow(
                         episode = episode,
                     ),
                 blurUnwatchedEpisodes = blurUnwatchedEpisodes,
+                isUnreleased = !episode.isReleasedBy(todayIsoDate),
                 metrics = rowMetrics,
                 onClick = { onEpisodeClick?.invoke(episode) },
                 onLongPress = { onEpisodeLongPress?.invoke(episode) },
@@ -689,6 +708,7 @@ private fun EpisodeHorizontalCard(
     imdbRating: Double?,
     isWatched: Boolean,
     blurUnwatchedEpisodes: Boolean,
+    isUnreleased: Boolean,
     metrics: EpisodeHorizontalCardMetrics,
     onClick: (() -> Unit)? = null,
     onLongPress: (() -> Unit)? = null,
@@ -711,6 +731,11 @@ private fun EpisodeHorizontalCard(
         modifier = Modifier
             .width(metrics.cardWidth)
             .height(metrics.cardHeight)
+            // Dims the whole card in one place — art, gradient, badges and text together — so an
+            // episode that has not aired reads as inactive rather than just lacking a thumbnail.
+            // Applied before `clip` so it composites the card as a single layer instead of
+            // cross-fading its children against each other.
+            .alpha(if (isUnreleased) UnreleasedEpisodeAlpha else 1f)
             .clip(cardShape)
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
             .nuvioCardDepth(
@@ -1071,6 +1096,7 @@ private fun EpisodeListCard(
     imdbRating: Double?,
     isWatched: Boolean,
     blurUnwatchedEpisodes: Boolean,
+    isUnreleased: Boolean,
     sizing: SeriesContentSizing,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
@@ -1083,6 +1109,7 @@ private fun EpisodeListCard(
         modifier = modifier
             .fillMaxWidth()
             .height(sizing.cardHeight)
+            .alpha(if (isUnreleased) UnreleasedEpisodeAlpha else 1f)
             .clip(cardShape)
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
             .border(

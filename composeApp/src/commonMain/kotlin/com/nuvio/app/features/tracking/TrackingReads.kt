@@ -21,6 +21,7 @@ data class TrackingLibraryTab(
     val selectionGroup: String? = null,
     val supportedContentTypes: Set<String>? = null,
     val isMembershipDestination: Boolean = true,
+    val semanticStatus: TrackingListStatus? = null,
 )
 
 fun TrackingLibraryTab.supportsContentType(contentType: String): Boolean =
@@ -32,6 +33,30 @@ internal fun trackingMembershipDestinations(
     tabs: List<TrackingLibraryTab>,
 ): List<TrackingLibraryTab> = tabs.filter(TrackingLibraryTab::isMembershipDestination)
 
+fun mirrorTrackingSemanticStatus(
+    tabs: List<TrackingLibraryTab>,
+    membership: Map<String, Boolean>,
+    selectedKey: String,
+): Map<String, Boolean> {
+    val selectedTab = tabs.firstOrNull { tab -> tab.key == selectedKey } ?: return membership
+    val selecting = membership[selectedKey] == true
+    val semanticStatus = selectedTab.semanticStatus ?: return membership
+    return membership.toMutableMap().apply {
+        tabs.filter { tab ->
+            tab.providerId != selectedTab.providerId && tab.semanticStatus == semanticStatus
+        }.forEach { equivalent ->
+            if (selecting) {
+                equivalent.selectionGroup?.let { group ->
+                    tabs.filter { sibling ->
+                        sibling.providerId == equivalent.providerId && sibling.selectionGroup == group
+                    }.forEach { sibling -> this[sibling.key] = false }
+                }
+            }
+            this[equivalent.key] = selecting
+        }
+    }
+}
+
 fun toggleTrackingLibraryMembership(
     tabs: List<TrackingLibraryTab>,
     membership: Map<String, Boolean>,
@@ -39,7 +64,7 @@ fun toggleTrackingLibraryMembership(
 ): Map<String, Boolean> {
     val target = tabs.firstOrNull { tab -> tab.key == key } ?: return membership
     val selecting = membership[key] != true
-    return membership.toMutableMap().apply {
+    val updated = membership.toMutableMap().apply {
         if (selecting && target.selectionGroup != null) {
             tabs.filter { tab ->
                 tab.providerId == target.providerId && tab.selectionGroup == target.selectionGroup
@@ -47,6 +72,11 @@ fun toggleTrackingLibraryMembership(
         }
         this[key] = selecting
     }
+    return mirrorTrackingSemanticStatus(
+        tabs = tabs,
+        membership = updated,
+        selectedKey = key,
+    )
 }
 
 data class TrackingLibrarySnapshot(

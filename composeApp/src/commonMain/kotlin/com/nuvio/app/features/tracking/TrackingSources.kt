@@ -8,14 +8,28 @@ enum class WatchProgressSource {
     /** On-device progress, optionally mirrored through the app's own cloud sync. */
     LOCAL,
     ANILIST,
-    MAL;
+    MAL,
+
+    /**
+     * AniList decides *which* shows are in progress; the device decides *where* in the episode you
+     * are.
+     *
+     * AniList only stores a watched-episode count, so pure [ANILIST] can never draw a resume
+     * timeline or resume mid-episode — the bars simply were not there. This keeps AniList as the
+     * cross-device list of what you are watching and overlays the on-device position on top.
+     */
+    ANILIST_LOCAL;
 
     val providerId: TrackingProviderId?
         get() = when (this) {
             LOCAL -> null
-            ANILIST -> TrackingProviderId.ANILIST
+            ANILIST, ANILIST_LOCAL -> TrackingProviderId.ANILIST
             MAL -> TrackingProviderId.MAL
         }
+
+    /** True when on-device positions are layered over the provider's episode counts. */
+    val mergesLocalProgress: Boolean
+        get() = this == ANILIST_LOCAL
 
     companion object {
         fun fromStorage(value: String?): WatchProgressSource =

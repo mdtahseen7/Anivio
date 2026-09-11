@@ -22,7 +22,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import coil3.compose.AsyncImage
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Animation
 import androidx.compose.material.icons.rounded.Sync
@@ -59,6 +61,10 @@ import com.nuvio.app.features.anilist.AniListAuthError
 import com.nuvio.app.features.anilist.AniListAuthRepository
 import com.nuvio.app.features.anilist.AniListAuthUiState
 import com.nuvio.app.features.anilist.AniListConnectionMode
+import com.nuvio.app.features.mal.MalAuthError
+import com.nuvio.app.features.mal.MalAuthSettings
+import com.nuvio.app.features.mal.MalAuthUiState
+import com.nuvio.app.features.mal.MalConnectionMode
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.action_cancel
 import nuvio.composeapp.generated.resources.rating_mal
@@ -77,9 +83,20 @@ import nuvio.composeapp.generated.resources.settings_anilist_open_login
 import nuvio.composeapp.generated.resources.settings_anilist_sign_in_description
 import nuvio.composeapp.generated.resources.settings_anilist_sign_in_failed
 import nuvio.composeapp.generated.resources.settings_anilist_website
-import nuvio.composeapp.generated.resources.settings_mal_coming_soon
 import nuvio.composeapp.generated.resources.settings_mal_connect
+import nuvio.composeapp.generated.resources.settings_mal_connected_as
+import nuvio.composeapp.generated.resources.settings_mal_connected_description
+import nuvio.composeapp.generated.resources.settings_mal_default_user
+import nuvio.composeapp.generated.resources.settings_mal_disconnect
+import nuvio.composeapp.generated.resources.settings_mal_finish_sign_in
+import nuvio.composeapp.generated.resources.settings_mal_approval_redirect
+import nuvio.composeapp.generated.resources.settings_mal_invalid_callback
+import nuvio.composeapp.generated.resources.settings_mal_missing_credentials
+import nuvio.composeapp.generated.resources.settings_mal_open_login
 import nuvio.composeapp.generated.resources.settings_mal_sign_in_description
+import nuvio.composeapp.generated.resources.settings_mal_sign_in_failed
+import nuvio.composeapp.generated.resources.settings_mal_authorization_expired
+import nuvio.composeapp.generated.resources.settings_mal_authorization_revoked
 import nuvio.composeapp.generated.resources.settings_mal_website
 import nuvio.composeapp.generated.resources.settings_tracking_disconnect_description
 import nuvio.composeapp.generated.resources.settings_tracking_disconnect_title
@@ -103,17 +120,18 @@ internal enum class TrackingConnectionCardMode {
 
 /**
  * Whether a brand can currently back the library or watch-progress source. Local is always
- * available; AniList needs a connected account; MAL has no integration yet.
+ * available; connected tracker availability is supplied by the provider registry.
  */
 internal fun isTrackingBrandAvailable(
     brand: TrackingBrand,
     aniListConnected: Boolean,
+    malConnected: Boolean,
 ): Boolean = when (brand) {
     TrackingBrand.LOCAL,
     TrackingBrand.TMDB,
     -> true
     TrackingBrand.ANILIST -> aniListConnected
-    TrackingBrand.MAL -> false
+    TrackingBrand.MAL -> malConnected
 }
 
 internal fun AniListConnectionMode.toTrackingConnectionCardMode(): TrackingConnectionCardMode = when (this) {
@@ -122,10 +140,17 @@ internal fun AniListConnectionMode.toTrackingConnectionCardMode(): TrackingConne
     AniListConnectionMode.CONNECTED -> TrackingConnectionCardMode.CONNECTED
 }
 
+internal fun MalConnectionMode.toTrackingConnectionCardMode(): TrackingConnectionCardMode = when (this) {
+    MalConnectionMode.DISCONNECTED -> TrackingConnectionCardMode.DISCONNECTED
+    MalConnectionMode.AWAITING_APPROVAL -> TrackingConnectionCardMode.AWAITING_APPROVAL
+    MalConnectionMode.CONNECTED -> TrackingConnectionCardMode.CONNECTED
+}
+
 @Composable
 internal fun TrackingProviderCards(
     isTablet: Boolean,
     aniListUiState: AniListAuthUiState,
+    malUiState: MalAuthUiState,
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         val useTwoColumns = maxWidth >= 600.dp
@@ -147,6 +172,7 @@ internal fun TrackingProviderCards(
                             .fillMaxHeight(),
                     )
                     MalProviderCard(
+                        uiState = malUiState,
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight(),
@@ -157,7 +183,10 @@ internal fun TrackingProviderCards(
                     uiState = aniListUiState,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                MalProviderCard(modifier = Modifier.fillMaxWidth())
+                MalProviderCard(
+                    uiState = malUiState,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
     }
@@ -178,6 +207,7 @@ private fun AniListProviderCard(
             uiState.username ?: stringResource(Res.string.settings_anilist_default_user),
         ),
         connectedDescription = stringResource(Res.string.settings_anilist_connected_description),
+        avatarUrl = uiState.avatarUrl,
         signInDescription = stringResource(Res.string.settings_anilist_sign_in_description),
         finishSignInLabel = stringResource(Res.string.settings_anilist_finish_sign_in),
         approvalDescription = stringResource(Res.string.settings_anilist_approval_redirect),
@@ -199,37 +229,36 @@ private fun AniListProviderCard(
     )
 }
 
-/**
- * Placeholder card for MyAnimeList. There is no MAL client yet, so the card sits permanently in the
- * disconnected state with the connect action disabled — it exists so the integration has a home,
- * and so the source pickers can list MAL without it appearing out of nowhere later.
- */
 @Composable
 private fun MalProviderCard(
+    uiState: MalAuthUiState,
     modifier: Modifier,
 ) {
+    val username = uiState.username?.takeIf(String::isNotBlank) ?: "MyAnimeList user"
     TrackingProviderCard(
         brand = TrackingBrand.MAL,
-        mode = TrackingConnectionCardMode.DISCONNECTED,
-        // Never "configured", which is what keeps the connect button disabled and surfaces the
-        // coming-soon note in its place.
-        credentialsConfigured = false,
-        isLoading = false,
-        connectedLabel = "",
-        connectedDescription = "",
+        mode = uiState.mode.toTrackingConnectionCardMode(),
+        credentialsConfigured = uiState.credentialsConfigured,
+        isLoading = uiState.isLoading,
+        connectedLabel = "Connected as $username",
+        connectedDescription = "Your MyAnimeList library and completed-episode progress are linked.",
+        avatarUrl = uiState.avatarUrl,
         signInDescription = stringResource(Res.string.settings_mal_sign_in_description),
-        finishSignInLabel = "",
-        approvalDescription = "",
+        finishSignInLabel = "Finish MyAnimeList sign in",
+        approvalDescription = "Approve Anivio in your browser, then return to the app.",
         connectLabel = stringResource(Res.string.settings_mal_connect),
-        openLoginLabel = "",
-        disconnectLabel = "",
-        missingCredentialsMessage = stringResource(Res.string.settings_mal_coming_soon),
+        openLoginLabel = "Open MyAnimeList login",
+        disconnectLabel = "Disconnect MyAnimeList",
+        missingCredentialsMessage = "MyAnimeList client ID is not configured.",
+        errorMessage = malErrorMessage(uiState.error),
         websiteLabel = stringResource(Res.string.settings_mal_website),
         websiteUrl = MAL_WEBSITE_URL,
-        onConnectRequested = { null },
-        onResumeAuthorization = { null },
-        onCancelAuthorization = {},
-        onDisconnect = {},
+        onConnectRequested = MalAuthSettings::onConnectRequested,
+        onResumeAuthorization = {
+            MalAuthSettings.pendingAuthorizationUrl() ?: MalAuthSettings.onConnectRequested()
+        },
+        onCancelAuthorization = MalAuthSettings::onCancelAuthorization,
+        onDisconnect = MalAuthSettings::onDisconnectRequested,
         modifier = modifier,
     )
 }
@@ -250,6 +279,7 @@ private fun TrackingProviderCard(
     disconnectLabel: String,
     missingCredentialsMessage: String,
     modifier: Modifier = Modifier,
+    avatarUrl: String? = null,
     statusMessage: String? = null,
     errorMessage: String? = null,
     websiteLabel: String? = null,
@@ -308,6 +338,7 @@ private fun TrackingProviderCard(
                     TrackingConnectedIdentity(
                         label = connectedLabel,
                         description = connectedDescription,
+                        avatarUrl = avatarUrl,
                     )
                 }
 
@@ -441,22 +472,43 @@ private fun TrackingProviderCard(
 private fun TrackingConnectedIdentity(
     label: String,
     description: String,
+    avatarUrl: String? = null,
 ) {
-    Column(
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyLarge,
-            color = Color.White,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Text(
-            text = description,
-            style = MaterialTheme.typography.bodySmall,
-            color = Color.White.copy(alpha = 0.76f),
-        )
+        // The provider's own avatar, so a connected card looks like the account it is linked to.
+        // Absent until the profile query lands, and null for an account with no picture set, so the
+        // text block has to stand on its own.
+        avatarUrl?.takeIf { it.isNotBlank() }?.let { url ->
+            AsyncImage(
+                model = url,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .border(1.dp, Color.White.copy(alpha = 0.35f), CircleShape),
+            )
+        }
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyLarge,
+                color = Color.White,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.76f),
+            )
+        }
     }
 }
 
@@ -631,7 +683,7 @@ private fun TrackingBrand.cardBrush(): Brush = when (this) {
     TrackingBrand.ANILIST -> Brush.linearGradient(
         colors = listOf(Color(0xFF11161D), Color(0xFF12405F), Color(0xFF02A9FF)),
     )
-    // MyAnimeList's deep blue, dimmed because the card is not actionable yet.
+    // MyAnimeList's deep blue.
     TrackingBrand.MAL -> Brush.linearGradient(
         colors = listOf(Color(0xFF10141C), Color(0xFF1B2740), Color(0xFF2E51A2)),
     )
@@ -652,6 +704,19 @@ private fun aniListErrorMessage(error: AniListAuthError?): String? = when (error
         stringResource(Res.string.settings_anilist_sign_in_failed)
     AniListAuthError.AUTHORIZATION_REVOKED ->
         stringResource(Res.string.settings_anilist_authorization_revoked)
+}
+
+@Composable
+private fun malErrorMessage(error: MalAuthError?): String? = when (error) {
+    null, MalAuthError.MISSING_CLIENT_ID -> null
+    MalAuthError.INVALID_CALLBACK,
+    MalAuthError.INVALID_CALLBACK_STATE,
+    -> "The MyAnimeList sign-in callback was invalid. Please try again."
+    MalAuthError.AUTHORIZATION_EXPIRED -> "The MyAnimeList sign-in request expired."
+    MalAuthError.AUTHORIZATION_REVOKED -> "MyAnimeList authorization was cancelled or revoked."
+    MalAuthError.TOKEN_EXCHANGE_FAILED -> "MyAnimeList sign-in failed while exchanging the authorization code."
+    MalAuthError.TOKEN_REFRESH_FAILED -> "The MyAnimeList session expired. Please reconnect."
+    MalAuthError.VIEWER_LOOKUP_FAILED -> "MyAnimeList connected, but the account profile could not be loaded."
 }
 
 private val TrackingErrorColor = Color(0xFFFFDAD6)

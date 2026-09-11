@@ -144,32 +144,60 @@ object AniZipClient {
     }
 
     private val cacheMutex = Mutex()
-    private val cache = linkedMapOf<Int, CachedMappings>()
+    private val cache = linkedMapOf<String, CachedMappings>()
 
     /** Returns null rather than throwing — every caller treats ani.zip as best-effort enrichment. */
-    suspend fun mappings(anilistId: Int, forceRefresh: Boolean = false): AniZipResponse? {
-        if (anilistId <= 0) return null
+    suspend fun mappings(anilistId: Int, forceRefresh: Boolean = false): AniZipResponse? =
+        mappingsByQuery("anilist_id", anilistId, forceRefresh)
+
+    /** Reverse mapping used by the MAL fallback to retain canonical `anilist:` ids. */
+    suspend fun mappingsByMalId(malId: Int, forceRefresh: Boolean = false): AniZipResponse? =
+        mappingsByQuery("mal_id", malId, forceRefresh)
+
+    /** Reverse mapping for Kitsu-sourced rows, so their items share ids with the rest of the app. */
+    suspend fun mappingsByKitsuId(kitsuId: Int, forceRefresh: Boolean = false): AniZipResponse? =
+        mappingsByQuery("kitsu_id", kitsuId, forceRefresh)
+
+    private suspend fun mappingsByQuery(
+        key: String,
+        id: Int,
+        forceRefresh: Boolean,
+    ): AniZipResponse? {
+        if (id <= 0) return null
+        val cacheKey = "$key:$id"
 
         if (!forceRefresh) {
             cacheMutex.withLock {
-                cache[anilistId]?.takeIf { nowMs() - it.storedAtMs <= CACHE_TTL_MS }
+                cache[cacheKey]?.takeIf { nowMs() - it.storedAtMs <= CACHE_TTL_MS }
             }?.let { return it.response }
+
+            // Disk fallback, so a cold start does not re-fetch mappings it already had. Promoted
+            // into memory so repeat hits in this process skip the decode.
+            AniZipDiskCache.get(cacheKey, nowMs())?.let { stored ->
+                cacheMutex.withLock {
+                    cache.remove(cacheKey)
+                    cache[cacheKey] = CachedMappings(stored, nowMs())
+                    while (cache.size > CACHE_MAX_ENTRIES) cache.remove(cache.keys.first())
+                }
+                return stored
+            }
         }
 
         return runCatching {
             val payload = httpGetTextWithHeaders(
-                url = "$ENDPOINT?anilist_id=$anilistId",
+                url = "$ENDPOINT?$key=$id",
                 headers = mapOf("User-Agent" to "Anivio", "Accept" to "application/json"),
             )
             json.decodeFromString<AniZipResponse>(payload)
         }.onSuccess { response ->
             cacheMutex.withLock {
-                cache.remove(anilistId)
-                cache[anilistId] = CachedMappings(response, nowMs())
+                cache.remove(cacheKey)
+                cache[cacheKey] = CachedMappings(response, nowMs())
                 while (cache.size > CACHE_MAX_ENTRIES) cache.remove(cache.keys.first())
             }
+            AniZipDiskCache.put(cacheKey, response, nowMs())
         }.onFailure { error ->
-            log.w(error) { "ani.zip mappings failed for anilist_id=$anilistId" }
+            log.w(error) { "ani.zip mappings failed for $key=$id" }
         }.getOrNull()
     }
 

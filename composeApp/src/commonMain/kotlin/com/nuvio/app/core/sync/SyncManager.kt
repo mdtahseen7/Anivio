@@ -536,10 +536,15 @@ object SyncManager {
                     requestedSource = settings.librarySourceMode,
                     isProviderAuthenticated = TrackingProviderRegistry::isAuthenticated,
                 ) == LibrarySourceMode.LOCAL
-                val shouldPullWatchProgress = effectiveWatchProgressSource(
+                // The hybrid source renders on-device positions too, so those still need pulling —
+                // otherwise a position recorded on another device never reaches this one and the
+                // timelines it exists to provide stay empty.
+                val effectiveWatchSource = effectiveWatchProgressSource(
                     requestedSource = settings.watchProgressSource,
                     isProviderAuthenticated = TrackingProviderRegistry::isAuthenticated,
-                ) == WatchProgressSource.LOCAL
+                )
+                val shouldPullWatchProgress = effectiveWatchSource == WatchProgressSource.LOCAL ||
+                    effectiveWatchSource.mergesLocalProgress
 
                 if (!shouldPullLibrary && !shouldPullWatchProgress) {
                     continue

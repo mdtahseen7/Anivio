@@ -1,7 +1,10 @@
 package com.nuvio.app.features.anilist
 
 import com.nuvio.app.core.anilist.ANILIST_MEDIA_FIELDS
+import com.nuvio.app.core.anilist.AniListClient
 import com.nuvio.app.core.time.EpisodeReleaseDatePlatform
+import com.nuvio.app.features.anime.PublicAnimeProvider
+import com.nuvio.app.features.anime.PublicAnimeRouter
 import com.nuvio.app.features.home.HomeCatalogDefinition
 import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.home.HomeCatalogSource
@@ -13,6 +16,7 @@ import nuvio.composeapp.generated.resources.anilist_row_recently_released
 import nuvio.composeapp.generated.resources.anilist_row_trending
 import nuvio.composeapp.generated.resources.anilist_row_upcoming
 import nuvio.composeapp.generated.resources.anilist_source_name
+import nuvio.composeapp.generated.resources.tracking_source_mal
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.getString
 
@@ -23,7 +27,7 @@ const val ANILIST_ADDON_ID = "anilist"
  * Bumped whenever [ANILIST_CATALOGS] changes, so cached home sections keyed on
  * [HomeCatalogDefinition.cacheKey] are invalidated.
  */
-private const val ANILIST_CATALOG_VERSION = "2"
+private const val ANILIST_CATALOG_VERSION = "3"
 
 /** Page size used for the home-row preview fetch. */
 private const val DEFAULT_HOME_PER_PAGE = 25
@@ -81,8 +85,14 @@ internal val ANILIST_CATALOGS: List<AniListCatalog> = listOf(
         titleResource = Res.string.anilist_row_trending,
         contentType = "series",
         isDefaultHeroSource = true,
+        // Constrained to RELEASING because AniList ranks TRENDING_DESC purely on recent activity,
+        // which floats long-finished shows into the row whenever they are being rewatched or are in
+        // the news — verified against the live API, which returned BLEACH (2004, FINISHED) in the
+        // top three. Airing-only keeps genuinely long-running shows like ONE PIECE, which belong
+        // there, while dropping the decade-old entries.
         selection = { _, includeAdult ->
-            "media(type: ANIME, sort: TRENDING_DESC${aniListAdultFilter(includeAdult)}) { $ANILIST_MEDIA_FIELDS }"
+            "media(type: ANIME, sort: TRENDING_DESC, status_in: [RELEASING]" +
+                "${aniListAdultFilter(includeAdult)}) { $ANILIST_MEDIA_FIELDS }"
         },
     ),
     AniListCatalog(
@@ -117,14 +127,31 @@ internal fun aniListCatalog(catalogId: String): AniListCatalog? =
     ANILIST_CATALOGS.firstOrNull { it.id == catalogId }
 
 /**
- * Truncated to a 10-minute bucket so repeated refreshes reuse the same query string — and
- * therefore the same [com.nuvio.app.core.anilist.AniListClient] cache entry — instead of missing
- * the cache on every tick of the clock.
+ * Truncated to a bucket so repeated refreshes reuse the same query string — and therefore the same
+ * [com.nuvio.app.core.anilist.AniListClient] cache entry — instead of missing the cache on every tick
+ * of the clock.
+ *
+ * The bucket is the *real* freshness limit for the recently-released row, not the response TTL:
+ * `airingAt_lesser` is baked into the query text, so an episode that aired inside the current bucket
+ * cannot appear however often the row is refetched. It is therefore kept in step with
+ * [com.nuvio.app.core.anilist.AniListClient.VOLATILE_CACHE_TTL_MS]; a longer bucket would make the
+ * shorter TTL pointless.
  */
+private const val ANILIST_NOW_BUCKET_SECONDS = 60L
+
 internal fun aniListNowBucketSeconds(): Long {
     val nowSeconds = EpisodeReleaseDatePlatform.nowEpochMs() / 1_000L
-    return (nowSeconds / 600L) * 600L
+    return (nowSeconds / ANILIST_NOW_BUCKET_SECONDS) * ANILIST_NOW_BUCKET_SECONDS
 }
+
+/**
+ * How long a cached response for this row stays usable.
+ *
+ * Only the airing feed is genuinely time-sensitive; Popular, Upcoming and Movies move on a scale of
+ * days and should keep the longer default so they cost nothing to revisit.
+ */
+internal fun AniListCatalog.cacheTtlMs(): Long =
+    if (isAiringFeed) AniListClient.VOLATILE_CACHE_TTL_MS else AniListClient.DEFAULT_CACHE_TTL_MS
 
 /**
  * Signature contribution for the AniList rows. Deliberately string-resource free: this is called
@@ -136,15 +163,33 @@ fun aniListCatalogRefreshSignature(): String =
 /**
  * Carries the adult preference so cached home sections are invalidated when it is toggled — the row
  * keys would otherwise still resolve to pages fetched under the previous filter.
+ *
+ * The active provider is included for the same reason: AniList and MAL fill the same row keys, so
+ * without it a source switch would redisplay the other provider's cached pages.
  */
 internal fun aniListCatalogDescriptorSignature(): String {
     val includeAdult = HomeCatalogSettingsRepository.snapshot().adultContentEnabled
-    return "anilist-v$ANILIST_CATALOG_VERSION:adult=$includeAdult"
+    val source = PublicAnimeRouter.activeProvider.name.lowercase()
+    return "anilist-v$ANILIST_CATALOG_VERSION:adult=$includeAdult:src=$source"
 }
 
-/** Home rows backed by AniList. Ordered first so they lead the home screen on a fresh install. */
+/**
+ * Built-in anime home rows. Ordered first so they lead the home screen on a fresh install.
+ *
+ * The row keys are provider-neutral because AniList and MAL serve the same catalog ids; only the
+ * displayed source name changes, so the Home Layout list tells the truth about where rows are
+ * currently coming from. [aniListCatalogDescriptorSignature] carries the provider, which is what
+ * makes these definitions rebuild on a source switch.
+ */
 fun buildAniListCatalogDefinitions(): List<HomeCatalogDefinition> {
-    val sourceName = runBlocking { getString(Res.string.anilist_source_name) }
+    val sourceName = runBlocking {
+        getString(
+            when (PublicAnimeRouter.activeProvider) {
+                PublicAnimeProvider.MAL -> Res.string.tracking_source_mal
+                PublicAnimeProvider.ANILIST -> Res.string.anilist_source_name
+            },
+        )
+    }
     return ANILIST_CATALOGS.map { catalog ->
         val title = runBlocking { getString(catalog.titleResource) }
         HomeCatalogDefinition(
@@ -161,6 +206,7 @@ fun buildAniListCatalogDefinitions(): List<HomeCatalogDefinition> {
             descriptorSignature = aniListCatalogDescriptorSignature(),
             source = HomeCatalogSource.ANILIST,
             defaultHeroSourceEnabled = catalog.isDefaultHeroSource,
+            isRecencyBased = catalog.isAiringFeed,
         )
     }
 }

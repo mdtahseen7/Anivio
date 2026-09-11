@@ -149,13 +149,12 @@ fun SearchScreen(
         val normalizedQuery = query.trim()
         if (normalizedQuery.isBlank()) {
             lastRequestedQuery = null
-            SearchRepository.clear()
+            AniListSearchRepository.clear()
         } else {
             delay(350)
             lastRequestedQuery = normalizedQuery
-            SearchRepository.search(
+            AniListSearchRepository.search(
                 query = normalizedQuery,
-                addons = addonsUiState.addons,
             )
         }
     }
@@ -181,15 +180,9 @@ fun SearchScreen(
                 observedOfflineState = false
 
                 val normalizedQuery = query.trim()
-                if (normalizedQuery.isBlank()) {
-                    SearchRepository.refreshDiscover(
-                        addons = addonsUiState.addons,
-                        forceRefresh = true,
-                    )
-                } else {
-                    SearchRepository.search(
+                if (normalizedQuery.isNotBlank()) {
+                    AniListSearchRepository.search(
                         query = normalizedQuery,
-                        addons = addonsUiState.addons,
                         forceRefresh = true,
                     )
                 }
@@ -295,9 +288,8 @@ fun SearchScreen(
                                 onRetry = {
                                     if (normalizedQuery.isNotBlank()) {
                                         NetworkStatusRepository.requestRefresh(force = true)
-                                        SearchRepository.search(
+                                        AniListSearchRepository.search(
                                             query = normalizedQuery,
-                                            addons = addonsUiState.addons,
                                             forceRefresh = true,
                                         )
                                     }

@@ -11,6 +11,8 @@ internal actual object PlatformLocalAccountDataCleaner {
         "nuvio_home_catalog_cache",
         "nuvio_anilist_cache",
         "nuvio_anilist_list_cache",
+        "nuvio_mal_auth",
+        "nuvio_mal_cache",
         "nuvio_player_settings",
         "torrent_settings",
         "nuvio_profile_cache",

@@ -939,7 +939,8 @@
     <string name="settings_meta_trailers_description">Trailer rail and playback shortcuts.</string>
     <string name="settings_notifications_disabled_in_app">Notifications are currently disabled in Anivio.</string>
     <string name="settings_notifications_episode_release_alerts">Episode release alerts</string>
-    <string name="settings_notifications_episode_release_alerts_description">Schedule local notifications when a new episode for a saved show becomes available.</string>
+    <string name="settings_notifications_episode_release_alerts_description">Get notified when a new episode airs. Choose which shows from their info page, under the three-dot menu.</string>
+    <string name="settings_notifications_subscribed_count">%1$d shows subscribed.</string>
     <string name="settings_notifications_permission_disabled">System notifications are disabled for Anivio. Enable them to receive alerts and test notifications.</string>
     <string name="settings_notifications_scheduled_count">%1$d release alerts are currently scheduled on this device.</string>
     <string name="settings_notifications_section_alerts">ALERTS</string>
@@ -1226,7 +1227,7 @@
     <string name="settings_trakt_sign_in_description">Sync your watchlist, watch progress, continue watching, scrobbles, and personal lists with Trakt.</string>
     <string name="settings_tracking_data_sources">Sources</string>
     <string name="settings_tracking_features">SOURCE PREFERENCES</string>
-    <string name="settings_tracking_viewing_discovery">Trakt features</string>
+    <string name="settings_tracking_viewing_discovery">Viewing preferences</string>
     <string name="settings_tracking_services">Accounts</string>
     <string name="settings_tracking_approval_redirect">After approval, you will be redirected back automatically.</string>
     <string name="settings_tracking_connect_first">Connect %1$s first</string>
@@ -1280,7 +1281,7 @@
     <string name="settings_anilist_connect">Connect AniList</string>
     <string name="settings_anilist_connected_as">Connected as %1$s</string>
     <string name="settings_anilist_default_user">AniList user</string>
-    <string name="settings_anilist_connected_description">Your AniList account is linked. Loading and updating your lists arrives in a following update.</string>
+    <string name="settings_anilist_connected_description">Your AniList library and completed-episode progress are linked.</string>
     <string name="settings_anilist_sign_in_description">Connect AniList to bring across your anime lists and keep your progress in sync.</string>
     <string name="settings_anilist_finish_sign_in">Finish connection approval</string>
     <string name="settings_anilist_approval_redirect">After approval, you will be redirected back automatically.</string>
@@ -1325,9 +1326,9 @@
     <string name="trakt_more_like_this_source_trakt">Trakt</string>
     <string name="trakt_more_like_this_source_tmdb">TMDB</string>
     <string name="trakt_continue_watching_window">Continue Watching Window</string>
-    <string name="trakt_continue_watching_subtitle">Trakt history considered for continue watching</string>
+    <string name="trakt_continue_watching_subtitle">How much selected tracking history appears in Continue Watching</string>
     <string name="trakt_cw_window_title">Continue Watching Window</string>
-    <string name="trakt_cw_window_subtitle">Choose how much Trakt activity should appear in continue watching.</string>
+    <string name="trakt_cw_window_subtitle">Choose how much activity from the selected source should appear in Continue Watching.</string>
     <string name="trakt_all_history">All history</string>
     <string name="trakt_days_format">%1$d days</string>
     <string name="source_audience_score">Audience Score</string>
@@ -1452,6 +1453,9 @@
     <string name="details_failed_to_load">Failed to load</string>
     <string name="details_more_like_this">More Like This</string>
     <string name="detail_more_like_this_powered_by_tmdb">Powered by TMDB</string>
+    <string name="detail_more_like_this_powered_by_anilist">Powered by AniList</string>
+    <string name="details_notify_new_episodes">Notify me about new episodes</string>
+    <string name="details_notify_subscribed">Notifications on</string>
     <string name="detail_more_like_this_powered_by_trakt">Powered by Trakt</string>
     <string name="details_seasons">Seasons</string>
     <string name="details_series_missing_numbers">This addon returned videos for the series, but none included season or episode numbers.</string>
@@ -1826,6 +1830,13 @@
     <string name="anilist_unavailable_title">AniList is taking a break</string>
     <string name="anilist_unavailable_message">Anime data comes from AniList, and it is not answering right now. Nothing is wrong on your end — try again in a little while.</string>
     <string name="anilist_unavailable_retry">Try again</string>
+    <string name="settings_anime_source_title">Anime data source</string>
+    <string name="settings_anime_source_dialog_subtitle">Where catalogs, Discover and anime details are loaded from.</string>
+    <string name="anime_source_auto">Automatic</string>
+    <string name="anime_source_auto_description">Use AniList, and switch to MyAnimeList on its own if AniList stops responding.</string>
+    <string name="anime_source_anilist_description">Always use AniList. Catalogs stay empty while AniList is down.</string>
+    <string name="anime_source_mal_description">Always use MyAnimeList. Genre filters in Discover are unavailable on this source.</string>
+    <string name="anime_source_mal_unavailable">Needs a MyAnimeList client id in this build</string>
     <string name="home_catalog_default_title">%1$s - %2$s</string>
     <string name="library_empty_message">Saved titles will appear here after you tap Save on a details screen.</string>
     <string name="library_empty_title">Your library is empty</string>
@@ -1842,7 +1853,7 @@
     <string name="library_sort_title_asc">Title A–Z</string>
     <string name="library_sort_title_desc">Title Z–A</string>
     <string name="library_sort_provider_order">Tracker order</string>
-    <string name="library_source_cloud">MAL</string>
+    <string name="library_source_cloud">Cloud</string>
     <string name="library_source_saved">AniList</string>
     <string name="library_title">Library</string>
     <string name="library_trakt_empty_message">Connect Trakt and save titles to your watchlist or personal lists.</string>
@@ -2313,9 +2324,20 @@
     <string name="privacy_section_contact_title">Contact</string>
     <string name="privacy_section_contact_body">This is a personal build, so there is no support channel. Questions about this policy go to the author directly.</string>
     <!-- Licenses and attributions: sources this fork added -->
-    <string name="settings_mal_sign_in_description">Track anime with your MyAnimeList account.</string>
+    <string name="settings_mal_sign_in_description">Connect MyAnimeList to sync anime lists, watched episodes, and progress.</string>
     <string name="settings_mal_connect">Connect MyAnimeList</string>
-    <string name="settings_mal_coming_soon">Not available yet. MyAnimeList tracking is still being built.</string>
+    <string name="settings_mal_connected_as">Connected as %1$s</string>
+    <string name="settings_mal_connected_description">Your MyAnimeList library and completed-episode progress are linked.</string>
+    <string name="settings_mal_default_user">MyAnimeList user</string>
+    <string name="settings_mal_finish_sign_in">Finish MyAnimeList sign in</string>
+    <string name="settings_mal_approval_redirect">Approve Anivio in your browser, then return to the app.</string>
+    <string name="settings_mal_open_login">Open MyAnimeList login</string>
+    <string name="settings_mal_disconnect">Disconnect MyAnimeList</string>
+    <string name="settings_mal_missing_credentials">Missing MAL_CLIENT_ID</string>
+    <string name="settings_mal_invalid_callback">MyAnimeList did not return a usable sign-in result. Please try again.</string>
+    <string name="settings_mal_authorization_expired">MyAnimeList sign-in expired. Start again.</string>
+    <string name="settings_mal_authorization_revoked">MyAnimeList sign-in was declined or revoked. Connect again.</string>
+    <string name="settings_mal_sign_in_failed">Could not complete MyAnimeList sign in. Please reconnect and try again.</string>
     <string name="settings_mal_website">Visit MyAnimeList</string>
     <string name="settings_tracking_failed_open_browser">Could not open the browser.</string>
     <string name="tracking_source_local">On this device</string>
@@ -2324,7 +2346,9 @@
     <string name="settings_tracking_local_progress_description">Playback position is kept on this device and synced across your own profiles.</string>
     <string name="settings_tracking_anilist_library_description">Your AniList lists become the library. Saving a title adds it to Planning.</string>
     <string name="settings_tracking_anilist_progress_description">Continue Watching follows the episode count on your AniList list.</string>
-    <string name="settings_tracking_mal_source_description">Available once MyAnimeList tracking is built.</string>
+    <string name="tracking_source_anilist_local">AniList + this device</string>
+    <string name="settings_tracking_anilist_local_progress_description">AniList decides which shows are in progress, and this device remembers where you paused. Use this if you want resume timelines.</string>
+    <string name="settings_tracking_mal_source_description">Use MyAnimeList library statuses and completed-episode progress.</string>
     <string name="settings_tracking_continue_watching_days_all">No limit</string>
     <string name="settings_tracking_continue_watching_days_value">Last %1$d days</string>
     <string name="settings_content_discovery_section_content">CONTENT</string>

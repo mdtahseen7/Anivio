@@ -10,6 +10,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
+@Serializable
 data class TvdbEpisode(
     val number: Int,
     val seasonNumber: Int?,
@@ -51,6 +52,9 @@ object TvdbClient {
     private const val AIRED_ORDER = "Aired Order"
 
     private const val TOKEN_TTL_MS = 24 * 60 * 60 * 1000L
+
+    /** Single-entry cache, so the key is a constant. */
+    private const val TOKEN_CACHE_KEY = "tvdb_bearer"
     private const val CACHE_TTL_MS = 6 * 60 * 60 * 1000L
     private const val CACHE_MAX_ENTRIES = 32
     private const val MAX_RESPONSE_BYTES = 4 * 1024 * 1024
@@ -81,6 +85,17 @@ object TvdbClient {
             artworkCache[seriesId]?.takeIf { nowMs() - it.storedAtMs <= CACHE_TTL_MS }
         }?.let { return it.value }
 
+        // Artwork is effectively immutable once published, so the disk copy is trusted for far
+        // longer than the in-memory TTL. This is what stops logos being re-fetched every launch.
+        TvdbArtworkDiskCache.get(seriesId, nowMs())?.let { stored ->
+            cacheMutex.withLock {
+                artworkCache.remove(seriesId)
+                artworkCache[seriesId] = CachedValue(stored, nowMs())
+                while (artworkCache.size > CACHE_MAX_ENTRIES) artworkCache.remove(artworkCache.keys.first())
+            }
+            return stored
+        }
+
         val resolved = runCatching {
             val payload = authorizedGet("/series/$seriesId/artworks") ?: return@runCatching TvdbArtwork()
             val artworks = json.decodeFromString<TvdbArtworksResponse>(payload)
@@ -105,6 +120,7 @@ object TvdbClient {
             artworkCache[seriesId] = CachedValue(resolved, nowMs())
             while (artworkCache.size > CACHE_MAX_ENTRIES) artworkCache.remove(artworkCache.keys.first())
         }
+        TvdbArtworkDiskCache.put(seriesId, resolved, nowMs())
         return resolved
     }
 
@@ -181,6 +197,17 @@ object TvdbClient {
             episodeCache[seriesId]?.takeIf { nowMs() - it.storedAtMs <= CACHE_TTL_MS }
         }?.let { return it.value }
 
+        // Survives the process, so the first details screen after launch does not pay for a list it
+        // already had. Promoted into memory so repeat hits skip the decode.
+        TvdbEpisodesDiskCache.get(seriesId, nowMs())?.takeIf { it.isNotEmpty() }?.let { stored ->
+            cacheMutex.withLock {
+                episodeCache.remove(seriesId)
+                episodeCache[seriesId] = CachedValue(stored, nowMs())
+                while (episodeCache.size > CACHE_MAX_ENTRIES) episodeCache.remove(episodeCache.keys.first())
+            }
+            return stored
+        }
+
         val resolved = runCatching {
             // The `/eng` variant is the point of coming here: ani.zip's `title.en` is null for a lot
             // of currently-airing episodes.
@@ -214,6 +241,11 @@ object TvdbClient {
             episodeCache[seriesId] = CachedValue(resolved, nowMs())
             while (episodeCache.size > CACHE_MAX_ENTRIES) episodeCache.remove(episodeCache.keys.first())
         }
+        // An empty map means the request failed or TVDB has nothing; persisting it would hide a
+        // recovered mapping for a whole day.
+        if (resolved.isNotEmpty()) {
+            TvdbEpisodesDiskCache.put(seriesId, resolved, nowMs())
+        }
         return resolved
     }
 
@@ -232,6 +264,16 @@ object TvdbClient {
     private suspend fun bearerToken(): String? = tokenMutex.withLock {
         token?.takeIf { nowMs() - tokenFetchedAtMs <= TOKEN_TTL_MS }?.let { return it }
 
+        // TVDB tokens last a day, but holding one only in memory meant a `POST /login` on every cold
+        // start — a round trip in front of the first details screen after every launch.
+        TvdbTokenDiskCache.get(TOKEN_CACHE_KEY, nowMs())
+            ?.takeIf { it.token.isNotBlank() }
+            ?.let { stored ->
+                token = stored.token
+                tokenFetchedAtMs = stored.fetchedAtEpochMs
+                return stored.token
+            }
+
         val fetched = runCatching {
             val payload = httpPostJsonWithHeaders(
                 url = "$BASE_URL/login",
@@ -245,6 +287,13 @@ object TvdbClient {
 
         token = fetched
         tokenFetchedAtMs = if (fetched == null) 0L else nowMs()
+        if (fetched != null) {
+            TvdbTokenDiskCache.put(
+                TOKEN_CACHE_KEY,
+                StoredTvdbToken(token = fetched, fetchedAtEpochMs = tokenFetchedAtMs),
+                tokenFetchedAtMs,
+            )
+        }
         fetched
     }
 
@@ -258,6 +307,9 @@ object TvdbClient {
     internal fun onApiKeyChanged() {
         token = null
         tokenFetchedAtMs = 0L
+        // The persisted copy belongs to the old key, so expire it rather than let it outlive the
+        // change and authorise requests against the wrong account for the rest of the day.
+        TvdbTokenDiskCache.put(TOKEN_CACHE_KEY, StoredTvdbToken(token = "", fetchedAtEpochMs = 0L), 0L)
     }
 
     private fun nowMs(): Long = EpisodeReleaseDatePlatform.nowEpochMs()

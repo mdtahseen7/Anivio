@@ -4,9 +4,7 @@ import co.touchlab.kermit.Logger
 import com.nuvio.app.core.deeplink.buildMetaDeepLinkUrl
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.details.MetaDetailsRepository
-import com.nuvio.app.features.library.LibraryItem
 import com.nuvio.app.features.library.LibraryRepository
-import com.nuvio.app.features.library.LibraryUiState
 import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.core.time.EpisodeReleaseDatePlatform
 import com.nuvio.app.features.watchprogress.CurrentDateProvider
@@ -18,7 +16,6 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.runBlocking
@@ -53,19 +50,60 @@ object EpisodeReleaseNotificationsRepository {
     @Volatile
     private var trackedShowsByKey: Map<String, TrackedFollowedShow> = emptyMap()
 
-    init {
+    /**
+     * Whether the user asked to be notified about this show.
+     *
+     * Reads straight off the tracked map rather than the ui state, so a caller that has not observed
+     * the flow yet still gets the truth.
+     */
+    fun isSubscribed(contentType: String, contentId: String): Boolean =
+        trackedShowsByKey.containsKey(buildTrackedShowKey(contentType, contentId))
+
+    /**
+     * Subscribes or unsubscribes a single show.
+     *
+     * Subscribing turns the feature on and asks for the notification permission if needed, because
+     * tapping "Notify me" on a show is an unambiguous request for exactly that — making the user then
+     * find a master switch in Settings would be a dead end.
+     */
+    fun setSubscribed(
+        contentType: String,
+        contentId: String,
+        subscribed: Boolean,
+        title: String? = null,
+        posterUrl: String? = null,
+        backdropUrl: String? = null,
+    ) {
+        ensureLoaded()
+        val key = buildTrackedShowKey(contentType, contentId)
+        val alreadySubscribed = trackedShowsByKey.containsKey(key)
+        if (alreadySubscribed == subscribed) return
+
+        trackedShowsByKey = if (subscribed) {
+            trackedShowsByKey + (
+                key to TrackedFollowedShow(
+                    contentId = contentId,
+                    contentType = contentType,
+                    // Only episodes airing from now on are of interest; back-catalogue air dates
+                    // would otherwise all qualify and schedule nothing but noise.
+                    followedOnIsoDate = CurrentDateProvider.todayIsoDate(),
+                    title = title,
+                    posterUrl = posterUrl,
+                    backdropUrl = backdropUrl,
+                )
+                )
+        } else {
+            trackedShowsByKey - key
+        }
+        publishSubscriptionState()
+        persist()
+
         scope.launch {
-            LibraryRepository.uiState.collectLatest { state ->
-                if (!hasLoaded) return@collectLatest
-
-                val changed = reconcileTrackedShows(state)
-                if (changed) {
-                    persist()
-                }
-
-                if (_uiState.value.isEnabled) {
-                    refreshScheduledNotifications()
-                }
+            if (subscribed && !_uiState.value.isEnabled) {
+                // Routes through the same permission flow the settings switch uses.
+                enableAndSchedule()
+            } else {
+                refreshScheduledNotifications()
             }
         }
     }
@@ -134,40 +172,45 @@ object EpisodeReleaseNotificationsRepository {
                 return@launch
             }
 
-            _uiState.value = _uiState.value.copy(
-                isLoading = true,
-                errorMessage = null,
-            )
+            enableAndSchedule()
+        }
+    }
 
-            val granted = runCatching { EpisodeReleaseNotificationPlatform.requestAuthorization() }
-                .onFailure { error ->
-                    log.e(error) { "Failed to request episode release notification permission" }
-                }
-                .getOrDefault(false)
+    /** Requests the permission, flips the master switch on and schedules. */
+    private suspend fun enableAndSchedule() {
+        _uiState.value = _uiState.value.copy(
+            isLoading = true,
+            errorMessage = null,
+        )
 
-            if (!granted) {
-                _uiState.value = _uiState.value.copy(
-                    isEnabled = false,
-                    isLoading = false,
-                    permissionGranted = false,
-                    scheduledCount = 0,
-                    statusMessage = null,
-                    errorMessage = getString(Res.string.settings_notifications_permission_disabled),
-                )
-                persist()
-                return@launch
+        val granted = runCatching { EpisodeReleaseNotificationPlatform.requestAuthorization() }
+            .onFailure { error ->
+                log.e(error) { "Failed to request episode release notification permission" }
             }
+            .getOrDefault(false)
 
+        if (!granted) {
             _uiState.value = _uiState.value.copy(
-                isEnabled = true,
+                isEnabled = false,
                 isLoading = false,
-                permissionGranted = true,
+                permissionGranted = false,
+                scheduledCount = 0,
                 statusMessage = null,
-                errorMessage = null,
+                errorMessage = getString(Res.string.settings_notifications_permission_disabled),
             )
             persist()
-            refreshScheduledNotifications()
+            return
         }
+
+        _uiState.value = _uiState.value.copy(
+            isEnabled = true,
+            isLoading = false,
+            permissionGranted = true,
+            statusMessage = null,
+            errorMessage = null,
+        )
+        persist()
+        refreshScheduledNotifications()
     }
 
     fun sendTestNotification() {
@@ -211,7 +254,7 @@ object EpisodeReleaseNotificationsRepository {
                 notificationBody = getString(Res.string.notifications_test_preview_body),
                 releaseDateIso = CurrentDateProvider.todayIsoDate(),
                 deepLinkUrl = buildMetaDeepLinkUrl(type = target.type, id = target.id),
-                backdropUrl = target.banner ?: target.poster,
+                backdropUrl = target.backdropUrl,
             )
 
             runCatching {
@@ -269,7 +312,10 @@ object EpisodeReleaseNotificationsRepository {
             testTargetTitle = null,
             errorMessage = null,
         )
-        updateTestTargetState()
+        // Anything already on disk was written by the old library-wide reconcile. Treating it as the
+        // starting subscription set means an upgrade keeps notifying about the same shows instead of
+        // silently going quiet.
+        publishSubscriptionState()
     }
 
     private fun persist() {
@@ -305,47 +351,16 @@ object EpisodeReleaseNotificationsRepository {
         }
     }
 
-    private fun reconcileTrackedShows(state: LibraryUiState): Boolean {
-        if (!state.isLoaded) return false
-
-        val seriesItems = state.items.filter { item -> isSeriesLibraryType(item.type) }
-        val nextTrackedShows = linkedMapOf<String, TrackedFollowedShow>()
-
-        seriesItems.forEach { item ->
-            val key = buildTrackedShowKey(item.type, item.id)
-            nextTrackedShows[key] = trackedShowsByKey[key]
-                ?: TrackedFollowedShow(
-                    contentId = item.id,
-                    contentType = item.type,
-                    followedOnIsoDate = inferFollowedOnIsoDate(item),
-                )
-        }
-
-        val changed = nextTrackedShows != trackedShowsByKey
-        if (changed) {
-            trackedShowsByKey = nextTrackedShows.toMap()
-        }
-        updateTestTargetState()
-        return changed
-    }
-
-    private fun inferFollowedOnIsoDate(item: LibraryItem): String {
-        if (item.savedAtEpochMs >= MinReasonableSavedAtEpochMs) {
-            return EpisodeReleaseNotificationsClock.isoDateFromEpochMs(item.savedAtEpochMs)
-        }
-        return CurrentDateProvider.todayIsoDate()
+    private fun publishSubscriptionState() {
+        _uiState.value = _uiState.value.copy(
+            subscribedShowKeys = trackedShowsByKey.keys.toSet(),
+            subscribedShowCount = trackedShowsByKey.size,
+            testTargetTitle = currentTestTarget()?.name,
+        )
     }
 
     private suspend fun refreshScheduledNotifications() {
         refreshMutex.withLock {
-            LibraryRepository.ensureLoaded()
-
-            val currentLibraryState = LibraryRepository.uiState.value
-            val trackedShowsChanged = reconcileTrackedShows(currentLibraryState)
-            if (trackedShowsChanged) {
-                persist()
-            }
-
             val permissionGranted = runCatching { EpisodeReleaseNotificationPlatform.notificationsAuthorized() }
                 .onFailure { error ->
                     log.w { "Failed to refresh episode release notification permission: ${error.message}" }
@@ -418,17 +433,40 @@ object EpisodeReleaseNotificationsRepository {
         }
     }
 
-    private fun updateTestTargetState() {
-        _uiState.value = _uiState.value.copy(
-            testTargetTitle = currentTestTarget()?.name,
-        )
-    }
+    private data class NotificationTestTarget(
+        val name: String,
+        val type: String,
+        val id: String,
+        val backdropUrl: String?,
+    )
 
-    private fun currentTestTarget(): LibraryItem? {
+    /**
+     * What "Send test notification" previews.
+     *
+     * A subscribed show first, since that is what the user will actually receive. Falls back to a
+     * library series so the button still demonstrates something before anything is subscribed.
+     */
+    private fun currentTestTarget(): NotificationTestTarget? {
+        trackedShowsByKey.values.firstOrNull()?.let { tracked ->
+            return NotificationTestTarget(
+                name = tracked.title?.takeIf { it.isNotBlank() } ?: tracked.contentId,
+                type = tracked.contentType,
+                id = tracked.contentId,
+                backdropUrl = tracked.backdropUrl ?: tracked.posterUrl,
+            )
+        }
+
         LibraryRepository.ensureLoaded()
         val libraryItems = LibraryRepository.uiState.value.items
-        return libraryItems.firstOrNull { item -> isSeriesLibraryType(item.type) }
+        val item = libraryItems.firstOrNull { isSeriesLibraryType(it.type) }
             ?: libraryItems.firstOrNull()
+            ?: return null
+        return NotificationTestTarget(
+            name = item.name,
+            type = item.type,
+            id = item.id,
+            backdropUrl = item.banner ?: item.poster,
+        )
     }
 
     private suspend fun buildRequestsForShow(trackedShow: TrackedFollowedShow): List<EpisodeReleaseNotificationRequest> {
@@ -442,10 +480,16 @@ object EpisodeReleaseNotificationsRepository {
             log.w { "Failed to resolve metadata for ${trackedShow.contentType}:${trackedShow.contentId}: ${error.message}" }
         }.getOrNull() ?: return emptyList()
 
-        val showTitle = meta.name.ifBlank { trackedShow.contentId }
+        val showTitle = meta.name.ifBlank { trackedShow.title ?: trackedShow.contentId }
+        val nowEpochMs = EpisodeReleaseDatePlatform.nowEpochMs()
         return meta.videos.mapNotNull { episode ->
-            val releaseDate = releaseDateIso(episode.released) ?: return@mapNotNull null
-            if (releaseDate < trackedShow.followedOnIsoDate) return@mapNotNull null
+            // An exact broadcast time is authoritative and needs no date comparison — if it is still
+            // in the future it is worth scheduling, whatever the calendar says about time zones.
+            val airingAt = episode.airingAtEpochMs?.takeIf { it > nowEpochMs }
+            val releaseDate = releaseDateIso(episode.released)
+                ?: airingAt?.let(EpisodeReleaseNotificationsClock::isoDateFromEpochMs)
+                ?: return@mapNotNull null
+            if (airingAt == null && releaseDate < trackedShow.followedOnIsoDate) return@mapNotNull null
             if (episode.season == null && episode.episode == null) return@mapNotNull null
 
             EpisodeReleaseNotificationRequest(
@@ -467,7 +511,13 @@ object EpisodeReleaseNotificationsRepository {
                     type = trackedShow.contentType,
                     id = trackedShow.contentId,
                 ),
-                backdropUrl = meta.background ?: episode.thumbnail ?: episode.seasonPoster ?: meta.poster,
+                backdropUrl = meta.background
+                    ?: episode.thumbnail
+                    ?: episode.seasonPoster
+                    ?: meta.poster
+                    ?: trackedShow.backdropUrl
+                    ?: trackedShow.posterUrl,
+                airingAtEpochMs = airingAt,
             )
         }
     }

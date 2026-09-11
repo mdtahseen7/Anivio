@@ -17,6 +17,17 @@ class AniListUnavailableException(
 ) : IllegalStateException(serverMessage ?: "AniList is currently unavailable")
 
 /**
+ * Raised when AniList rate limited this specific request rather than going down.
+ *
+ * Deliberately *not* an [AniListUnavailableException]: the router must fail this one call and leave
+ * the provider alone. Treating throttling as an outage swung every row in the app to the fallback
+ * provider for the whole probe window, which is far more disruptive than one empty request.
+ */
+class AniListRateLimitedException(
+    serverMessage: String? = null,
+) : IllegalStateException(serverMessage ?: "AniList is rate limiting requests")
+
+/**
  * Whether AniList last answered with an outage.
  *
  * Process-wide rather than per-screen because the outage is a property of the remote service, and

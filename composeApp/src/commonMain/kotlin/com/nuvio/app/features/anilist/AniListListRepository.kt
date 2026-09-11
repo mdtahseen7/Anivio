@@ -170,7 +170,15 @@ object AniListListRepository {
             }
         """.trimIndent()
 
-        val data = AniListClient.query(query = query, forceRefresh = forceRefresh, accessToken = token)
+        val data = AniListClient.query(
+            query = query,
+            forceRefresh = forceRefresh,
+            accessToken = token,
+            // This is the user's own progress, and it feeds Continue Watching. Ten minutes of it was
+            // enough for an episode marked watched elsewhere — or in this app a moment ago — to keep
+            // showing the old position.
+            cacheTtlMs = AniListClient.VOLATILE_CACHE_TTL_MS,
+        )
         val collectionObject = data["MediaListCollection"] as? JsonObject ?: return emptyList()
         val collection = AniListClient.json.decodeFromJsonElement(
             AniListMediaListCollection.serializer(),

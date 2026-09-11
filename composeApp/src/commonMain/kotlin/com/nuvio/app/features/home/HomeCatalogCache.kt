@@ -24,6 +24,15 @@ internal object HomeCatalogCache {
     /** Old enough that the rows are more likely wrong than useful; refetched from scratch instead. */
     private const val MAX_AGE_MS = 7L * 24 * 60 * 60 * 1000
 
+    /**
+     * Cap for rows whose whole premise is recency, marked by the caller via `volatileCacheKeys`.
+     *
+     * A week is fine for Popular. For a row titled "Recently released" it is a lie — the entries would
+     * be up to seven days out of date on the first frame, and stale-while-revalidate means the user
+     * reads them before the refresh lands. Better to show that row's skeleton and wait.
+     */
+    private const val VOLATILE_MAX_AGE_MS = 60L * 60 * 1000
+
     private const val MAX_ROWS = 48
 
     /** Home only ever previews `HOME_CATALOG_PREVIEW_FETCH_LIMIT` items per row. */
@@ -46,14 +55,21 @@ internal object HomeCatalogCache {
     }
 
     /** Blocking disk write -- call from a background coroutine. */
+    /**
+     * @param volatileCacheKeys rows that must not be restored once stale, however recently the rest of
+     * the snapshot was written. Marked at save time because only the caller knows which definitions
+     * are recency-based.
+     */
     fun save(
         sections: Map<String, HomeCatalogSection>,
         heroArtwork: Map<String, MetaPreview>,
+        volatileCacheKeys: Set<String> = emptySet(),
     ) {
         val payload = encodePayload(
             sections = sections,
             heroArtwork = heroArtwork,
             nowEpochMs = EpisodeReleaseDatePlatform.nowEpochMs(),
+            volatileCacheKeys = volatileCacheKeys,
         ) ?: return
 
         runCatching { HomeCatalogCacheStorage.savePayload(payload) }
@@ -74,9 +90,12 @@ internal object HomeCatalogCache {
         if (stored.version != VERSION) return null
         if (stored.storedAtEpochMs <= 0L || nowEpochMs - stored.storedAtEpochMs > MAX_AGE_MS) return null
 
+        val age = nowEpochMs - stored.storedAtEpochMs
         return HomeCatalogCacheSnapshot(
             rows = stored.rows
                 .filter { row -> row.cacheKey.isNotBlank() && row.items.isNotEmpty() }
+                // Dropped rather than served: a recency row is worth nothing once it is not recent.
+                .filterNot { row -> row.isVolatile && age > VOLATILE_MAX_AGE_MS }
                 .associate { row ->
                     row.cacheKey to HomeCatalogCachedRow(
                         items = row.items,
@@ -93,6 +112,7 @@ internal object HomeCatalogCache {
         sections: Map<String, HomeCatalogSection>,
         heroArtwork: Map<String, MetaPreview>,
         nowEpochMs: Long,
+        volatileCacheKeys: Set<String> = emptySet(),
     ): String? {
         val rows = sections.entries
             .asSequence()
@@ -104,6 +124,7 @@ internal object HomeCatalogCache {
                     items = section.items.take(MAX_ITEMS_PER_ROW),
                     availableItemCount = section.availableItemCount,
                     hasMore = section.hasMore,
+                    isVolatile = cacheKey in volatileCacheKeys,
                 )
             }
             .toList()
@@ -152,6 +173,11 @@ private data class StoredHomeCatalogRow(
     val items: List<MetaPreview> = emptyList(),
     val availableItemCount: Int = 0,
     val hasMore: Boolean = false,
+    /**
+     * Defaults false so rows written before this existed keep the long TTL rather than vanishing —
+     * they are one refresh away from being re-marked correctly.
+     */
+    val isVolatile: Boolean = false,
 )
 
 @Serializable

@@ -73,6 +73,8 @@ import com.nuvio.app.features.player.AndroidPlaybackEngine
 import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.anilist.AniListAuthRepository
 import com.nuvio.app.features.anilist.AniListAuthUiState
+import com.nuvio.app.features.mal.MalAuthSettings
+import com.nuvio.app.features.mal.MalAuthUiState
 
 import com.nuvio.app.features.tracking.TrackingSettingsRepository
 import com.nuvio.app.features.tracking.TrackingSettingsUiState
@@ -180,6 +182,10 @@ fun SettingsScreen(
         val aniListAuthUiState by remember {
             AniListAuthRepository.ensureLoaded()
             AniListAuthRepository.uiState
+        }.collectAsStateWithLifecycle()
+        val malAuthUiState by remember {
+            MalAuthSettings.ensureLoaded()
+            MalAuthSettings.uiState
         }.collectAsStateWithLifecycle()
         val trackingSettingsUiState by remember {
             TrackingSettingsRepository.ensureLoaded()
@@ -413,6 +419,7 @@ fun SettingsScreen(
                 mdbListSettings = mdbListSettings,
                 debridSettings = debridSettings,
                 aniListAuthUiState = aniListAuthUiState,
+                malAuthUiState = malAuthUiState,
                 trackingSettingsUiState = trackingSettingsUiState,
                 homescreenHeroEnabled = homescreenSettingsUiState.heroEnabled,
                 homescreenShowCatalogType = homescreenSettingsUiState.showCatalogType,
@@ -476,6 +483,7 @@ fun SettingsScreen(
                 mdbListSettings = mdbListSettings,
                 debridSettings = debridSettings,
                 aniListAuthUiState = aniListAuthUiState,
+                malAuthUiState = malAuthUiState,
                 trackingSettingsUiState = trackingSettingsUiState,
                 homescreenHeroEnabled = homescreenSettingsUiState.heroEnabled,
                 homescreenShowCatalogType = homescreenSettingsUiState.showCatalogType,
@@ -549,6 +557,7 @@ private fun MobileSettingsScreen(
     mdbListSettings: MdbListSettings,
     debridSettings: DebridSettings,
     aniListAuthUiState: AniListAuthUiState,
+    malAuthUiState: MalAuthUiState,
     trackingSettingsUiState: TrackingSettingsUiState,
     homescreenHeroEnabled: Boolean,
     homescreenShowCatalogType: Boolean,
@@ -819,6 +828,7 @@ private fun MobileSettingsScreen(
                 SettingsPage.TraktAuthentication -> trackingSettingsContent(
                     isTablet = false,
                     aniListUiState = aniListAuthUiState,
+                    malUiState = malAuthUiState,
                     settingsUiState = trackingSettingsUiState,
                 )
             }
@@ -914,6 +924,7 @@ private fun TabletSettingsScreen(
     mdbListSettings: MdbListSettings,
     debridSettings: DebridSettings,
     aniListAuthUiState: AniListAuthUiState,
+    malAuthUiState: MalAuthUiState,
     trackingSettingsUiState: TrackingSettingsUiState,
     homescreenHeroEnabled: Boolean,
     homescreenShowCatalogType: Boolean,
@@ -1239,6 +1250,7 @@ private fun TabletSettingsScreen(
                     SettingsPage.TraktAuthentication -> trackingSettingsContent(
                         isTablet = true,
                         aniListUiState = aniListAuthUiState,
+                        malUiState = malAuthUiState,
                         settingsUiState = trackingSettingsUiState,
                     )
                 }

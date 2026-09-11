@@ -1,6 +1,8 @@
 package com.nuvio.app.features.home
 
 import com.nuvio.app.features.addons.ManagedAddon
+import com.nuvio.app.features.anime.AnimeDataSourcePreference
+import com.nuvio.app.features.anime.PublicAnimeRouter
 import com.nuvio.app.features.collection.Collection
 import com.nuvio.app.features.collection.CollectionRepository
 import kotlinx.atomicfu.atomic
@@ -36,6 +38,8 @@ data class HomeCatalogSettingsUiState(
     val showCatalogType: Boolean = true,
     val hideUnreleasedContent: Boolean = false,
     val adultContentEnabled: Boolean = false,
+    val animeDataSource: AnimeDataSourcePreference = AnimeDataSourcePreference.AUTO,
+    val malSourceAvailable: Boolean = false,
     val items: List<HomeCatalogSettingsItem> = emptyList(),
 ) {
     val signature: String
@@ -84,6 +88,7 @@ private data class StoredHomeCatalogSettingsPayload(
     val showCatalogType: Boolean = true,
     val hideUnreleasedContent: Boolean = false,
     val adultContentEnabled: Boolean = false,
+    val animeDataSource: String = AnimeDataSourcePreference.AUTO.name,
     val items: List<StoredHomeCatalogPreference> = emptyList(),
 )
 
@@ -111,6 +116,7 @@ object HomeCatalogSettingsRepository {
     private var showCatalogType = true
     private var hideUnreleasedContent = false
     private var adultContentEnabled = false
+    private var animeDataSource = AnimeDataSourcePreference.AUTO
 
     fun onProfileChanged() {
         hasLoaded = false
@@ -119,6 +125,7 @@ object HomeCatalogSettingsRepository {
         showCatalogType = true
         hideUnreleasedContent = false
         adultContentEnabled = false
+        applyAnimeDataSource(AnimeDataSourcePreference.AUTO)
         definitions = emptyList()
         collectionDefinitions = emptyList()
         _uiState.value = HomeCatalogSettingsUiState()
@@ -133,6 +140,7 @@ object HomeCatalogSettingsRepository {
         showCatalogType = true
         hideUnreleasedContent = false
         adultContentEnabled = false
+        applyAnimeDataSource(AnimeDataSourcePreference.AUTO)
         _uiState.value = HomeCatalogSettingsUiState()
     }
 
@@ -210,6 +218,27 @@ object HomeCatalogSettingsRepository {
         publish()
         persist()
         HomeRepository.applyCurrentSettings()
+    }
+
+    /**
+     * Also left out of [exportToSyncPayload]: MAL is only wired up on Android, so pushing a MAL pin
+     * to an iOS device would silently strand it on a source it cannot reach.
+     *
+     * The choice feeds the home refresh signature and the catalog cache key, so switching sources
+     * re-requests every row instead of redisplaying the previous provider's cached results.
+     */
+    fun setAnimeDataSource(source: AnimeDataSourcePreference) {
+        ensureLoaded()
+        if (animeDataSource == source) return
+        applyAnimeDataSource(source)
+        publish()
+        persist()
+        HomeRepository.applyCurrentSettings()
+    }
+
+    private fun applyAnimeDataSource(source: AnimeDataSourcePreference) {
+        animeDataSource = source
+        PublicAnimeRouter.setPreference(source)
     }
 
     fun setHideUnreleasedContent(enabled: Boolean) {
@@ -303,6 +332,11 @@ object HomeCatalogSettingsRepository {
             showCatalogType = parsedPayload.showCatalogType
             hideUnreleasedContent = parsedPayload.hideUnreleasedContent
             adultContentEnabled = parsedPayload.adultContentEnabled
+            applyAnimeDataSource(
+                AnimeDataSourcePreference.entries
+                    .firstOrNull { it.name == parsedPayload.animeDataSource }
+                    ?: AnimeDataSourcePreference.AUTO,
+            )
             preferences = parsedPayload.items.associateBy { it.key }
             publish()
             return
@@ -404,6 +438,8 @@ object HomeCatalogSettingsRepository {
             showCatalogType = showCatalogType,
             hideUnreleasedContent = hideUnreleasedContent,
             adultContentEnabled = adultContentEnabled,
+            animeDataSource = animeDataSource,
+            malSourceAvailable = PublicAnimeRouter.isFallbackAvailable,
             items = items,
         )
     }
@@ -416,6 +452,7 @@ object HomeCatalogSettingsRepository {
                     showCatalogType = showCatalogType,
                     hideUnreleasedContent = hideUnreleasedContent,
                     adultContentEnabled = adultContentEnabled,
+                    animeDataSource = animeDataSource.name,
                     items = preferences.values.sortedBy { it.order },
                 ),
             ),

@@ -230,6 +230,7 @@ data class ContinueWatchingPreferencesUiState(
     val isVisible: Boolean = true,
     val style: ContinueWatchingSectionStyle = ContinueWatchingSectionStyle.Card,
     val upNextFromFurthestEpisode: Boolean = true,
+    val dismissedNextUpContentIds: Set<String> = emptySet(),
     val useEpisodeThumbnails: Boolean = true,
     val showUnairedNextUp: Boolean = true,
     val blurNextUp: Boolean = false,

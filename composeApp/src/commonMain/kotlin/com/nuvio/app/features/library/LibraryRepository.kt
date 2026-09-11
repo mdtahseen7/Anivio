@@ -15,12 +15,18 @@ import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.tracking.TrackingLibraryProvider
 import com.nuvio.app.features.tracking.TrackingLibraryTab
 import com.nuvio.app.features.tracking.TrackingLibraryTabKind
+import com.nuvio.app.features.tracking.TrackingListStatus
+import com.nuvio.app.features.tracking.TrackingCatalogReference
+import com.nuvio.app.features.tracking.TrackingMediaReference
+import com.nuvio.app.features.tracking.parseTrackingExternalIds
+import com.nuvio.app.features.tracking.trackingMediaKind
 import com.nuvio.app.features.tracking.TrackingMembershipApplyResult
 import com.nuvio.app.features.tracking.TrackingMembershipResolution
 import com.nuvio.app.features.tracking.TrackingProviderId
 import com.nuvio.app.features.tracking.TrackingProviderRegistry
 import com.nuvio.app.features.tracking.TrackingRefreshIntent
 import com.nuvio.app.features.tracking.TrackingSettingsRepository
+import com.nuvio.app.features.tracking.TrackingWriteCoordinator
 import com.nuvio.app.features.tracking.supportsContentType
 import com.nuvio.app.features.tracking.effectiveLibrarySourceMode as resolveEffectiveLibrarySourceMode
 import com.nuvio.app.features.tracking.providerId
@@ -328,18 +334,33 @@ object LibraryRepository {
 
         activeLibraryProvider()?.let { provider ->
             val providerMembership = provider.membership(item)
-            val desiredMembership = provider.toggledDefaultMembership(providerMembership)
-            log.i {
-                "toggleSaved routed to ${provider.providerId.storageId} library source " +
-                    "item=${item.id} type=${item.type} profile=${localState.snapshot().token.profileId}"
+            val removing = providerMembership.values.any { it }
+            if (removing) {
+                val connectedProviders = TrackingProviderRegistry.connectedLibraryProviders()
+                val removalConfirmations = connectedProviders.mapNotNull { connectedProvider ->
+                    val removalMembership = connectedProvider.snapshot().tabs.associate { tab -> tab.key to false }
+                    connectedProvider.membershipRemovalConfirmation(item, removalMembership)
+                        ?.takeUnless { it.providerId in confirmedRemovalProviders }
+                }
+                if (removalConfirmations.isNotEmpty()) {
+                    return TrackingMembershipApplyResult(
+                        requiredRemovalConfirmations = removalConfirmations,
+                    )
+                }
             }
-            return applyMembershipChanges(
-                item = item,
-                desiredMembership = desiredMembership,
-                confirmedRemovalProviders = confirmedRemovalProviders,
-                targetProviderIds = setOf(provider.providerId),
-                updateLocal = false,
+            val destination = if (removing) null else TrackingListStatus.PLAN_TO_WATCH
+            val writeResult = TrackingWriteCoordinator.setListStatus(
+                profileId = localState.snapshot().token.profileId,
+                item = item.toTrackingMediaReference(),
+                destination = destination,
             )
+            writeResult.failures.forEach { failure ->
+                log.e(failure.cause) {
+                    "Failed to update ${failure.providerId.storageId} library status"
+                }
+            }
+            publish()
+            return TrackingMembershipApplyResult()
         }
 
         return toggleLocalSavedInternal(item)
@@ -468,11 +489,31 @@ object LibraryRepository {
         val localDesired = desiredMembership[LOCAL_LIBRARY_LIST_KEY] == true
         val currentlyInLocal = localState.contains(item.id, item.type)
         val profileId = localState.snapshot().token.profileId
-        val providerChanges = TrackingProviderRegistry.connectedLibraryProviders()
+        val connectedProviders = TrackingProviderRegistry.connectedLibraryProviders()
+        val selectedStatus = desiredMembership.entries.firstNotNullOfOrNull { (key, selected) ->
+            if (!selected) null else connectedProviders
+                .asSequence()
+                .flatMap { provider -> provider.snapshot().tabs.asSequence() }
+                .firstOrNull { tab -> tab.key == key }
+                ?.semanticStatus
+        }
+        val removalRequested = selectedStatus == null && desiredMembership
+            .filterKeys { key -> key != LOCAL_LIBRARY_LIST_KEY }
+            .isNotEmpty() && desiredMembership
+            .filterKeys { key -> key != LOCAL_LIBRARY_LIST_KEY }
+            .values.none { it }
+        val mediaReference = item.toTrackingMediaReference()
+        val providerChanges = connectedProviders
             .filter { provider -> targetProviderIds == null || provider.providerId in targetProviderIds }
             .mapNotNull { provider ->
-                val providerListKeys = provider.snapshot().tabs.mapTo(mutableSetOf(), TrackingLibraryTab::key)
-                val providerMembership = desiredMembership.filterKeys(providerListKeys::contains)
+                val providerTabs = provider.snapshot().tabs
+                val providerMembership = when {
+                    selectedStatus != null -> providerTabs.associate { tab ->
+                        tab.key to (tab.semanticStatus == selectedStatus)
+                    }
+                    removalRequested -> providerTabs.associate { tab -> tab.key to false }
+                    else -> desiredMembership.filterKeys { key -> providerTabs.any { tab -> tab.key == key } }
+                }
                 providerMembership.takeIf { membership -> membership.isNotEmpty() }?.let { membership ->
                     provider to membership
                 }
@@ -501,19 +542,33 @@ object LibraryRepository {
 
         var firstFailure: Throwable? = null
         val resolutions = mutableListOf<TrackingMembershipResolution>()
-        providerChanges.forEach { (provider, providerMembership) ->
-            try {
-                provider.applyMembership(
-                    profileId = profileId,
-                    item = item,
-                    desiredMembership = providerMembership,
-                    destructiveRemovalConfirmed = provider.providerId in confirmedRemovalProviders,
-                )?.let(resolutions::add)
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Throwable) {
-                if (firstFailure == null) firstFailure = error
-                log.e(error) { "Failed to update ${provider.providerId.storageId} library membership" }
+        if (selectedStatus != null || removalRequested) {
+            val writeResult = TrackingWriteCoordinator.setListStatus(
+                profileId = profileId,
+                item = mediaReference,
+                destination = selectedStatus,
+            )
+            writeResult.failures.forEach { failure ->
+                if (firstFailure == null) firstFailure = failure.cause
+                log.e(failure.cause) {
+                    "Failed to mirror ${selectedStatus ?: "removal"} to ${failure.providerId.storageId}"
+                }
+            }
+        } else {
+            providerChanges.forEach { (provider, providerMembership) ->
+                try {
+                    provider.applyMembership(
+                        profileId = profileId,
+                        item = item,
+                        desiredMembership = providerMembership,
+                        destructiveRemovalConfirmed = provider.providerId in confirmedRemovalProviders,
+                    )?.let(resolutions::add)
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Throwable) {
+                    if (firstFailure == null) firstFailure = error
+                    log.e(error) { "Failed to update ${provider.providerId.storageId} library membership" }
+                }
             }
         }
         publish()
@@ -720,6 +775,22 @@ object LibraryRepository {
         sourceMode: LibrarySourceMode = effectiveLibrarySourceMode(),
     ): TrackingLibraryProvider? =
         sourceMode.providerId?.let(TrackingProviderRegistry::libraryProvider)
+
+    private fun LibraryItem.toTrackingMediaReference(): TrackingMediaReference {
+        val ids = parseTrackingExternalIds(id).copy(
+            imdb = imdbId ?: parseTrackingExternalIds(id).imdb,
+            tmdb = tmdbId?.toLong() ?: parseTrackingExternalIds(id).tmdb,
+            trakt = traktId?.toLong() ?: parseTrackingExternalIds(id).trakt,
+        )
+        return TrackingMediaReference(
+            kind = trackingMediaKind(type, ids),
+            title = name,
+            year = releaseInfo?.take(4)?.toIntOrNull(),
+            ids = ids,
+            catalog = TrackingCatalogReference(contentId = id, contentType = type),
+            posterUrl = poster,
+        )
+    }
 }
 
 internal const val LOCAL_LIBRARY_LIST_KEY = "local"

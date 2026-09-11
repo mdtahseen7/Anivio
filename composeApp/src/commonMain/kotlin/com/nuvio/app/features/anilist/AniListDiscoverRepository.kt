@@ -6,6 +6,7 @@ import com.nuvio.app.core.anilist.AniListClient
 import com.nuvio.app.core.anilist.AniListPage
 import com.nuvio.app.core.anilist.toMetaPreview
 import com.nuvio.app.core.time.EpisodeReleaseDatePlatform
+import com.nuvio.app.features.anime.PublicAnimeRouter
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.search.DiscoverCatalogOption
 import com.nuvio.app.features.search.DiscoverEmptyStateReason
@@ -54,7 +55,9 @@ private data class AniListDiscoverSort(
 )
 
 private val ANILIST_DISCOVER_SORTS = listOf(
-    AniListDiscoverSort("trending", "Trending", "sort: TRENDING_DESC"),
+    // Airing-only for the same reason as the home Trending row: unfiltered TRENDING_DESC ranks on
+    // recent activity and surfaces long-finished titles.
+    AniListDiscoverSort("trending", "Trending", "sort: TRENDING_DESC, status_in: [RELEASING]"),
     AniListDiscoverSort("popular", "Popular", "sort: POPULARITY_DESC"),
     AniListDiscoverSort("top-rated", "Top Rated", "sort: SCORE_DESC, averageScore_greater: 60"),
     AniListDiscoverSort("newest", "Newest", "sort: START_DATE_DESC, status_in: [RELEASING, FINISHED]"),
@@ -237,10 +240,21 @@ object AniListDiscoverRepository {
         pages?.forEach { (key, cached) -> if (!pageCache.containsKey(key)) pageCache[key] = cached }
     }
 
-    private fun cacheKey(type: String?, sort: String, genre: String?, page: Int): String =
-        "${type.orEmpty()}|$sort|${genre.orEmpty()}|$page"
+    /**
+     * Includes the active provider and the adult filter, not just the visible filter row.
+     *
+     * AniList, MAL and Kitsu all fill these same pages, and the pages are persisted to disk, so a
+     * key built only from type/sort/genre/page kept serving whichever provider happened to populate
+     * it first — switching the source in settings left Discover showing the previous provider's
+     * results indefinitely. The adult flag is here for the same reason.
+     */
+    private fun cacheKey(type: String?, sort: String, genre: String?, page: Int): String {
+        val source = PublicAnimeRouter.activeProvider.name.lowercase()
+        val includeAdult = AniListCatalogSource.adultContentEnabled()
+        return "${type.orEmpty()}|$sort|${genre.orEmpty()}|$page|$source|adult=$includeAdult"
+    }
 
-    private data class FetchedPage(val items: List<MetaPreview>, val nextPage: Int?)
+data class AniListDiscoverPage(val items: List<MetaPreview>, val nextPage: Int?)
 
     private suspend fun fetchPage(
         page: Int,
@@ -248,7 +262,31 @@ object AniListDiscoverRepository {
         genre: String?,
         sort: AniListDiscoverSort,
         forceRefresh: Boolean,
-    ): FetchedPage {
+    ): AniListDiscoverPage {
+        val result = com.nuvio.app.features.anime.PublicAnimeSource.discover(
+            page = page,
+            contentType = type,
+            genre = genre,
+            sort = sort.key,
+            forceRefresh = forceRefresh,
+        ) {
+            val fetched = fetchAniListPage(page, type, genre, sort, forceRefresh)
+            com.nuvio.app.features.catalog.CatalogPage(
+                items = fetched.items,
+                rawItemCount = fetched.items.size,
+                nextSkip = fetched.nextPage,
+            )
+        }
+        return AniListDiscoverPage(result.items, result.nextSkip)
+    }
+
+    private suspend fun fetchAniListPage(
+        page: Int,
+        type: String,
+        genre: String?,
+        sort: AniListDiscoverSort,
+        forceRefresh: Boolean,
+    ): AniListDiscoverPage {
         val includeAdult = AniListCatalogSource.adultContentEnabled()
         val formatFilter = if (type == TYPE_MOVIE) ", format_in: [MOVIE]" else ", format_not_in: [MOVIE]"
         // The filter row is single-select. AniList splits its browse vocabulary into `genre`
@@ -272,9 +310,9 @@ object AniListDiscoverRepository {
         """.trimIndent()
 
         val data = AniListClient.query(query = query, forceRefresh = forceRefresh)
-        val pageObject = data["Page"] as? JsonObject ?: return FetchedPage(emptyList(), null)
+        val pageObject = data["Page"] as? JsonObject ?: return AniListDiscoverPage(emptyList(), null)
         val parsed = AniListClient.json.decodeFromJsonElement(AniListPage.serializer(), pageObject)
-        return FetchedPage(
+        return AniListDiscoverPage(
             items = parsed.media.mapNotNull { it.toMetaPreview() },
             nextPage = (page + 1).takeIf { parsed.pageInfo?.hasNextPage == true && parsed.media.isNotEmpty() },
         )
@@ -376,7 +414,9 @@ private data class DiscoverFilters(
  * enough for the tab to open on content and for paging back to be free.
  */
 private object AniListDiscoverCache {
-    private const val VERSION = 1
+    // 2: the Trending sort gained a RELEASING filter, and the page cache key carries only the sort
+    // name, so stored pages from the unfiltered query would otherwise keep being served.
+    private const val VERSION = 2
     private const val FILTERS_MAX_AGE_MS = 30L * 24 * 60 * 60 * 1000
     private const val PAGES_MAX_AGE_MS = 24L * 60 * 60 * 1000
     private const val MAX_PAGES = 8

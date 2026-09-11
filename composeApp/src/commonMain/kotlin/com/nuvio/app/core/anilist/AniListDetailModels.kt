@@ -34,6 +34,42 @@ data class AniListMediaDetail(
     val characters: AniListCharacterConnection? = null,
     val staff: AniListStaffConnection? = null,
     val externalLinks: List<AniListExternalLink> = emptyList(),
+    val recommendations: AniListRecommendationConnection? = null,
+    val airingSchedule: AniListAiringScheduleConnection? = null,
+)
+
+@Serializable
+data class AniListAiringScheduleConnection(val nodes: List<AniListAiringScheduleNode> = emptyList())
+
+/**
+ * One scheduled broadcast. This is the same data LiveChart and every other anime calendar renders —
+ * AniList publishes it directly, so there is nothing to scrape.
+ */
+@Serializable
+data class AniListAiringScheduleNode(
+    val episode: Int? = null,
+    /** Unix seconds, not millis. */
+    val airingAt: Long? = null,
+)
+
+/** Upcoming broadcasts by episode number, in epoch millis. */
+fun AniListMediaDetail.airingScheduleByEpisode(): Map<Int, Long> =
+    airingSchedule?.nodes.orEmpty()
+        .mapNotNull { node ->
+            val episode = node.episode ?: return@mapNotNull null
+            val airingAt = node.airingAt?.takeIf { it > 0 } ?: return@mapNotNull null
+            episode to airingAt * 1000L
+        }
+        .toMap()
+
+@Serializable
+data class AniListRecommendationConnection(val nodes: List<AniListRecommendationNode> = emptyList())
+
+@Serializable
+data class AniListRecommendationNode(
+    /** Community upvotes minus downvotes. Negative means users disagreed with the suggestion. */
+    val rating: Int? = null,
+    val mediaRecommendation: AniListMedia? = null,
 )
 
 @Serializable
@@ -143,4 +179,13 @@ const val ANILIST_MEDIA_DETAIL_FIELDS: String = """
         }
     }
     externalLinks { site url type }
+    recommendations(sort: RATING_DESC, perPage: 20) {
+        nodes {
+            rating
+            mediaRecommendation { $ANILIST_MEDIA_FIELDS }
+        }
+    }
+    airingSchedule(notYetAired: true, perPage: 50) {
+        nodes { episode airingAt }
+    }
 """

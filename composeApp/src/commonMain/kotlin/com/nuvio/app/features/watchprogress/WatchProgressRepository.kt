@@ -3,6 +3,8 @@ package com.nuvio.app.features.watchprogress
 import co.touchlab.kermit.Logger
 import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
+import com.nuvio.app.core.network.NetworkStatusRepository
+import com.nuvio.app.core.sync.AppVisibilityState
 import com.nuvio.app.core.tracking.ensureTrackingProvidersRegistered
 import com.nuvio.app.features.addons.AddonManifest
 import com.nuvio.app.features.addons.AddonRepository
@@ -970,6 +972,19 @@ object WatchProgressRepository {
     }
 
     private fun resolveRemoteMetadata() {
+        // Enriching up to 64 shows is only worth doing for a screen someone is looking at. Backgrounded,
+        // the radio is usually already gone — every request fails, the retry ladder doubles the noise,
+        // and nothing consumes the result. The retry coordinator re-requests this on the next
+        // foreground pass, so skipping here loses nothing.
+        if (!AppVisibilityState.isForeground) {
+            log.d { "Skipping watch progress metadata resolution while backgrounded" }
+            return
+        }
+        if (NetworkStatusRepository.uiState.value.isOfflineLike) {
+            log.d { "Skipping watch progress metadata resolution while offline" }
+            return
+        }
+
         val targetProfileId = currentProfileId
         val targetGeneration = profileGeneration
         val targetSource = activeSource
@@ -1071,6 +1086,10 @@ object WatchProgressRepository {
     ): RemoteMetadataResolutionResult {
         var meta: MetaDetails? = null
         for (attempt in 1..WATCH_PROGRESS_METADATA_FETCH_ATTEMPTS) {
+            // Re-checked per group, not just once per batch: with 4 running concurrently and the rest
+            // queued behind the semaphore, the app can be backgrounded partway through. This drains
+            // the remaining groups immediately instead of walking them into a torn-down radio.
+            if (!AppVisibilityState.isForeground) break
             if (attempt > 1) {
                 val retryDelayMs = WATCH_PROGRESS_METADATA_RETRY_BASE_DELAY_MS *
                     (1L shl (attempt - 2))

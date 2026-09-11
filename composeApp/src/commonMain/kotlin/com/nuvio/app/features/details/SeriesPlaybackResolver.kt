@@ -1,5 +1,6 @@
 package com.nuvio.app.features.details
 
+import com.nuvio.app.core.time.EpisodeReleaseDatePlatform
 import com.nuvio.app.features.watched.WatchedItem
 import com.nuvio.app.features.watched.normalizeWatchedMarkedAtEpochMs
 import com.nuvio.app.features.watched.watchedItemKey
@@ -202,12 +203,19 @@ internal fun MetaVideo.upNextLabel(): String =
 internal fun WatchProgressEntry.resumeLabel(): String =
     resumeLabel(seasonNumber = seasonNumber, episodeNumber = episodeNumber)
 
-internal fun MetaVideo.isReleasedBy(todayIsoDate: String): Boolean =
-    isReleasedBy(
+internal fun MetaVideo.isReleasedBy(todayIsoDate: String): Boolean {
+    // An exact broadcast instant beats any date parsing. AniList publishes one for airing anime, and
+    // it is the difference between "airs later today" and "already out" — which a date-only value
+    // cannot express at all.
+    airingAtEpochMs?.let { airingAt ->
+        return available && airingAt <= EpisodeReleaseDatePlatform.nowEpochMs()
+    }
+    return isReleasedBy(
         todayIsoDate = todayIsoDate,
         releasedDate = released,
         available = available,
     )
+}
 
 internal data class CompletedSeriesEpisode(
     val seasonNumber: Int,

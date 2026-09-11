@@ -6,7 +6,7 @@ import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.buildAddonResourceUrl
 import com.nuvio.app.features.addons.enabledAddons
 import com.nuvio.app.features.addons.fetchAddonResponseText
-import com.nuvio.app.features.anilist.AniListMetaSource
+import com.nuvio.app.features.anime.PublicAnimeSource
 import com.nuvio.app.features.anilist.isAniListId
 import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.home.filterReleasedItems
@@ -111,9 +111,23 @@ object MetaDetailsRepository {
         scope.launch {
             // AniList ids are served by the built-in source, not by addons. On failure we fall
             // through to the addon/TMDB path below rather than erroring outright.
-            if (isAniListId(id)) {
+            if (isAniListId(id) || id.startsWith("mal:", ignoreCase = true)) {
                 val aniListResult = withContext(Dispatchers.Default) {
-                    AniListMetaSource.fetchMeta(id = id, type = type)
+                    PublicAnimeSource.details(
+                        id = id,
+                        contentType = type,
+                        // Renders the page from AniList's own record while TVDB, Kitsu and TMDB are
+                        // still resolving, instead of holding a spinner until every one of them has
+                        // answered. `isLoading` stays true so the screen keeps showing progress.
+                        onPartialMeta = { partial ->
+                            if (activeRequestKey == requestKey) {
+                                _uiState.value = MetaDetailsUiState(
+                                    isLoading = true,
+                                    meta = partial.withUnreleasedFilter(),
+                                )
+                            }
+                        },
+                    )
                 }
                 if (aniListResult != null) {
                     publishLoadedMeta(
@@ -208,6 +222,14 @@ object MetaDetailsRepository {
     suspend fun fetch(type: String, id: String, cacheResult: Boolean = true): MetaDetails? {
         val requestKey = "$type:$id"
         cachedMetaByRequestKey[requestKey]?.let { return it.baseMeta }
+
+        if (isAniListId(id) || id.startsWith("mal:", ignoreCase = true)) {
+            val publicMeta = PublicAnimeSource.details(id = id, contentType = type)?.meta
+            if (publicMeta != null) {
+                if (cacheResult) cachedMetaByRequestKey[requestKey] = CachedMetaEntry(baseMeta = publicMeta)
+                return publicMeta
+            }
+        }
 
         val metaLookupId = resolveMetaLookupId(itemId = id, itemType = type)
         val manifests = findReadyMetaManifests(type = type, id = metaLookupId)
@@ -414,6 +436,12 @@ object MetaDetailsRepository {
 
     private fun applyMoreLikeThisSource(meta: MetaDetails): MetaDetails {
         TmdbSettingsRepository.ensureLoaded()
+
+        // AniList labels its own recommendations upstream. Leave them alone: they are not governed
+        // by the TMDB toggle, and stamping TMDB on them would credit the wrong service.
+        if (meta.moreLikeThisSource != null && meta.moreLikeThisSource != MoreLikeThisSource.TMDB) {
+            return meta
+        }
 
         val tmdbSettings = TmdbSettingsRepository.snapshot()
         // Only clear when there is nothing to show. Recommendations are fetched regardless of the

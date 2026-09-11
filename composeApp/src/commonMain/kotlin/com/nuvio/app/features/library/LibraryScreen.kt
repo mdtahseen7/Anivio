@@ -293,11 +293,8 @@ fun LibraryScreen(
                             } else {
                                 when (uiState.sourceMode) {
                                     LibrarySourceMode.LOCAL -> stringResource(Res.string.library_title)
-                                    // A tracker-backed library is titled after the tracker. MAL is
-                                    // listed for exhaustiveness; it cannot become active yet.
-                                    LibrarySourceMode.ANILIST,
-                                    LibrarySourceMode.MAL,
-                                    -> stringResource(Res.string.anilist_source_name)
+                                    LibrarySourceMode.ANILIST -> stringResource(Res.string.anilist_source_name)
+                                    LibrarySourceMode.MAL -> stringResource(Res.string.tracking_source_mal)
                                 }
                             },
                             modifier = Modifier.padding(horizontal = 16.dp),

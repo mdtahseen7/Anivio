@@ -223,6 +223,7 @@ fun HomeScreen(
         nextUpWatchedItems,
         progressProviderOwnsCompletedHistory,
         continueWatchingPreferences.upNextFromFurthestEpisode,
+        continueWatchingPreferences.dismissedNextUpContentIds,
     ) {
         buildHomeNextUpSeedCandidates(
             progressEntries = watchProgressUiState.entries,
@@ -233,6 +234,7 @@ fun HomeScreen(
             shouldUseProgressSeed = WatchProgressRepository::shouldUseAsNextUpSeed,
             isContentHidden = { contentId ->
                 contentId in watchProgressUiState.hiddenContentIds ||
+                    contentId in continueWatchingPreferences.dismissedNextUpContentIds ||
                     WatchProgressRepository.isDroppedShow(contentId)
             },
         )
@@ -353,6 +355,7 @@ fun HomeScreen(
     val cachedNextUpItems = remember(
         cachedSnapshots.first,
         continueWatchingPreferences.dismissedNextUpKeys,
+        continueWatchingPreferences.dismissedNextUpContentIds,
         activeNextUpSeedContentIds,
         currentNextUpSeedByContentId,
         progressProviderOwnsCompletedHistory,
@@ -401,6 +404,7 @@ fun HomeScreen(
             }
             if (
                 cached.contentId in watchProgressUiState.hiddenContentIds ||
+                cached.contentId in continueWatchingPreferences.dismissedNextUpContentIds ||
                 WatchProgressRepository.isDroppedShow(cached.contentId)
             ) {
                 return@mapNotNull null
@@ -434,6 +438,7 @@ fun HomeScreen(
         nextUpItemsBySeries,
         cachedNextUpItems,
         continueWatchingPreferences.dismissedNextUpKeys,
+        continueWatchingPreferences.dismissedNextUpContentIds,
         activeNextUpSeedContentIds,
         currentNextUpSeedByContentId,
         shouldValidateMissingNextUpSeeds,
@@ -445,11 +450,12 @@ fun HomeScreen(
             currentSeedByContentId = currentNextUpSeedByContentId,
             shouldDropItemsWithoutActiveSeed = shouldValidateMissingNextUpSeeds,
         ).filterValues { (_, item) ->
-            nextUpDismissKey(
-                item.parentMetaId,
-                item.nextUpSeedSeasonNumber,
-                item.nextUpSeedEpisodeNumber,
-            ) !in continueWatchingPreferences.dismissedNextUpKeys
+            item.parentMetaId !in continueWatchingPreferences.dismissedNextUpContentIds &&
+                nextUpDismissKey(
+                    item.parentMetaId,
+                    item.nextUpSeedSeasonNumber,
+                    item.nextUpSeedEpisodeNumber,
+                ) !in continueWatchingPreferences.dismissedNextUpKeys
         }
         mergeHomeNextUpItemsWithCache(
             resolvedItems = liveNextUpItems,
@@ -472,6 +478,7 @@ fun HomeScreen(
         cloudLibraryUiState,
         aniListLists.snapshot,
         aniListEpisodeThumbnails,
+        continueWatchingPreferences.dismissedNextUpContentIds,
     ) {
         val localItems = buildHomeContinueWatchingItems(
             visibleEntries = visibleContinueWatchingEntries,
@@ -484,10 +491,18 @@ fun HomeScreen(
         )
         // Append the AniList "watching" list, minus anything local progress already covers, so a
         // show tracked both ways shows up once.
-        localItems + aniListContinueWatchingItems(
+        val combined = localItems + aniListContinueWatchingItems(
             snapshot = aniListLists.snapshot,
-            excludeParentMetaIds = localItems.mapTo(mutableSetOf()) { it.parentMetaId },
-        ).withAniListEpisodeThumbnails(aniListEpisodeThumbnails)
+            // Nothing else filters this projection, so a removed show would come straight back from
+            // the AniList "watching" list on the next snapshot.
+            excludeParentMetaIds = localItems.mapTo(mutableSetOf<String>()) { it.parentMetaId } +
+                continueWatchingPreferences.dismissedNextUpContentIds,
+        )
+        // Applied to the whole row, not just the AniList projection. Locally tracked cards carry
+        // `anilist:` ids too, and the resolver below already fetches stills for every item, so
+        // scoping this to the projection meant those cards resolved a still and then displayed the
+        // series poster anyway.
+        combined.withAniListEpisodeThumbnails(aniListEpisodeThumbnails)
     }
 
     // Episode stills arrive after the cards do, so the row renders on series art and upgrades in
@@ -580,11 +595,14 @@ fun HomeScreen(
         buildHomeCatalogRefreshSignature(enabledAddons)
     }
 
-    // Keyed on the profile as well as the addon set: switching profiles clears both
-    // HomeCatalogSettingsRepository.definitions and HomeRepository.currentDefinitions, and a second
-    // profile that shares the primary addons produces an identical refresh signature, so keying on
-    // the addons alone left the effect dormant and the home screen permanently empty.
-    LaunchedEffect(catalogRefreshKey, activeProfileId) {
+    // Keyed on the profile and a reload generation as well as the addon set. Switching profiles
+    // clears both HomeCatalogSettingsRepository.definitions and HomeRepository.currentDefinitions,
+    // and a second profile sharing the primary addons produces an identical refresh signature.
+    // The generation covers the harder case: resuming the app re-selects the *same* profile, which
+    // clears home state while every other key stays equal, leaving the screen blank until the tab
+    // was disposed and recomposed.
+    val homeReloadGeneration by HomeRepository.reloadGeneration.collectAsStateWithLifecycle()
+    LaunchedEffect(catalogRefreshKey, activeProfileId, homeReloadGeneration) {
         // No emptiness guard: the AniList rows are built in, so home must load even when the user
         // has no addons installed at all.
         HomeCatalogSettingsRepository.syncCatalogs(enabledAddons)

@@ -42,6 +42,7 @@ data class MetaDetails(
 
 enum class MoreLikeThisSource {
     TMDB,
+    ANILIST,
 }
 
 data class MetaExternalRating(
@@ -94,6 +95,15 @@ data class MetaVideo(
     val overview: String? = null,
     val runtime: Int? = null,
     val rating: Double? = null,
+    /**
+     * Exact broadcast instant, when the source knows one.
+     *
+     * [released] is only a calendar date, which is not enough to notify on: an episode airing 23:30
+     * JST is a different date in half the world, and firing a reminder in the morning of the air date
+     * fires it before the episode exists. AniList's `airingSchedule` carries the real timestamp, so
+     * it is kept alongside rather than folded into [released].
+     */
+    val airingAtEpochMs: Long? = null,
     val streams: List<StreamItem> = emptyList(),
 )
 

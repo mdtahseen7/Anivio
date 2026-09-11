@@ -57,6 +57,7 @@ import com.nuvio.app.core.network.NetworkCondition
 import com.nuvio.app.core.network.NetworkStatusRepository
 import com.nuvio.app.core.sync.AppForegroundMonitor
 import com.nuvio.app.core.sync.AppVisibility
+import com.nuvio.app.core.sync.AppVisibilityState
 import com.nuvio.app.core.sync.ProfileSettingsSync
 import com.nuvio.app.core.sync.SyncManager
 import com.nuvio.app.core.ui.DisintegrationRequestController
@@ -589,6 +590,7 @@ internal fun MainAppContent(
         syncProfileId?.let(SyncManager::pullAllForProfile)
         try {
             AppForegroundMonitor.events().collect { visibility ->
+                AppVisibilityState.set(visibility)
                 when (visibility) {
                     AppVisibility.Foreground -> {
                         NetworkStatusRepository.requestForegroundRefresh()
@@ -1072,10 +1074,8 @@ internal fun MainAppContent(
 
         val librarySectionSubtitle = when (libraryUiState.sourceMode) {
             LibrarySourceMode.ANILIST -> stringResource(Res.string.anilist_source_name)
-            // MAL has no library integration yet, so it reads as the local library would.
-            LibrarySourceMode.LOCAL,
-            LibrarySourceMode.MAL,
-            -> stringResource(Res.string.compose_catalog_subtitle_library)
+            LibrarySourceMode.MAL -> stringResource(Res.string.tracking_source_mal)
+            LibrarySourceMode.LOCAL -> stringResource(Res.string.compose_catalog_subtitle_library)
         }
 
         val onLibrarySectionViewAllClick: (LibrarySection, LibrarySortOption) -> Unit = { section, sortOption ->
@@ -1186,8 +1186,16 @@ internal fun MainAppContent(
                         item.nextUpSeedEpisodeNumber,
                     ),
                 )
+                // AniList-projected cards are next-up shaped but carry no local progress, so the
+                // seed key alone never matched them and removal did nothing at all.
+                ContinueWatchingPreferencesRepository.addDismissedNextUpContent(item.parentMetaId)
             } else {
+                // Deleting the progress entry is what *unblocks* the watched-history-derived Next Up
+                // card for the very next episode, which is the same card the user just removed. The
+                // content-level dismissal is what actually makes it disappear; it is lifted again as
+                // soon as new progress for the show is recorded.
                 WatchProgressRepository.removeProgress(contentId = item.parentMetaId)
+                ContinueWatchingPreferencesRepository.addDismissedNextUpContent(item.parentMetaId)
             }
         }
 

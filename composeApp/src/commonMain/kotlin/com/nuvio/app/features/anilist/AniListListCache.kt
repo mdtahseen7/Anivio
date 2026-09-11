@@ -21,8 +21,15 @@ import kotlinx.serialization.json.Json
 internal object AniListListCache {
     private const val VERSION = 1
 
-    /** Beyond this the lists are refetched from scratch rather than shown. */
-    private const val MAX_AGE_MS = 14L * 24 * 60 * 60 * 1000
+    /**
+     * Beyond this the lists are refetched from scratch rather than shown.
+     *
+     * Two days, not two weeks. This payload is what Continue Watching paints from before any refresh
+     * lands, so its age is directly how wrong the rail can look on a cold start — a fortnight-old
+     * episode count means offering an episode already watched, which is worse than a brief skeleton.
+     * Still long enough to cover being offline for a weekend.
+     */
+    private const val MAX_AGE_MS = 2L * 24 * 60 * 60 * 1000
 
     /** Bounds the payload for the rare user with a four-figure list; newest entries win. */
     private const val MAX_ENTRIES_PER_LIST = 800

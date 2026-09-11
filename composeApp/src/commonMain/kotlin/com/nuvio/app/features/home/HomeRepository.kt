@@ -3,7 +3,7 @@ package com.nuvio.app.features.home
 import com.nuvio.app.features.addons.ManagedAddon
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.enabledAddons
-import com.nuvio.app.features.anilist.AniListCatalogSource
+import com.nuvio.app.features.anime.PublicAnimeSource
 import com.nuvio.app.features.anilist.AniListHeroArtwork
 import com.nuvio.app.features.catalog.CatalogPage
 import com.nuvio.app.features.catalog.CatalogTarget
@@ -34,6 +34,18 @@ object HomeRepository {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+
+    /**
+     * Bumped every time home state is discarded, so the screen can re-request its rows.
+     *
+     * [clear] wipes the definitions the rows are built from, but the effect that reloads them is
+     * keyed on the addon set and the active profile — neither of which changes when the app is
+     * resumed and `AppGate` re-selects the *same* profile. That left an empty home until the tab was
+     * disposed and recomposed. Observing this counter covers every clear path, including future ones,
+     * rather than adding another key each time one is discovered.
+     */
+    private val _reloadGeneration = MutableStateFlow(0)
+    val reloadGeneration: StateFlow<Int> = _reloadGeneration.asStateFlow()
 
     private var activeJob: Job? = null
     private var activeRequestKey: String? = null
@@ -186,6 +198,7 @@ object HomeRepository {
         lastErrorMessage = null
         hydratedFromCache = false
         _uiState.value = HomeUiState()
+        _reloadGeneration.update { it + 1 }
     }
 
     /**
@@ -221,6 +234,11 @@ object HomeRepository {
         HomeCatalogCache.save(
             sections = cachedSections,
             heroArtwork = AniListHeroArtwork.snapshot(),
+            // Recorded per row rather than inferred at read time: the cache holds only keys and items,
+            // and a key cannot say whether the row it belongs to is about recency.
+            volatileCacheKeys = currentDefinitions
+                .filter(HomeCatalogDefinition::isRecencyBased)
+                .mapTo(mutableSetOf(), HomeCatalogDefinition::cacheKey),
         )
     }
 
@@ -309,8 +327,9 @@ object HomeRepository {
             // Normally already resolved by the batched query; falls back to a single-row
             // request if that call failed.
             HomeCatalogSource.ANILIST -> aniListPages[catalogId]
-                ?: AniListCatalogSource.resolve(
+                ?: PublicAnimeSource.catalog(
                     catalogId = catalogId,
+                    contentType = type,
                     page = 1,
                     maxItems = HOME_CATALOG_PREVIEW_FETCH_LIMIT,
                     forceRefresh = forceRefresh,
@@ -377,7 +396,7 @@ object HomeRepository {
         if (catalogIds.isEmpty()) return emptyMap()
 
         return try {
-            AniListCatalogSource.resolveHomeRows(
+            PublicAnimeSource.homeRows(
                 catalogIds = catalogIds,
                 maxItems = HOME_CATALOG_PREVIEW_FETCH_LIMIT,
                 forceRefresh = forceRefresh,

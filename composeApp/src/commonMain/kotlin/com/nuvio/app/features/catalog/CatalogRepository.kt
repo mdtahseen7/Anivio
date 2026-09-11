@@ -1,6 +1,6 @@
 package com.nuvio.app.features.catalog
 
-import com.nuvio.app.features.anilist.AniListCatalogSource
+import com.nuvio.app.features.anime.PublicAnimeSource
 import com.nuvio.app.features.collection.CollectionRepository
 import com.nuvio.app.features.collection.TmdbCollectionSourceResolver
 import com.nuvio.app.features.collection.catalogRouteKey
@@ -165,8 +165,9 @@ object CatalogRepository {
                         page = requestedSkip.takeIf { it > 0 } ?: 1,
                     )
 
-                    is CatalogTarget.AniList -> AniListCatalogSource.resolve(
+                    is CatalogTarget.AniList -> PublicAnimeSource.catalog(
                         catalogId = target.catalogId,
+                        contentType = target.contentType,
                         page = requestedSkip.takeIf { it > 0 } ?: 1,
                         forceRefresh = forceRefresh,
                         searchQuery = target.searchQuery,

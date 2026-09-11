@@ -49,8 +49,6 @@ internal fun librarySectionItemKey(sectionType: String, item: LibraryItem): Stri
 enum class LibrarySourceMode {
     LOCAL,
     ANILIST,
-
-    /** Placeholder: selectable only once the MAL integration exists. */
     MAL,
 }
 

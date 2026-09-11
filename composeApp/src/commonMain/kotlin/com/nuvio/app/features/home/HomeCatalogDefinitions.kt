@@ -35,6 +35,13 @@ data class HomeCatalogDefinition(
     val source: HomeCatalogSource = HomeCatalogSource.ADDON,
     /** Whether this row seeds the hero carousel before the user has expressed a preference. */
     val defaultHeroSourceEnabled: Boolean = true,
+    /**
+     * Whether the row's value is its recency, so a stale copy is worse than an empty one.
+     *
+     * True for the airing feed. Addon catalogs are opaque here — their names are arbitrary — so they
+     * keep the long cache by default.
+     */
+    val isRecencyBased: Boolean = false,
 ) {
     val cacheKey: String
         get() = "$key|$descriptorSignature"

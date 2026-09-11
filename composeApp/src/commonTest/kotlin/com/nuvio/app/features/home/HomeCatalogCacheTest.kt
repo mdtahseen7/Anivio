@@ -53,6 +53,30 @@ class HomeCatalogCacheTest {
     }
 
     @Test
+    fun `a recency row expires long before the rest of the snapshot`() {
+        val payload = requireNotNull(
+            HomeCatalogCache.encodePayload(
+                sections = mapOf(
+                    "anilist:trending|v1" to section(items = listOf(preview("anilist:1"))),
+                    "anilist:recently-released|v1" to section(items = listOf(preview("anilist:2"))),
+                ),
+                heroArtwork = emptyMap(),
+                nowEpochMs = NOW,
+                volatileCacheKeys = setOf("anilist:recently-released|v1"),
+            ),
+        )
+
+        val threeHoursLater = NOW + 3L * 60 * 60 * 1000
+        val snapshot = requireNotNull(
+            HomeCatalogCache.decodePayload(payload = payload, nowEpochMs = threeHoursLater),
+        )
+
+        // The snapshot as a whole is well inside its week, so the ordinary row survives.
+        assertTrue(snapshot.rows.containsKey("anilist:trending|v1"))
+        assertNull(snapshot.rows["anilist:recently-released|v1"])
+    }
+
+    @Test
     fun `payload from another cache version is dropped`() {
         val payload = """{"version":99,"storedAtEpochMs":$NOW,"rows":[],"heroArtwork":[]}"""
 

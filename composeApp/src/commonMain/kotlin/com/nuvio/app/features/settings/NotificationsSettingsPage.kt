@@ -23,6 +23,7 @@ import nuvio.composeapp.generated.resources.settings_notifications_episode_relea
 import nuvio.composeapp.generated.resources.settings_notifications_permission_disabled
 import nuvio.composeapp.generated.resources.settings_notifications_scheduled_count
 import nuvio.composeapp.generated.resources.settings_notifications_section_alerts
+import nuvio.composeapp.generated.resources.settings_notifications_subscribed_count
 import nuvio.composeapp.generated.resources.settings_notifications_section_test
 import nuvio.composeapp.generated.resources.settings_notifications_send_test
 import nuvio.composeapp.generated.resources.settings_notifications_sending_test
@@ -106,6 +107,16 @@ private fun NotificationTestCard(
                     } else {
                         stringResource(Res.string.settings_notifications_disabled_in_app)
                     },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                // Without this the switch is opaque: nothing else on this page reveals that alerts
+                // are per-show now, so "0 scheduled" would read as broken rather than "none picked".
+                Text(
+                    text = stringResource(
+                        Res.string.settings_notifications_subscribed_count,
+                        uiState.subscribedShowCount,
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
