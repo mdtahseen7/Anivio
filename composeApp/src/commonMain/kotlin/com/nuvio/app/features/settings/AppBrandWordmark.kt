@@ -1,59 +1,36 @@
 package com.nuvio.app.features.settings
 
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.sp
-import com.nuvio.app.core.ui.nuvio
+import androidx.compose.ui.layout.ContentScale
+import org.jetbrains.compose.resources.painterResource
+import nuvio.composeapp.generated.resources.Res
+import nuvio.composeapp.generated.resources.app_logo_wordmark
 
 /**
- * The Anivio wordmark. Drawn as text rather than bundled artwork: the inherited raster wordmarks
- * had "Nuvio" baked into the pixels, so every colourway would have needed redrawing.
+ * The Anivio wordmark, drawn from the supplied artwork.
+ *
+ * Previously this was rendered as the literal text "Anivio" in the accent colour, because the
+ * inherited rasters had "Nuvio" baked into the pixels and there was no Anivio artwork to use. There
+ * is now, so this draws the real mark.
+ *
+ * The caller sets the height and the width follows from the artwork's aspect ratio — the source is
+ * cropped to its ink, so the height the caller asks for is the height the lettering actually occupies
+ * with no invisible padding above or below.
  */
-private const val AppWordmarkText = "Anivio"
-
-/** Cap-height of the lettering relative to the height the caller asked for. */
-private const val AppWordmarkFontHeightRatio = 0.68f
-
-/** Guards against an unbounded parent handing us an effectively infinite height. */
-private const val AppWordmarkMaxFontHeightDp = 96f
-
 @Composable
 internal fun AppBrandWordmark(
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
 ) {
-    val tokens = MaterialTheme.nuvio
-    val description = contentDescription
-    BoxWithConstraints(
-        modifier = modifier,
-        contentAlignment = Alignment.Center,
-    ) {
-        val availableHeight = maxHeight.value.coerceAtMost(AppWordmarkMaxFontHeightDp)
-        Text(
-            text = AppWordmarkText,
-            style = TextStyle(
-                fontSize = (availableHeight * AppWordmarkFontHeightRatio).sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = (-0.5).sp,
-            ),
-            color = tokens.colors.accent,
-            maxLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Visible,
-            modifier = if (description != null) {
-                Modifier.semantics { this.contentDescription = description }
-            } else {
-                Modifier
-            },
-        )
-    }
+    Image(
+        painter = painterResource(Res.drawable.app_logo_wordmark),
+        contentDescription = contentDescription,
+        // Fit rather than FillBounds: a wordmark stretched off its aspect ratio looks broken, and the
+        // parent in the settings footer constrains height only.
+        contentScale = ContentScale.Fit,
+        modifier = modifier.wrapContentWidth(),
+    )
 }

@@ -102,6 +102,10 @@ android {
         }
     }
 
+    androidResources {
+        noCompress += "cvr"
+    }
+
     splits {
         abi {
             isEnable = buildsReleaseApks

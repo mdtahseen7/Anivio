@@ -1,5 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="app_icon_background">#000000</color>
+    <!--
+      Adaptive icon backdrop, per colourway.
+
+      The adaptive foreground holds only the logo, on transparency, fitted to the 66dp safe zone. What
+      shows in the bleed area around it is this colour, so it has to match the backdrop the artwork was
+      drawn on or there is a visible ring where the foreground ends. Sampled from each source image.
+    -->
+    <color name="app_icon_background">#182337</color>
+    <color name="app_icon_background_arctic_blue">#000000</color>
+    <color name="app_icon_background_emerald">#000000</color>
+    <color name="app_icon_background_rose_gold">#000000</color>
+    <color name="app_icon_background_copper">#000000</color>
+    <color name="app_icon_background_graphite">#000000</color>
+
     <color name="nuvio_background">#0D0D0D</color>
 </resources>

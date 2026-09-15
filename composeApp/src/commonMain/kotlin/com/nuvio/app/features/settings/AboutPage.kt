@@ -90,6 +90,11 @@ private fun AboutBody(
                 body = stringResource(Res.string.about_author_body),
                 isTablet = isTablet,
             )
+            PlainRow(
+                title = stringResource(Res.string.about_origin_title),
+                body = stringResource(Res.string.about_origin_body),
+                isTablet = isTablet,
+            )
         }
     }
 }

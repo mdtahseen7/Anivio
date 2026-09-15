@@ -4,7 +4,7 @@ import com.nuvio.app.core.ui.AppTheme
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import nuvio.composeapp.generated.resources.Res
-import nuvio.composeapp.generated.resources.app_logo_wordmark_gold
+import nuvio.composeapp.generated.resources.app_logo_wordmark
 
 class AppIconOptionTest {
     @Test
@@ -31,10 +31,14 @@ class AppIconOptionTest {
     }
 
     @Test
-    fun goldThemeUsesGoldWordmark() {
-        assertEquals(
-            Res.drawable.app_logo_wordmark_gold,
-            AppTheme.GOLD.wordmarkResource(AppIconOption.COPPER),
-        )
+    fun everyThemeAndIconShareOneWordmark() {
+        // There is a single Anivio wordmark now, so no theme or colourway may resolve to anything
+        // else. Asserted rather than assumed because the per-colour rasters were deleted, and a stray
+        // reference to one would be a missing-resource crash at runtime, not a compile error.
+        AppTheme.entries.forEach { theme ->
+            AppIconOption.entries.forEach { icon ->
+                assertEquals(Res.drawable.app_logo_wordmark, theme.wordmarkResource(icon))
+            }
+        }
     }
 }

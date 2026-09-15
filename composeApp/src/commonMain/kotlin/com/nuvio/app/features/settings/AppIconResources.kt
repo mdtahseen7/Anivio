@@ -25,22 +25,19 @@ internal val AppIconOption.previewResource: DrawableResource
         AppIconOption.GRAPHITE -> Res.drawable.app_icon_graphite
     }
 
+/**
+ * The Anivio wordmark.
+ *
+ * One asset for every colourway and every theme. The inherited artwork kept a separate raster per
+ * colour because "Nuvio" was baked into the pixels and each copy had been recoloured by hand. The
+ * Anivio wordmark is a single mark, so those copies were deleted rather than duplicated six times.
+ *
+ * Still expressed as a property and a function so the call sites do not change if a per-colourway
+ * wordmark is ever reintroduced.
+ */
 internal val AppIconOption.wordmarkResource: DrawableResource
-    get() = when (this) {
-        AppIconOption.ORIGINAL -> Res.drawable.app_logo_wordmark_original
-        AppIconOption.ARCTIC_BLUE -> Res.drawable.app_logo_wordmark_arctic_blue
-        AppIconOption.EMERALD -> Res.drawable.app_logo_wordmark_emerald
-        AppIconOption.ROSE_GOLD -> Res.drawable.app_logo_wordmark_rose_gold
-        AppIconOption.COPPER -> Res.drawable.app_logo_wordmark_copper
-        AppIconOption.GRAPHITE -> Res.drawable.app_logo_wordmark_graphite
-    }
+    get() = Res.drawable.app_logo_wordmark
 
+@Suppress("UnusedReceiverParameter")
 internal fun AppTheme.wordmarkResource(fallback: AppIconOption): DrawableResource =
-    when (this) {
-        AppTheme.GOLD -> Res.drawable.app_logo_wordmark_gold
-        AppTheme.JADE -> AppIconOption.EMERALD.wordmarkResource
-        AppTheme.ROSE_GOLD -> AppIconOption.ROSE_GOLD.wordmarkResource
-        AppTheme.ARCTIC_BLUE -> AppIconOption.ARCTIC_BLUE.wordmarkResource
-        AppTheme.GRAPHITE -> AppIconOption.GRAPHITE.wordmarkResource
-        else -> fallback.wordmarkResource
-    }
+    fallback.wordmarkResource

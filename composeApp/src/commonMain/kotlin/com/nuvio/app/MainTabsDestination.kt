@@ -9,9 +9,13 @@ import com.nuvio.app.core.ui.NuvioCircularGlassButton
 import org.jetbrains.compose.resources.painterResource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Scaffold
@@ -26,10 +30,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nuvio.app.core.ui.FloatingNavigationBar
+import com.nuvio.app.core.ui.FloatingNavigationItem
 import com.nuvio.app.core.ui.LocalNuvioBottomNavigationOverlayPadding
 import com.nuvio.app.core.ui.LocalNuvioNavBarScrollState
 import com.nuvio.app.core.ui.NuvioClassicNavigationBar
-import com.nuvio.app.core.ui.NuvioNavigationBar
 import com.nuvio.app.core.ui.PlatformBackHandler
 import com.nuvio.app.core.ui.rememberNuvioNavBarScrollState
 import com.nuvio.app.features.profiles.NuvioProfile
@@ -65,7 +70,7 @@ internal fun MainTabsDestination(
     onProfileSelected: (NuvioProfile) -> Unit,
     onAddProfileRequested: () -> Unit,
 ) {
-    PlatformBackHandler(enabled = true, onBack = onBack)
+    PlatformBackHandler(enabled = rootRouteActive, onBack = onBack)
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val isTabletLayout = useTabletFloatingTabBar || maxWidth >= 768.dp
@@ -78,6 +83,73 @@ internal fun MainTabsDestination(
         val navBarScrollState = rememberNuvioNavBarScrollState()
         val navBarHazeState = rememberHazeState()
         val navBarStyleSetting by remember { ThemeSettingsRepository.navBarStyle }.collectAsStateWithLifecycle()
+        val navBarGlowEnabled by ThemeSettingsRepository.navBarGlowEnabled.collectAsStateWithLifecycle()
+        val floatingNavigationItems = listOf(
+            FloatingNavigationItem(
+                selected = selectedTab == AppScreenTab.Home,
+                onClick = { onTabSelected(AppScreenTab.Home) },
+                icon = Icons.Filled.Home,
+                label = stringResource(Res.string.compose_nav_home),
+            ),
+            FloatingNavigationItem(
+                selected = selectedTab == AppScreenTab.Search,
+                onClick = { onTabSelected(AppScreenTab.Search) },
+                drawable = Res.drawable.sidebar_search,
+                label = stringResource(Res.string.compose_nav_search),
+            ),
+            FloatingNavigationItem(
+                selected = selectedTab == AppScreenTab.Library,
+                onClick = { onTabSelected(AppScreenTab.Library) },
+                drawable = Res.drawable.sidebar_library,
+                label = stringResource(Res.string.compose_nav_library),
+            ),
+            FloatingNavigationItem(
+                selected = selectedTab == AppScreenTab.Settings,
+                onClick = { onTabSelected(AppScreenTab.Settings) },
+                label = stringResource(Res.string.compose_nav_profile),
+                content = {
+                    ProfileSwitcherTab(
+                        selected = selectedTab == AppScreenTab.Settings,
+                        onClick = { onTabSelected(AppScreenTab.Settings) },
+                        onProfileSelected = onProfileSelected,
+                        onAddProfileRequested = onAddProfileRequested,
+                    )
+                },
+            ),
+        )
+        val bottomNavigationItems = listOf(
+            FloatingNavigationItem(
+                selected = selectedTab == AppScreenTab.Home,
+                onClick = { onTabSelected(AppScreenTab.Home) },
+                icon = Icons.Filled.Home,
+                label = stringResource(Res.string.compose_nav_home),
+            ),
+            FloatingNavigationItem(
+                selected = selectedTab == AppScreenTab.Library,
+                onClick = { onTabSelected(AppScreenTab.Library) },
+                drawable = Res.drawable.sidebar_library,
+                label = stringResource(Res.string.compose_nav_library),
+            ),
+            FloatingNavigationItem(
+                selected = selectedTab == AppScreenTab.Discover,
+                onClick = { onTabSelected(AppScreenTab.Discover) },
+                icon = Icons.Rounded.Explore,
+                label = stringResource(Res.string.compose_search_discover_title),
+            ),
+            FloatingNavigationItem(
+                selected = selectedTab == AppScreenTab.Settings,
+                onClick = { onTabSelected(AppScreenTab.Settings) },
+                label = stringResource(Res.string.compose_nav_profile),
+                content = {
+                    ProfileSwitcherTab(
+                        selected = selectedTab == AppScreenTab.Settings,
+                        onClick = { onTabSelected(AppScreenTab.Settings) },
+                        onProfileSelected = onProfileSelected,
+                        onAddProfileRequested = onAddProfileRequested,
+                    )
+                },
+            ),
+        )
 
         Scaffold(
             modifier = Modifier
@@ -133,7 +205,7 @@ internal fun MainTabsDestination(
                         actions = actions(isTabletLayout),
                         modifier = Modifier
                             .fillMaxSize()
-                            .then(if (navBarStyleSetting != NavBarStyle.CLASSIC) Modifier.hazeSource(state = navBarHazeState) else Modifier)
+                            .then(if (isTabletLayout || navBarStyleSetting != NavBarStyle.CLASSIC) Modifier.hazeSource(state = navBarHazeState) else Modifier)
                             .then(if (navBarStyleSetting == NavBarStyle.ADAPTIVE) Modifier.nestedScroll(navBarScrollState.nestedScrollConnection) else Modifier)
                             .padding(innerPadding),
                     )
@@ -161,11 +233,16 @@ internal fun MainTabsDestination(
                 }
 
                 if (isTabletLayout && !useNativeBottomTabs) {
-                    TabletFloatingTopBar(
-                        selectedTab = selectedTab,
-                        onTabSelected = onTabSelected,
-                        onProfileSelected = onProfileSelected,
-                        onAddProfileRequested = onAddProfileRequested,
+                    FloatingNavigationBar(
+                        modifier = Modifier.align(Alignment.TopCenter).widthIn(max = 416.dp),
+                        hazeState = navBarHazeState,
+                        contentPadding = PaddingValues(
+                            top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 10.dp,
+                            bottom = 8.dp,
+                        ),
+                        compactSize = true,
+                        items = floatingNavigationItems,
+                        glowEnabled = navBarGlowEnabled,
                     )
                 }
 
@@ -175,45 +252,13 @@ internal fun MainTabsDestination(
                         NavBarStyle.COMPACT -> navBarScrollState.collapse()
                         else -> {}
                     }
-                    NuvioNavigationBar(
+                    FloatingNavigationBar(
                         modifier = Modifier.align(Alignment.BottomCenter),
                         scrollState = navBarScrollState,
                         hazeState = navBarHazeState,
-                    ) {
-                        NavItem(
-                            selected = selectedTab == AppScreenTab.Home,
-                            onClick = { onTabSelected(AppScreenTab.Home) },
-                            icon = Icons.Filled.Home,
-                            contentDescription = stringResource(Res.string.compose_nav_home),
-                            label = stringResource(Res.string.compose_nav_home),
-                        )
-                        NavItem(
-                            selected = selectedTab == AppScreenTab.Library,
-                            onClick = { onTabSelected(AppScreenTab.Library) },
-                            icon = Res.drawable.sidebar_library,
-                            contentDescription = stringResource(Res.string.compose_nav_library),
-                            label = stringResource(Res.string.compose_nav_library),
-                        )
-                        NavItem(
-                            selected = selectedTab == AppScreenTab.Discover,
-                            onClick = { onTabSelected(AppScreenTab.Discover) },
-                            icon = Icons.Rounded.Explore,
-                            contentDescription = stringResource(Res.string.compose_search_discover_title),
-                            label = stringResource(Res.string.compose_search_discover_title),
-                        )
-                        NavItem(
-                            selected = selectedTab == AppScreenTab.Settings,
-                            onClick = { onTabSelected(AppScreenTab.Settings) },
-                            label = stringResource(Res.string.compose_nav_profile),
-                        ) {
-                            ProfileSwitcherTab(
-                                selected = selectedTab == AppScreenTab.Settings,
-                                onClick = { onTabSelected(AppScreenTab.Settings) },
-                                onProfileSelected = onProfileSelected,
-                                onAddProfileRequested = onAddProfileRequested,
-                            )
-                        }
-                    }
+                        items = bottomNavigationItems,
+                        glowEnabled = navBarGlowEnabled,
+                    )
                 }
             }
         }
