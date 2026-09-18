@@ -40,6 +40,7 @@ internal fun PlayerStreamList(
     ),
     currentStreamUrl: String? = null,
     currentStreamName: String? = null,
+    currentStreamIdentityKey: String? = null,
     currentLabel: String? = null,
 ) {
     val debridSettings by remember {
@@ -93,7 +94,7 @@ internal fun PlayerStreamList(
                         showFileSizeBadges = streamBadgeSettings.showFileSizeBadges,
                         showAddonLogo = streamBadgeSettings.showAddonLogo,
                         badgePlacement = streamBadgeSettings.badgePlacement,
-                        isCurrent = stream.isCurrentPlayerStream(currentStreamUrl, currentStreamName),
+                        isCurrent = stream.isCurrentPlayerStream(currentStreamUrl, currentStreamName, currentStreamIdentityKey),
                         currentLabel = currentLabel,
                         onClick = { onStreamSelected(stream) },
                     )

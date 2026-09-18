@@ -12,7 +12,38 @@ internal object SkipIntroApi {
     private const val ARM_BASE = "https://arm.haglund.dev/api/v2/"
     private const val ANIMESKIP_BASE = "https://api.anime-skip.com/"
 
-    // --- IntroDb ---
+    /** TheIntroDB (theintrodb.org) — v3 read + submit both require an account API key. */
+    private const val THE_INTRO_DB_BASE = "https://api.theintrodb.org/v3/"
+
+    // --- TheIntroDB (theintrodb.org) v3 ---
+
+    suspend fun getTheIntroDbSegments(
+        tmdbId: String,
+        isMovie: Boolean,
+        season: Int?,
+        episode: Int?,
+        durationMs: Long?,
+    ): TheIntroDbMediaResponse? {
+        if (tmdbId.isBlank()) return null
+        val params = buildList {
+            add("tmdb_id=$tmdbId")
+            add("type=${if (isMovie) "movie" else "tv"}")
+            if (!isMovie) {
+                if (season != null) add("season=$season")
+                if (episode != null) add("episode=$episode")
+            }
+            if (durationMs != null && durationMs > 0) add("duration_ms=$durationMs")
+        }
+        val url = THE_INTRO_DB_BASE + "media?" + params.joinToString("&")
+        return try {
+            val text = httpGetText(url)
+            json.decodeFromString<TheIntroDbMediaResponse>(text)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    // --- Legacy IntroDb (introdb.app) — kept for backward compatibility ---
 
     suspend fun getIntroDbSegments(
         imdbId: String,
@@ -156,6 +187,16 @@ internal object SkipIntroApi {
 
     suspend fun resolveKitsuToImdb(kitsuId: String): ArmEntry? {
         val url = "${ARM_BASE}ids?source=kitsu&id=$kitsuId&include=imdb"
+        return try {
+            val text = httpGetText(url)
+            json.decodeFromString<ArmEntry>(text)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    suspend fun resolveAnilistToMal(anilistId: String): ArmEntry? {
+        val url = "${ARM_BASE}ids?source=anilist&id=$anilistId&include=myanimelist"
         return try {
             val text = httpGetText(url)
             json.decodeFromString<ArmEntry>(text)

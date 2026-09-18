@@ -55,6 +55,8 @@ import com.nuvio.app.features.anilist.AniListAuthStorage
 import com.nuvio.app.features.anilist.AniListCacheStorage
 import com.nuvio.app.features.mal.MalAuthStorage
 import com.nuvio.app.features.mal.MalCacheStorage
+import com.nuvio.app.features.discord.DiscordAuthStorage
+import com.nuvio.app.features.discord.DiscordBootstrap
 import com.nuvio.app.features.mal.MalTrackingBootstrap
 import com.nuvio.app.features.tmdb.TmdbSettingsStorage
 import com.nuvio.app.features.tracking.TrackingSettingsStorage
@@ -121,6 +123,8 @@ open class MainActivity : AppCompatActivity() {
         MalAuthStorage.initialize(applicationContext)
         MalCacheStorage.initialize(applicationContext)
         MalTrackingBootstrap.install()
+        DiscordAuthStorage.initialize(applicationContext)
+        DiscordBootstrap.install()
         TvdbSettingsStorage.initialize(applicationContext)
         LibraryDisplaySettingsStorage.initialize(applicationContext)
         ContinueWatchingPreferencesStorage.initialize(applicationContext)

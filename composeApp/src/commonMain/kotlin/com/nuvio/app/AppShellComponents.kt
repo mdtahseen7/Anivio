@@ -172,6 +172,7 @@ internal fun AppTabHost(
                         modifier = Modifier.fillMaxSize(),
                         scrollToTopRequests = requests.libraryScrollToTopRequests,
                         onPosterClick = actions.onLibraryPosterClick,
+                        onAniListPosterClick = actions.onPosterClick,
                         onPosterLongClick = actions.onLibraryPosterLongClick,
                         onAniListPosterLongClick = actions.onPosterLongClick,
                         onSectionViewAllClick = actions.onLibrarySectionViewAllClick,

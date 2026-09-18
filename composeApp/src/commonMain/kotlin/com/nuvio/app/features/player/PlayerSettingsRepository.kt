@@ -66,7 +66,9 @@ data class PlayerSettingsUiState(
     val animeSkipEnabled: Boolean = false,
     val animeSkipClientId: String = "",
     val introDbApiKey: String = "",
+    val theIntroDbApiKey: String = "",
     val introSubmitEnabled: Boolean = false,
+    val seekForwardSeconds: Int = 10,
     val streamAutoPlayNextEpisodeEnabled: Boolean = false,
     val streamAutoPlayNextEpisodeFallbackEnabled: Boolean = true,
     val streamAutoPlayPreferBingeGroup: Boolean = true,
@@ -132,7 +134,9 @@ object PlayerSettingsRepository {
     private var animeSkipEnabled = false
     private var animeSkipClientId = ""
     private var introDbApiKey = ""
+    private var theIntroDbApiKey = ""
     private var introSubmitEnabled = false
+    private var seekForwardSeconds = 10
     private var streamAutoPlayNextEpisodeEnabled = false
     private var streamAutoPlayNextEpisodeFallbackEnabled = true
     private var streamAutoPlayPreferBingeGroup = true
@@ -203,7 +207,9 @@ object PlayerSettingsRepository {
         animeSkipEnabled = false
         animeSkipClientId = ""
         introDbApiKey = ""
+        theIntroDbApiKey = ""
         introSubmitEnabled = false
+        seekForwardSeconds = 10
         streamAutoPlayNextEpisodeEnabled = false
         streamAutoPlayNextEpisodeFallbackEnabled = true
         streamAutoPlayPreferBingeGroup = true
@@ -279,6 +285,8 @@ object PlayerSettingsRepository {
                 ?: SubtitleStyleState.DEFAULT.useForcedSubtitles,
             showOnlyPreferredLanguages = PlayerSettingsStorage.loadSubtitleShowOnlyPreferredLanguages()
                 ?: SubtitleStyleState.DEFAULT.showOnlyPreferredLanguages,
+            overrideEmbeddedStyles = PlayerSettingsStorage.loadSubtitleOverrideEmbeddedStyles()
+                ?: SubtitleStyleState.DEFAULT.overrideEmbeddedStyles,
         )
         streamReuseLastLinkEnabled = PlayerSettingsStorage.loadStreamReuseLastLinkEnabled() ?: false
         streamReuseLastLinkCacheHours = PlayerSettingsStorage.loadStreamReuseLastLinkCacheHours() ?: 24
@@ -326,7 +334,9 @@ object PlayerSettingsRepository {
         animeSkipEnabled = PlayerSettingsStorage.loadAnimeSkipEnabled() ?: false
         animeSkipClientId = PlayerSettingsStorage.loadAnimeSkipClientId() ?: ""
         introDbApiKey = PlayerSettingsStorage.loadIntroDbApiKey() ?: ""
+        theIntroDbApiKey = PlayerSettingsStorage.loadTheIntroDbApiKey() ?: ""
         introSubmitEnabled = PlayerSettingsStorage.loadIntroSubmitEnabled() ?: false
+        seekForwardSeconds = (PlayerSettingsStorage.loadSeekForwardSeconds() ?: 10).coerceIn(5, 300)
         streamAutoPlayNextEpisodeEnabled = PlayerSettingsStorage.loadStreamAutoPlayNextEpisodeEnabled() ?: false
         streamAutoPlayNextEpisodeFallbackEnabled = PlayerSettingsStorage.loadStreamAutoPlayNextEpisodeFallbackEnabled() ?: true
         streamAutoPlayPreferBingeGroup = PlayerSettingsStorage.loadStreamAutoPlayPreferBingeGroup() ?: true
@@ -509,6 +519,7 @@ object PlayerSettingsRepository {
         PlayerSettingsStorage.saveSubtitleStripSdh(normalized.stripSdh)
         PlayerSettingsStorage.saveSubtitleUseForcedSubtitles(normalized.useForcedSubtitles)
         PlayerSettingsStorage.saveSubtitleShowOnlyPreferredLanguages(normalized.showOnlyPreferredLanguages)
+        PlayerSettingsStorage.saveSubtitleOverrideEmbeddedStyles(normalized.overrideEmbeddedStyles)
     }
 
     fun setStreamReuseLastLinkEnabled(enabled: Boolean) {
@@ -665,12 +676,29 @@ object PlayerSettingsRepository {
         PlayerSettingsStorage.saveIntroDbApiKey(apiKey)
     }
 
+    fun setTheIntroDbApiKey(apiKey: String) {
+        ensureLoaded()
+        if (theIntroDbApiKey == apiKey) return
+        theIntroDbApiKey = apiKey
+        publish()
+        PlayerSettingsStorage.saveTheIntroDbApiKey(apiKey)
+    }
+
     fun setIntroSubmitEnabled(enabled: Boolean) {
         ensureLoaded()
         if (introSubmitEnabled == enabled) return
         introSubmitEnabled = enabled
         publish()
         PlayerSettingsStorage.saveIntroSubmitEnabled(enabled)
+    }
+
+    fun setSeekForwardSeconds(seconds: Int) {
+        ensureLoaded()
+        val normalized = seconds.coerceIn(5, 300)
+        if (seekForwardSeconds == normalized) return
+        seekForwardSeconds = normalized
+        publish()
+        PlayerSettingsStorage.saveSeekForwardSeconds(normalized)
     }
 
     fun setStreamAutoPlayNextEpisodeEnabled(enabled: Boolean) {
@@ -946,7 +974,9 @@ object PlayerSettingsRepository {
             animeSkipEnabled = animeSkipEnabled,
             animeSkipClientId = animeSkipClientId,
             introDbApiKey = introDbApiKey,
+            theIntroDbApiKey = theIntroDbApiKey,
             introSubmitEnabled = introSubmitEnabled,
+            seekForwardSeconds = seekForwardSeconds,
             streamAutoPlayNextEpisodeEnabled = streamAutoPlayNextEpisodeEnabled,
             streamAutoPlayNextEpisodeFallbackEnabled = streamAutoPlayNextEpisodeFallbackEnabled,
             streamAutoPlayPreferBingeGroup = streamAutoPlayPreferBingeGroup,

@@ -356,6 +356,7 @@ private fun ExoPlayerSurface(
                 latestExternalSubtitleMimeType.value == MimeTypes.TEXT_VTT
             },
             shouldStripSdhProvider = { currentSubtitleStyle.stripSdh },
+            shouldOverrideEmbeddedStylesProvider = { currentSubtitleStyle.overrideEmbeddedStyles },
             videoBoundsFractionProvider = {
                 playerViewRef?.videoBoundsFraction(latestVideoAspectRatio.value)
             },
@@ -2164,6 +2165,7 @@ private class SubtitleOffsetRenderersFactory(
     private val subtitleDelayUsProvider: () -> Long,
     private val shouldNormalizeCuePositionProvider: () -> Boolean,
     private val shouldStripSdhProvider: () -> Boolean,
+    private val shouldOverrideEmbeddedStylesProvider: () -> Boolean = { false },
     private val videoBoundsFractionProvider: () -> RectF?,
 ) : DefaultRenderersFactory(context) {
     override fun buildTextRenderers(
@@ -2177,6 +2179,7 @@ private class SubtitleOffsetRenderersFactory(
             delegate = output,
             shouldNormalizeCuePositionProvider = shouldNormalizeCuePositionProvider,
             shouldStripSdhProvider = shouldStripSdhProvider,
+            shouldOverrideEmbeddedStylesProvider = shouldOverrideEmbeddedStylesProvider,
             videoBoundsFractionProvider = videoBoundsFractionProvider,
         )
         val startIndex = out.size
@@ -2194,6 +2197,7 @@ private class CueNormalizingTextOutput(
     private val delegate: TextOutput,
     private val shouldNormalizeCuePositionProvider: () -> Boolean,
     private val shouldStripSdhProvider: () -> Boolean,
+    private val shouldOverrideEmbeddedStylesProvider: () -> Boolean = { false },
     private val videoBoundsFractionProvider: () -> RectF?,
 ) : TextOutput {
     override fun onCues(cueGroup: CueGroup) {
@@ -2208,6 +2212,23 @@ private class CueNormalizingTextOutput(
 
     private fun processCue(cue: Cue): Cue? {
         var processed = fixRtlCueText(cue)
+        if (shouldOverrideEmbeddedStylesProvider()) {
+            val text = processed.text?.toString()
+            if (text != null) {
+                val stripped = stripEmbeddedAssStyles(text)
+                if (stripped != text) {
+                    processed = processed.buildUpon().setText(stripped).build()
+                }
+            }
+            // Force bottom-center, ignore embedded \pos/\an and VTT line/position
+            processed = processed.buildUpon()
+                .setPosition(0.5f)
+                .setPositionAnchor(Cue.ANCHOR_TYPE_MIDDLE)
+                .setLine(Cue.DIMEN_UNSET, Cue.TYPE_UNSET)
+                .setLineAnchor(Cue.TYPE_UNSET)
+                .setTextAlignment(null)
+                .build()
+        }
         if (shouldStripSdhProvider()) {
             val text = processed.text?.toString() ?: return processed
             val filtered = SubtitleSdhFilter.filter(text) ?: return null
@@ -2246,6 +2267,14 @@ private class CueNormalizingTextOutput(
             builder.setBitmapHeight(cue.bitmapHeight * bounds.height())
         }
         return builder.build()
+    }
+
+    private fun stripEmbeddedAssStyles(text: String): String {
+        // Remove ASS override blocks {\an8\pos(0,0)...} and VTT/HTML tags when forcing custom style
+        var stripped = text.replace(Regex("\\{[^}]*\\}"), "")
+        // Strip any remaining HTML tags if present (e.g., <i>, <b>, <font>)
+        stripped = stripped.replace(Regex("<[^>]+>"), "")
+        return stripped.trim()
     }
 
     private fun normalizeCuePosition(cue: Cue): Cue {

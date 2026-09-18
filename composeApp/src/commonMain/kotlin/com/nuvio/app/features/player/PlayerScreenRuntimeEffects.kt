@@ -8,6 +8,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.nuvio.app.features.details.MetaDetailsRepository
+import com.nuvio.app.features.discord.DiscordAuth
+import com.nuvio.app.features.discord.DiscordWatchingActivity
 import com.nuvio.app.features.p2p.P2pSettingsRepository
 import com.nuvio.app.features.p2p.P2pStreamRequest
 import com.nuvio.app.features.p2p.P2pStreamingEngine
@@ -86,12 +88,21 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
         preferredSubtitleSelectionApplied = false
         isUserExplicitSubtitleSelection = false
         hasScannedTextTracksOnce = false
+        trackPreferenceRestoreApplied = false
+        selectedAddonSubtitleId = null
+        selectedSubtitleIndex = -1
+        useCustomSubtitles = false
+        subtitleTracks = emptyList()
+        audioTracks = emptyList()
+        subtitleAutoSyncState = SubtitleAutoSyncUiState()
+        autoFetchedAddonSubtitlesForKey = null
         showSourcesPanel = false
         showEpisodesPanel = false
         episodeStreamsPanelState = EpisodeStreamsPanelState()
         PlayerStreamsRepository.clearEpisodeStreams()
         SubtitleRepository.clear()
         WatchProgressRepository.ensureLoaded()
+        playerController?.clearExternalSubtitle()
     }
 
     LaunchedEffect(
@@ -309,6 +320,7 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
 
     BindPlayerUiVisibilityEffects()
     BindPlayerMetadataAndSkipEffects()
+    BindDiscordRichPresenceEffects()
 
     DisposableEffect(playbackSession.videoId, activeSourceUrl, activeSourceAudioUrl) {
         val effectVideoId = playbackSession.videoId
@@ -458,6 +470,14 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
                     val kitsuId = vid.removePrefix("kitsu:").substringBefore(':')
                     SkipIntroRepository.getSkipIntervalsForKitsu(kitsuId = kitsuId, episode = episode)
                 }
+                vid.startsWith("anilist:") -> {
+                    val anilistId = vid.removePrefix("anilist:").substringBefore(':')
+                    SkipIntroRepository.getSkipIntervalsForAnilist(
+                        anilistId = anilistId,
+                        season = season,
+                        episode = episode,
+                    )
+                }
                 else -> SkipIntroRepository.getSkipIntervals(
                     imdbId = vid.substringBefore(':').takeIf { it.startsWith("tt") },
                     season = season,
@@ -577,6 +597,50 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
             }
         }
     }
+}
+
+/**
+ * Pushes Discord Rich Presence (when connected + enabled) from the playback snapshot. Presence
+ * mirrors the player: watching/paused while open, cleared on dispose.
+ */
+@Composable
+private fun PlayerScreenRuntime.BindDiscordRichPresenceEffects() {
+    DisposableEffect(Unit) {
+        onDispose { DiscordAuth.clearWatching() }
+    }
+
+    // Episode identity: re-push (and re-anchor the elapsed timer) only when it changes.
+    LaunchedEffect(title, activeSeasonNumber, activeEpisodeNumber, activeEpisodeTitle, poster, background) {
+        if (!playbackSnapshot.isEnded && (playbackSnapshot.isPlaying || !playbackSnapshot.isLoading)) {
+            pushDiscordPresence()
+        }
+    }
+
+    LaunchedEffect(
+        playbackSnapshot.isPlaying,
+        playbackSnapshot.isLoading,
+        playbackSnapshot.isEnded,
+    ) {
+        if (playbackSnapshot.isEnded || playbackSnapshot.isLoading) {
+            if (playbackSnapshot.isEnded) DiscordAuth.clearWatching()
+            return@LaunchedEffect
+        }
+        pushDiscordPresence()
+    }
+}
+
+private fun PlayerScreenRuntime.pushDiscordPresence() {
+    DiscordAuth.updateWatching(
+        DiscordWatchingActivity(
+            contentTitle = title.ifBlank { activeStreamTitle },
+            seasonNumber = activeSeasonNumber,
+            episodeNumber = activeEpisodeNumber,
+            episodeTitle = activeEpisodeTitle,
+            imageUrl = firstNonBlankUrl(poster, background, activeEpisodeThumbnail),
+            isPlaying = playbackSnapshot.isPlaying,
+            positionMs = playbackSnapshot.positionMs,
+        ),
+    )
 }
 
 private fun PlayerScreenRuntime.buildNowPlayingInfo(): PlayerNowPlayingInfo {

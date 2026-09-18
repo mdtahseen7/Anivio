@@ -72,6 +72,7 @@ import com.nuvio.app.core.ui.NuvioPosterZoomActionOverlay
 import com.nuvio.app.core.ui.NuvioStatusModal
 import com.nuvio.app.core.ui.NuvioToastController
 import com.nuvio.app.core.ui.NuvioToastHost
+import com.nuvio.app.features.anilist.AniListRateLimitNotifier
 import com.nuvio.app.core.ui.PosterZoomAnchor
 import com.nuvio.app.core.ui.PosterZoomAnchorHolder
 import com.nuvio.app.core.ui.PosterZoomOverlayAction
@@ -2018,6 +2019,12 @@ internal fun MainAppContent(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .zIndex(20f),
+            )
+
+            AniListRateLimitNotifier(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(25f),
             )
 
             }

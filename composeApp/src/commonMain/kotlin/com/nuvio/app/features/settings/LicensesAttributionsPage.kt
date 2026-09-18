@@ -52,6 +52,7 @@ private const val MdbListUrl = "https://mdblist.com"
 private const val IntroDbUrl = "https://introdb.app/"
 private const val MpvKitUrl = "https://github.com/mpvkit/MPVKit"
 private const val ApacheLicenseUrl = "https://www.apache.org/licenses/LICENSE-2.0"
+private const val DiscordUrl = "https://discord.com"
 
 /**
  * Several data providers ship no logo we can bundle, so the icon is fetched from the favicon
@@ -458,6 +459,12 @@ private fun attributionItems(): List<AttributionItem> = listOf(
         bodyRes = Res.string.settings_licenses_attributions_imdb_body,
         logo = IntegrationLogo.Imdb,
         link = ImdbDatasetsUrl,
+    ),
+    AttributionItem(
+        titleRes = Res.string.settings_licenses_attributions_discord_title,
+        bodyRes = Res.string.settings_licenses_attributions_discord_body,
+        logo = IntegrationLogo.Discord,
+        link = DiscordUrl,
     ),
 )
 

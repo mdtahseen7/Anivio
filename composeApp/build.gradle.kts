@@ -47,6 +47,9 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
     abstract val tvdbApiKey: Property<String>
 
     @get:Input
+    abstract val discordAppId: Property<String>
+
+    @get:Input
     abstract val malClientId: Property<String>
 
     @get:Input
@@ -128,6 +131,20 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
                 |object SentryConfig {
                 |    const val DSN = "${sentryDsn.get()}"
                 |    const val ENVIRONMENT = "${sentryEnvironment.get()}"
+                |}
+                """.trimMargin()
+            )
+        }
+
+        outDir.resolve("com/nuvio/app/features/discord").apply {
+            mkdirs()
+            resolve("DiscordConfig.kt").writeText(
+                """
+                |package com.nuvio.app.features.discord
+                |
+                |object DiscordConfig {
+                |    /** Discord application id used for Rich Presence activity assets. */
+                |    const val APP_ID = "${discordAppId.get()}"
                 |}
                 """.trimMargin()
             )
@@ -433,6 +450,7 @@ val generateRuntimeConfigs = tasks.register<GenerateRuntimeConfigsTask>("generat
     sentryDsn.set(runtimeConfigValue("SENTRY_DSN"))
     fanartApiKey.set(runtimeConfigValue("FANART_API_KEY"))
     tvdbApiKey.set(runtimeConfigValue("TVDB_API_KEY"))
+    discordAppId.set(runtimeConfigValue("DISCORD_APP_ID"))
     malClientId.set(runtimeConfigValue("MAL_CLIENT_ID"))
     malRedirectUri.set(runtimeConfigValue("MAL_REDIRECT_URI", fallback = "nuvio://auth/mal"))
     updateGitHubOwner.set(runtimeConfigValue("ANIVIO_UPDATE_GITHUB_OWNER"))
@@ -599,9 +617,7 @@ kotlin {
             implementation("io.coil-kt.coil3:coil-network-cache-control:${libs.versions.coil.get()}") {
                 exclude(group = "org.jetbrains.skiko", module = "skiko")
             }
-            implementation("io.coil-kt.coil3:coil-svg:${libs.versions.coil.get()}") {
-                exclude(group = "org.jetbrains.skiko", module = "skiko")
-            }
+            implementation("io.coil-kt.coil3:coil-svg:${libs.versions.coil.get()}")
             implementation("dev.chrisbanes.haze:haze:1.7.2")
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)

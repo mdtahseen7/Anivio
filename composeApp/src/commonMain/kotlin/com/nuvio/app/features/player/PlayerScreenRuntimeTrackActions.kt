@@ -134,13 +134,31 @@ internal fun PlayerScreenRuntime.restorePersistedTrackPreferenceIfNeeded() {
             }
         }
         PersistedSubtitleSelectionType.ADDON -> {
-            val url = preference.addonSubtitleUrl?.takeIf { it.isNotBlank() }
-            if (url != null) {
-                selectedAddonSubtitleId = preference.addonSubtitleId ?: url
+            val persistedId = preference.addonSubtitleId?.takeIf { it.isNotBlank() }
+            val persistedUrl = preference.addonSubtitleUrl?.takeIf { it.isNotBlank() }
+            val persistedLang = preference.subtitleLanguage?.takeIf { it.isNotBlank() }
+            // Don't blindly reuse previous episode's URL – it's episode-specific.
+            // Try to find the same subtitle (by id/url) or same language in the *current* episode's list.
+            val match = when {
+                persistedId != null -> addonSubtitles.firstOrNull { it.id == persistedId || it.url == persistedId }
+                persistedUrl != null -> addonSubtitles.firstOrNull { it.url == persistedUrl }
+                else -> null
+            } ?: persistedLang?.let { lang ->
+                addonSubtitles.firstOrNull { SubtitleLanguageMatching.matchesLanguageCode(it.language, lang) }
+            }
+            if (match != null) {
+                selectedAddonSubtitleId = match.id
                 selectedSubtitleIndex = -1
                 useCustomSubtitles = true
-                playerController?.setSubtitleUri(url)
+                playerController?.setSubtitleUri(match.url)
                 preferredSubtitleSelectionApplied = true
+            } else if (addonSubtitles.isNotEmpty() || !isLoadingAddonSubtitles) {
+                // No matching addon subtitle for this episode – let auto-selection pick by language.
+                preferredSubtitleSelectionApplied = false
+            } else {
+                // Subtitles still loading for new episode – defer restore.
+                preferredSubtitleSelectionApplied = false
+                return
             }
         }
     }

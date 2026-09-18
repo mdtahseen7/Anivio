@@ -45,6 +45,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.nuvio.app.core.ui.NuvioTokens
 import com.nuvio.app.core.ui.nuvio
+import com.nuvio.app.features.discord.discordRichPresenceSupported
 import com.nuvio.app.isIos
 import com.nuvio.app.supportsPosterNavigationMotion
 import nuvio.composeapp.generated.resources.*
@@ -260,6 +261,17 @@ internal fun settingsSearchEntries(
         description = stringResource(Res.string.compose_settings_root_integrations_description),
         icon = Icons.Rounded.Link,
     )
+    if (discordRichPresenceSupported) {
+        addRow(
+            page = SettingsPage.Integrations,
+            key = "discord-rich-presence",
+            title = stringResource(Res.string.discord_search_entry_title),
+            description = stringResource(Res.string.discord_search_entry_description),
+            pageLabel = integrationsPage,
+            section = stringResource(Res.string.settings_integrations_discord_section),
+            icon = Icons.Rounded.Link,
+        )
+    }
     addPage(
         page = SettingsPage.Notifications,
         key = "notifications",
@@ -308,6 +320,7 @@ internal fun settingsSearchEntries(
         PlaybackSearchRow("mdblist-attribution", stringResource(Res.string.settings_licenses_attributions_mdblist_title), stringResource(Res.string.settings_licenses_attributions_mdblist_body)),
         PlaybackSearchRow("introdb-attribution", stringResource(Res.string.settings_licenses_attributions_introdb_title), stringResource(Res.string.settings_licenses_attributions_introdb_body)),
         PlaybackSearchRow("imdb-datasets", stringResource(Res.string.settings_licenses_attributions_imdb_title), stringResource(Res.string.settings_licenses_attributions_imdb_body)),
+        PlaybackSearchRow("discord-attribution", stringResource(Res.string.settings_licenses_attributions_discord_title), stringResource(Res.string.settings_licenses_attributions_discord_body)),
         PlaybackSearchRow(
             if (isIos) "mpvkit-license" else "exoplayer-license",
             if (isIos) {

@@ -7,12 +7,14 @@
       shows in the bleed area around it is this colour, so it has to match the backdrop the artwork was
       drawn on or there is a visible ring where the foreground ends. Sampled from each source image.
     -->
-    <color name="app_icon_background">#182337</color>
-    <color name="app_icon_background_arctic_blue">#000000</color>
-    <color name="app_icon_background_emerald">#000000</color>
-    <color name="app_icon_background_rose_gold">#000000</color>
-    <color name="app_icon_background_copper">#000000</color>
-    <color name="app_icon_background_graphite">#000000</color>
+    <!-- Sampled from the average backdrop each foreground artwork was drawn on; a mismatch here
+         reads as a dark square ring around the artwork on masked launchers. -->
+    <color name="app_icon_background">#050C17</color>
+    <color name="app_icon_background_arctic_blue">#070708</color>
+    <color name="app_icon_background_emerald">#060607</color>
+    <color name="app_icon_background_rose_gold">#09090A</color>
+    <color name="app_icon_background_copper">#060607</color>
+    <color name="app_icon_background_graphite">#050405</color>
 
     <color name="nuvio_background">#0D0D0D</color>
 </resources>

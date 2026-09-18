@@ -42,6 +42,7 @@ actual object PlayerSettingsStorage {
     private const val subtitleStripSdhKey = "subtitle_strip_sdh"
     private const val subtitleUseForcedSubtitlesKey = "subtitle_use_forced_subtitles"
     private const val subtitleShowOnlyPreferredLanguagesKey = "subtitle_show_only_preferred_languages"
+    private const val subtitleOverrideEmbeddedStylesKey = "subtitle_override_embedded_styles"
     private const val streamReuseLastLinkEnabledKey = "stream_reuse_last_link_enabled"
     private const val streamReuseLastLinkCacheHoursKey = "stream_reuse_last_link_cache_hours"
     private const val androidPlaybackEngineKey = "android_playback_engine"
@@ -60,7 +61,9 @@ actual object PlayerSettingsStorage {
     private const val skipIntroEnabledKey = "skip_intro_enabled"
     private const val animeSkipEnabledKey = "animeskip_enabled"
     private const val animeSkipClientIdKey = "animeskip_client_id"
+    private const val seekForwardSecondsKey = "seek_forward_seconds"
     private const val introDbApiKeyKey = "introdb_api_key"
+    private const val theIntroDbApiKeyKey = "theintrodb_api_key"
     private const val introSubmitEnabledKey = "intro_submit_enabled"
     private const val streamAutoPlayNextEpisodeEnabledKey = "stream_auto_play_next_episode_enabled"
     private const val streamAutoPlayNextEpisodeFallbackEnabledKey = "stream_auto_play_next_episode_fallback_enabled"
@@ -112,6 +115,7 @@ actual object PlayerSettingsStorage {
         subtitleStripSdhKey,
         subtitleUseForcedSubtitlesKey,
         subtitleShowOnlyPreferredLanguagesKey,
+        subtitleOverrideEmbeddedStylesKey,
         streamReuseLastLinkEnabledKey,
         streamReuseLastLinkCacheHoursKey,
         androidPlaybackEngineKey,
@@ -130,6 +134,7 @@ actual object PlayerSettingsStorage {
         skipIntroEnabledKey,
         animeSkipEnabledKey,
         animeSkipClientIdKey,
+        seekForwardSecondsKey,
         streamAutoPlayNextEpisodeEnabledKey,
         streamAutoPlayNextEpisodeFallbackEnabledKey,
         streamAutoPlayPreferBingeGroupKey,
@@ -460,6 +465,12 @@ actual object PlayerSettingsStorage {
         saveBoolean(subtitleShowOnlyPreferredLanguagesKey, enabled)
     }
 
+    actual fun loadSubtitleOverrideEmbeddedStyles(): Boolean? = loadBoolean(subtitleOverrideEmbeddedStylesKey)
+
+    actual fun saveSubtitleOverrideEmbeddedStyles(enabled: Boolean) {
+        saveBoolean(subtitleOverrideEmbeddedStylesKey, enabled)
+    }
+
     actual fun loadStreamReuseLastLinkEnabled(): Boolean? {
         val defaults = NSUserDefaults.standardUserDefaults
         val key = ProfileScopedKey.of(streamReuseLastLinkEnabledKey)
@@ -688,6 +699,16 @@ actual object PlayerSettingsStorage {
         NSUserDefaults.standardUserDefaults.setObject(apiKey, forKey = ProfileScopedKey.of(introDbApiKeyKey))
     }
 
+    actual fun loadTheIntroDbApiKey(): String? {
+        val defaults = NSUserDefaults.standardUserDefaults
+        val key = ProfileScopedKey.of(theIntroDbApiKeyKey)
+        return defaults.stringForKey(key)
+    }
+
+    actual fun saveTheIntroDbApiKey(apiKey: String) {
+        NSUserDefaults.standardUserDefaults.setObject(apiKey, forKey = ProfileScopedKey.of(theIntroDbApiKeyKey))
+    }
+
     actual fun loadIntroSubmitEnabled(): Boolean? {
         val defaults = NSUserDefaults.standardUserDefaults
         val key = ProfileScopedKey.of(introSubmitEnabledKey)
@@ -700,6 +721,20 @@ actual object PlayerSettingsStorage {
 
     actual fun saveIntroSubmitEnabled(enabled: Boolean) {
         NSUserDefaults.standardUserDefaults.setBool(enabled, forKey = ProfileScopedKey.of(introSubmitEnabledKey))
+    }
+
+    actual fun loadSeekForwardSeconds(): Int? {
+        val defaults = NSUserDefaults.standardUserDefaults
+        val key = ProfileScopedKey.of(seekForwardSecondsKey)
+        return if (defaults.objectForKey(key) != null) {
+            defaults.integerForKey(key).toInt()
+        } else {
+            null
+        }
+    }
+
+    actual fun saveSeekForwardSeconds(seconds: Int) {
+        NSUserDefaults.standardUserDefaults.setInteger(seconds.toLong(), forKey = ProfileScopedKey.of(seekForwardSecondsKey))
     }
 
     actual fun loadStreamAutoPlayNextEpisodeEnabled(): Boolean? {
@@ -930,6 +965,7 @@ actual object PlayerSettingsStorage {
         loadSubtitleStripSdh()?.let { put(subtitleStripSdhKey, encodeSyncBoolean(it)) }
         loadSubtitleUseForcedSubtitles()?.let { put(subtitleUseForcedSubtitlesKey, encodeSyncBoolean(it)) }
         loadSubtitleShowOnlyPreferredLanguages()?.let { put(subtitleShowOnlyPreferredLanguagesKey, encodeSyncBoolean(it)) }
+        loadSubtitleOverrideEmbeddedStyles()?.let { put(subtitleOverrideEmbeddedStylesKey, encodeSyncBoolean(it)) }
         loadStreamReuseLastLinkEnabled()?.let { put(streamReuseLastLinkEnabledKey, encodeSyncBoolean(it)) }
         loadStreamReuseLastLinkCacheHours()?.let { put(streamReuseLastLinkCacheHoursKey, encodeSyncInt(it)) }
         loadAndroidPlaybackEngine()?.let { put(androidPlaybackEngineKey, encodeSyncString(it)) }
@@ -950,6 +986,8 @@ actual object PlayerSettingsStorage {
         loadSkipIntroEnabled()?.let { put(skipIntroEnabledKey, encodeSyncBoolean(it)) }
         loadAnimeSkipEnabled()?.let { put(animeSkipEnabledKey, encodeSyncBoolean(it)) }
         loadAnimeSkipClientId()?.let { put(animeSkipClientIdKey, encodeSyncString(it)) }
+        loadTheIntroDbApiKey()?.let { put(theIntroDbApiKeyKey, encodeSyncString(it)) }
+        loadSeekForwardSeconds()?.let { put(seekForwardSecondsKey, encodeSyncInt(it)) }
         loadStreamAutoPlayNextEpisodeEnabled()?.let { put(streamAutoPlayNextEpisodeEnabledKey, encodeSyncBoolean(it)) }
         loadStreamAutoPlayNextEpisodeFallbackEnabled()?.let { put(streamAutoPlayNextEpisodeFallbackEnabledKey, encodeSyncBoolean(it)) }
         loadStreamAutoPlayPreferBingeGroup()?.let { put(streamAutoPlayPreferBingeGroupKey, encodeSyncBoolean(it)) }
@@ -1005,6 +1043,7 @@ actual object PlayerSettingsStorage {
         payload.decodeSyncBoolean(subtitleStripSdhKey)?.let(::saveSubtitleStripSdh)
         payload.decodeSyncBoolean(subtitleUseForcedSubtitlesKey)?.let(::saveSubtitleUseForcedSubtitles)
         payload.decodeSyncBoolean(subtitleShowOnlyPreferredLanguagesKey)?.let(::saveSubtitleShowOnlyPreferredLanguages)
+        payload.decodeSyncBoolean(subtitleOverrideEmbeddedStylesKey)?.let(::saveSubtitleOverrideEmbeddedStyles)
         payload.decodeSyncBoolean(streamReuseLastLinkEnabledKey)?.let(::saveStreamReuseLastLinkEnabled)
         payload.decodeSyncInt(streamReuseLastLinkCacheHoursKey)?.let(::saveStreamReuseLastLinkCacheHours)
         payload.decodeSyncString(androidPlaybackEngineKey)?.let(::saveAndroidPlaybackEngine)
@@ -1024,7 +1063,9 @@ actual object PlayerSettingsStorage {
         payload.decodeSyncBoolean(skipIntroEnabledKey)?.let(::saveSkipIntroEnabled)
         payload.decodeSyncBoolean(animeSkipEnabledKey)?.let(::saveAnimeSkipEnabled)
         payload.decodeSyncString(animeSkipClientIdKey)?.let(::saveAnimeSkipClientId)
+        payload.decodeSyncInt(seekForwardSecondsKey)?.let(::saveSeekForwardSeconds)
         payload.decodeSyncString(introDbApiKeyKey)?.let(::saveIntroDbApiKey)
+        payload.decodeSyncString(theIntroDbApiKeyKey)?.let(::saveTheIntroDbApiKey)
         payload.decodeSyncBoolean(streamAutoPlayNextEpisodeEnabledKey)?.let(::saveStreamAutoPlayNextEpisodeEnabled)
         payload.decodeSyncBoolean(streamAutoPlayNextEpisodeFallbackEnabledKey)?.let(::saveStreamAutoPlayNextEpisodeFallbackEnabled)
         payload.decodeSyncBoolean(streamAutoPlayPreferBingeGroupKey)?.let(::saveStreamAutoPlayPreferBingeGroup)

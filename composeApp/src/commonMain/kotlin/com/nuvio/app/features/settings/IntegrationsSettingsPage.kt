@@ -20,11 +20,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.core.anilist.TvdbSettingsRepository
+import com.nuvio.app.features.discord.discordRichPresenceSupported
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.compose_settings_page_debrid
 import nuvio.composeapp.generated.resources.compose_settings_page_mdblist_ratings
 import nuvio.composeapp.generated.resources.compose_settings_page_tmdb_enrichment
 import nuvio.composeapp.generated.resources.settings_integrations_debrid_description
+import nuvio.composeapp.generated.resources.settings_integrations_discord_section
 import nuvio.composeapp.generated.resources.settings_integrations_mdblist_description
 import nuvio.composeapp.generated.resources.settings_integrations_section_title
 import nuvio.composeapp.generated.resources.settings_integrations_tmdb_description
@@ -72,6 +74,17 @@ internal fun LazyListScope.integrationsContent(
                 SettingsGroupDivider(isTablet = isTablet)
                 // Inline rather than its own page: a single key is the whole TVDB configuration.
                 TvdbApiKeyRow(isTablet = isTablet)
+            }
+        }
+    }
+
+    if (discordRichPresenceSupported) {
+        item {
+            SettingsSection(
+                title = stringResource(Res.string.settings_integrations_discord_section),
+                isTablet = isTablet,
+            ) {
+                DiscordConnectionCard(isTablet = isTablet)
             }
         }
     }

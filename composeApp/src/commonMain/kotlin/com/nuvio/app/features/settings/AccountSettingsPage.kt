@@ -33,6 +33,13 @@ import com.nuvio.app.core.ui.NuvioStatusModal
 import com.nuvio.app.core.ui.NuvioSurfaceCard
 import com.nuvio.app.core.ui.NuvioTokens
 import com.nuvio.app.core.ui.nuvio
+import com.nuvio.app.features.anilist.AniListAuthRepository
+import com.nuvio.app.features.anilist.AniListConnectionMode
+import com.nuvio.app.features.debrid.DebridProviders
+import com.nuvio.app.features.debrid.DebridSettingsRepository
+import com.nuvio.app.features.mal.MalAuthSettings
+import com.nuvio.app.features.mal.MalConnectionMode
+import com.nuvio.app.features.profiles.ProfileRepository
 import kotlinx.coroutines.launch
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.action_cancel
@@ -43,7 +50,9 @@ import nuvio.composeapp.generated.resources.settings_account_delete_account_desc
 import nuvio.composeapp.generated.resources.settings_account_delete_confirm_message
 import nuvio.composeapp.generated.resources.settings_account_delete_confirm_title
 import nuvio.composeapp.generated.resources.settings_account_email
+import nuvio.composeapp.generated.resources.settings_account_linked_services
 import nuvio.composeapp.generated.resources.settings_account_not_signed_in
+import nuvio.composeapp.generated.resources.settings_account_profile
 import nuvio.composeapp.generated.resources.settings_account_sign_out
 import nuvio.composeapp.generated.resources.settings_account_sign_out_confirm_message
 import nuvio.composeapp.generated.resources.settings_account_sign_out_confirm_title
@@ -65,6 +74,19 @@ private fun AccountSettingsBody(
     isTablet: Boolean,
 ) {
     val authState by AuthRepository.state.collectAsStateWithLifecycle()
+    val profileState by ProfileRepository.state.collectAsStateWithLifecycle()
+    val aniListAuth by remember {
+        AniListAuthRepository.ensureLoaded()
+        AniListAuthRepository.uiState
+    }.collectAsStateWithLifecycle()
+    val malAuth by remember {
+        MalAuthSettings.ensureLoaded()
+        MalAuthSettings.uiState
+    }.collectAsStateWithLifecycle()
+    val debridSettings by remember {
+        DebridSettingsRepository.ensureLoaded()
+        DebridSettingsRepository.uiState
+    }.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var showSignOutConfirm by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -101,6 +123,28 @@ private fun AccountSettingsBody(
                             value = email,
                         )
                     }
+                    profileState.activeProfile?.takeIf { it.name.isNotBlank() }?.let { profile ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        AccountInfoRow(
+                            label = stringResource(Res.string.settings_account_profile),
+                            value = profile.name,
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    AccountInfoRow(
+                        label = stringResource(Res.string.settings_account_linked_services),
+                        value = linkedServicesSummary(
+                            aniListConnected = aniListAuth.mode == AniListConnectionMode.CONNECTED,
+                            aniListUsername = aniListAuth.username,
+                            malConnected = malAuth.mode == MalConnectionMode.CONNECTED,
+                            malUsername = malAuth.username,
+                            debridProviders = debridSettings.providerApiKeys.keys
+                                .mapNotNull(DebridProviders::byId)
+                                .filter { it.visibleInUi }
+                                .map { it.shortName }
+                                .sorted(),
+                        ),
+                    )
                 }
                 else -> {
                     Text(
@@ -220,6 +264,26 @@ private fun DeleteAccountCard(
         }
     }
 }
+
+/**
+ * One-line summary of everything linked from this device: tracking usernames when connected plus
+ * short debrid provider names, so the account page reads like a wallet of connected services.
+ */
+private fun linkedServicesSummary(
+    aniListConnected: Boolean,
+    aniListUsername: String?,
+    malConnected: Boolean,
+    malUsername: String?,
+    debridProviders: List<String>,
+): String = buildList {
+    if (aniListConnected) {
+        add(aniListUsername?.takeIf { it.isNotBlank() }?.let { "AniList ($it)" } ?: "AniList")
+    }
+    if (malConnected) {
+        add(malUsername?.takeIf { it.isNotBlank() }?.let { "MyAnimeList ($it)" } ?: "MyAnimeList")
+    }
+    addAll(debridProviders)
+}.joinToString(separator = ", ").ifBlank { "None" }
 
 @Composable
 private fun AccountInfoRow(

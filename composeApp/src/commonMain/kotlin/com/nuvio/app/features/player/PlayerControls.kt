@@ -85,6 +85,8 @@ internal fun PlayerControlsShell(
     onTogglePlayback: () -> Unit,
     onSeekBack: () -> Unit,
     onSeekForward: () -> Unit,
+    /** Skip increment shown on the center seek buttons; user-configurable. */
+    seekSeconds: Int = 10,
     onResizeModeClick: () -> Unit,
     onSpeedClick: () -> Unit,
     onSubtitleClick: () -> Unit,
@@ -171,6 +173,7 @@ internal fun PlayerControlsShell(
                 CenterControls(
                     snapshot = playbackSnapshot,
                     metrics = metrics,
+                    seekSeconds = seekSeconds,
                     onSeekBack = onSeekBack,
                     onSeekForward = onSeekForward,
                     onTogglePlayback = onTogglePlayback,
@@ -394,6 +397,7 @@ private fun PlayerHeaderIconButton(
 private fun CenterControls(
     snapshot: PlayerPlaybackSnapshot,
     metrics: PlayerLayoutMetrics,
+    seekSeconds: Int,
     onSeekBack: () -> Unit,
     onSeekForward: () -> Unit,
     onTogglePlayback: () -> Unit,
@@ -406,6 +410,7 @@ private fun CenterControls(
     ) {
         SideControlButton(
             icon = Icons.Rounded.Replay10,
+            label = "$seekSeconds",
             contentDescription = stringResource(Res.string.compose_player_seek_back_10),
             metrics = metrics,
             onClick = onSeekBack,
@@ -418,6 +423,7 @@ private fun CenterControls(
         )
         SideControlButton(
             icon = Icons.Rounded.Forward10,
+            label = "$seekSeconds",
             contentDescription = stringResource(Res.string.compose_player_seek_forward_10),
             metrics = metrics,
             onClick = onSeekForward,
@@ -428,6 +434,7 @@ private fun CenterControls(
 @Composable
 private fun SideControlButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
     contentDescription: String,
     metrics: PlayerLayoutMetrics,
     onClick: () -> Unit,
@@ -439,12 +446,20 @@ private fun SideControlButton(
             .padding(metrics.sideButtonPadding),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            tint = Color.White,
-            modifier = Modifier.size(metrics.playIconSize),
-        )
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = Color.White,
+                modifier = Modifier.size(metrics.playIconSize),
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
     }
 }
 

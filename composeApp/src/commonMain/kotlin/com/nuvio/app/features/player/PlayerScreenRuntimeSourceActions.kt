@@ -435,6 +435,18 @@ private fun PlayerScreenRuntime.resetEpisodePanelAndNextEpisodeState() {
     nextEpisodeAutoPlaySourceName = null
     nextEpisodeAutoPlayCountdown = null
     PlayerStreamsRepository.clearEpisodeStreams()
+    // Clear per-episode subtitle state immediately so next episode doesn't show stale subs
+    selectedAddonSubtitleId = null
+    selectedSubtitleIndex = -1
+    useCustomSubtitles = false
+    preferredSubtitleSelectionApplied = false
+    isUserExplicitSubtitleSelection = false
+    hasScannedTextTracksOnce = false
+    trackPreferenceRestoreApplied = false
+    autoFetchedAddonSubtitlesForKey = null
+    subtitleAutoSyncState = SubtitleAutoSyncUiState()
+    SubtitleRepository.clear()
+    playerController?.clearExternalSubtitle()
 }
 
 private fun PlayerScreenRuntime.resolveEpisodeResume(epVideoId: String, episode: MetaVideo): EpisodeResume {

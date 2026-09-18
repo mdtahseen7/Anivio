@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import com.nuvio.app.features.p2p.P2pLoadingStatus
 import com.nuvio.app.features.player.skip.NextEpisodeCard
 import com.nuvio.app.features.player.skip.NextEpisodeInfo
+import com.nuvio.app.features.player.skip.SeekForwardPillButton
 import com.nuvio.app.features.player.skip.SkipIntroButton
 import com.nuvio.app.features.player.skip.SkipInterval
 
@@ -51,6 +52,8 @@ internal fun BoxScope.PlayerPlaybackOverlays(
     controlsVisible: Boolean,
     onSkipInterval: (SkipInterval) -> Unit,
     onDismissSkipInterval: () -> Unit,
+    seekForwardSeconds: Int,
+    onSeekForward: () -> Unit,
     sliderEdgePadding: Dp,
     overlayBottomPadding: Dp,
     isSeries: Boolean,
@@ -139,6 +142,18 @@ internal fun BoxScope.PlayerPlaybackOverlays(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(start = sliderEdgePadding, bottom = overlayBottomPadding),
+        )
+    }
+
+    if (!playerControlsLocked) {
+        SeekForwardPillButton(
+            seconds = seekForwardSeconds,
+            visible = controlsVisible && initialLoadCompleted && !pausedOverlayVisible &&
+                showNextEpisodeCard.not() && errorMessage == null,
+            onClick = onSeekForward,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = sliderEdgePadding, bottom = overlayBottomPadding),
         )
     }
 

@@ -88,13 +88,37 @@ object AuthRepository {
             validatedRemoteUserId = userId
             true
         }.getOrElse { e ->
-            if (isInvalidRemoteSessionError(e)) {
+            if (!isInvalidRemoteSessionError(e)) {
+                log.w(e) { "Unable to validate stored Supabase session; keeping cached auth state" }
+                return true
+            }
+            // A 401 here usually means the access token expired and the auto-refresher lost the
+            // race with the first sync call — the refresh token is still fine. Wiping everything
+            // at this point destroyed the user's logins and local data for no reason, so attempt
+            // a refresh-and-retry first and only wipe when the refresh token itself is rejected.
+            val refreshed = runCatching { SupabaseProvider.client.auth.refreshCurrentSession() }
+                .onFailure { refreshError ->
+                    log.w(refreshError) { "Session refresh after auth rejection failed" }
+                }
+                .isSuccess
+            if (!refreshed) {
                 log.w(e) { "Stored Supabase session no longer belongs to an active account; clearing local auth" }
                 clearLocalSessionAfterRemoteInvalidation()
-                false
-            } else {
-                log.w(e) { "Unable to validate stored Supabase session; keeping cached auth state" }
+                return false
+            }
+            runCatching {
+                SupabaseProvider.client.auth.retrieveUserForCurrentSession(false)
+                validatedRemoteUserId = userId
                 true
+            }.getOrElse { retryError ->
+                if (isInvalidRemoteSessionError(retryError)) {
+                    log.w(retryError) { "Session rejected even after refresh; clearing local auth" }
+                    clearLocalSessionAfterRemoteInvalidation()
+                    false
+                } else {
+                    log.w(retryError) { "Session validation retry failed non-fatally; keeping cached auth state" }
+                    true
+                }
             }
         }
     }
@@ -199,6 +223,19 @@ object AuthRepository {
 
     suspend fun signOutIfSessionInvalid(error: Throwable, source: String): Boolean {
         if (!isInvalidRemoteSessionError(error)) return false
+
+        // Same protection as validateRemoteSession: an expired access token reaching a sync call
+        // before the auto-refresher produces a 401 even though the refresh token is still valid.
+        // Try to recover the session first; only wipe when recovery is impossible.
+        val refreshed = runCatching { SupabaseProvider.client.auth.refreshCurrentSession() }
+            .onFailure { refreshError ->
+                log.w(refreshError) { "$source: session refresh after auth rejection failed" }
+            }
+            .isSuccess
+        if (refreshed) {
+            log.i { "$source failed with an auth rejection but the session recovered via refresh; keeping local data" }
+            return false
+        }
 
         log.w(error) { "$source failed because the current Supabase account/session is no longer valid; clearing local auth" }
         clearLocalSessionAfterRemoteInvalidation()

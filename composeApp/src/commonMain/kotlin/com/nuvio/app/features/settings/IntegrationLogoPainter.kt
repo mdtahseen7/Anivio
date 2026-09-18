@@ -8,6 +8,7 @@ internal enum class IntegrationLogo {
     MdbList,
     IntroDb,
     Imdb,
+    Discord,
 }
 
 @Composable

@@ -44,6 +44,8 @@ fun handleAppUrl(url: String) {
 
     ensureTrackingProvidersRegistered()
     TrackingProviderRegistry.handleAuthCallback(normalizedUrl)
+    // Discord OAuth callback (nuvio://auth/discord) is not a TrackingProvider, handle directly
+    runCatching { com.nuvio.app.features.discord.DiscordAuth.handleAuthCallback(normalizedUrl) }
     AppDeepLinkRepository.handleUrl(normalizedUrl)
 }
 

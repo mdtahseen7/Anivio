@@ -264,8 +264,9 @@ private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long, 
                 args.onBack()
             },
             onTogglePlayback = { togglePlayback() },
-            onSeekBack = { seekBy(-10_000L) },
-            onSeekForward = { seekBy(10_000L) },
+            onSeekBack = { seekBy(-playerSettingsUiState.seekForwardSeconds * 1000L) },
+            onSeekForward = { seekBy(playerSettingsUiState.seekForwardSeconds * 1000L) },
+            seekSeconds = playerSettingsUiState.seekForwardSeconds,
             onResizeModeClick = { cycleResizeMode() },
             onSpeedClick = { cyclePlaybackSpeed() },
             onSubtitleClick = {
@@ -392,6 +393,11 @@ private fun BoxScope.RenderPlaybackOverlays(
             skipIntervalDismissed = true
         },
         onDismissSkipInterval = { skipIntervalDismissed = true },
+        seekForwardSeconds = playerSettingsUiState.seekForwardSeconds,
+        onSeekForward = {
+            seekBy(playerSettingsUiState.seekForwardSeconds * 1000L)
+            scheduleProgressSyncAfterSeek()
+        },
         sliderEdgePadding = sliderEdgePadding,
         overlayBottomPadding = overlayBottomPadding,
         isSeries = isSeries,
@@ -499,6 +505,7 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
         activeEpisodeTitle = activeEpisodeTitle,
         activeSourceUrl = activeSourceUrl,
         activeStreamTitle = activeStreamTitle,
+        activeSourceIdentityKey = activeSourceIdentityKey,
         onSourceFilterSelected = PlayerStreamsRepository::selectSourceFilter,
         onSourceStreamSelected = { stream -> switchToSource(stream) },
         onReloadSources = {

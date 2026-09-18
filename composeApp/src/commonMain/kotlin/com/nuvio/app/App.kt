@@ -10,7 +10,6 @@ import coil3.annotation.ExperimentalCoilApi
 import coil3.compose.setSingletonImageLoaderFactory
 import coil3.request.CachePolicy
 import coil3.request.crossfade
-import coil3.svg.SvgDecoder
 import com.nuvio.app.core.ui.NativeProfileSwitcherController
 import com.nuvio.app.core.ui.NuvioTheme
 import com.nuvio.app.core.ui.configurePlatformImageLoader
@@ -74,7 +73,6 @@ internal fun AppEnvironment(content: @Composable () -> Unit) {
             .diskCachePolicy(CachePolicy.ENABLED)
             .memoryCachePolicy(CachePolicy.ENABLED)
             .components {
-                add(SvgDecoder.Factory())
                 add(
                     coil3.network.ktor3.KtorNetworkFetcherFactory(
                         cacheStrategy = { coil3.network.cachecontrol.CacheControlCacheStrategy() },

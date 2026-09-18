@@ -53,6 +53,8 @@ internal expect object PlayerSettingsStorage {
     fun saveSubtitleUseForcedSubtitles(enabled: Boolean)
     fun loadSubtitleShowOnlyPreferredLanguages(): Boolean?
     fun saveSubtitleShowOnlyPreferredLanguages(enabled: Boolean)
+    fun loadSubtitleOverrideEmbeddedStyles(): Boolean?
+    fun saveSubtitleOverrideEmbeddedStyles(enabled: Boolean)
     fun loadStreamReuseLastLinkEnabled(): Boolean?
     fun saveStreamReuseLastLinkEnabled(enabled: Boolean)
     fun loadStreamReuseLastLinkCacheHours(): Int?
@@ -89,9 +91,15 @@ internal expect object PlayerSettingsStorage {
     fun saveAnimeSkipEnabled(enabled: Boolean)
     fun loadAnimeSkipClientId(): String?
     fun saveAnimeSkipClientId(clientId: String)
+    fun loadSeekForwardSeconds(): Int?
+    fun saveSeekForwardSeconds(seconds: Int)
 
     fun loadIntroDbApiKey(): String?
     fun saveIntroDbApiKey(apiKey: String)
+
+    /** TheIntroDB (theintrodb.org) account API key — gates both fetching and submitting. */
+    fun loadTheIntroDbApiKey(): String?
+    fun saveTheIntroDbApiKey(apiKey: String)
     fun loadIntroSubmitEnabled(): Boolean?
     fun saveIntroSubmitEnabled(enabled: Boolean)
     fun loadStreamAutoPlayNextEpisodeEnabled(): Boolean?

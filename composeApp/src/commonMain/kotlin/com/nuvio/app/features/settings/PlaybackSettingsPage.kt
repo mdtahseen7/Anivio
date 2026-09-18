@@ -1021,6 +1021,25 @@ private fun PlaybackSettingsSection(
                     onCheckedChange = PlayerSettingsRepository::setSkipIntroEnabled,
                 )
                 SettingsGroupDivider(isTablet = isTablet)
+                var showTheIntroDbApiKeyDialog by remember { mutableStateOf(false) }
+                val theIntroDbNotSetLabel = stringResource(Res.string.settings_playback_not_set)
+                SettingsNavigationRow(
+                    title = stringResource(Res.string.settings_playback_theintrodb_api_key),
+                    description = autoPlayPlayerSettings.theIntroDbApiKey.ifBlank { theIntroDbNotSetLabel },
+                    isTablet = isTablet,
+                    onClick = { showTheIntroDbApiKeyDialog = true },
+                )
+                if (showTheIntroDbApiKeyDialog) {
+                    TheIntroDbApiKeyDialog(
+                        initialValue = autoPlayPlayerSettings.theIntroDbApiKey,
+                        onSave = {
+                            PlayerSettingsRepository.setTheIntroDbApiKey(it)
+                            showTheIntroDbApiKeyDialog = false
+                        },
+                        onDismiss = { showTheIntroDbApiKeyDialog = false },
+                    )
+                }
+                SettingsGroupDivider(isTablet = isTablet)
                 SettingsSwitchRow(
                     title = stringResource(Res.string.settings_playback_anime_skip),
                     description = stringResource(Res.string.settings_playback_anime_skip_description),
@@ -1077,6 +1096,32 @@ private fun PlaybackSettingsSection(
                             onDismiss = { showIntroDbApiKeyDialog = false },
                         )
                     }
+                }
+                SettingsGroupDivider(isTablet = isTablet)
+                var showSeekForwardDialog by remember { mutableStateOf(false) }
+                SettingsNavigationRow(
+                    title = stringResource(Res.string.settings_playback_seek_forward_seconds),
+                    description = stringResource(Res.string.settings_playback_seek_forward_seconds_value),
+                    isTablet = isTablet,
+                    trailingContent = {
+                        Text(
+                            text = "+${autoPlayPlayerSettings.seekForwardSeconds}s",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    },
+                    onClick = { showSeekForwardDialog = true },
+                )
+                if (showSeekForwardDialog) {
+                    SeekForwardSecondsDialog(
+                        selectedSeconds = autoPlayPlayerSettings.seekForwardSeconds,
+                        onSecondsSelected = { seconds ->
+                            PlayerSettingsRepository.setSeekForwardSeconds(seconds)
+                            showSeekForwardDialog = false
+                        },
+                        onDismiss = { showSeekForwardDialog = false },
+                    )
                 }
             }
         }
@@ -2446,6 +2491,93 @@ private fun HoldToSpeedValueDialog(
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
+private fun SeekForwardSecondsDialog(
+    selectedSeconds: Int,
+    onSecondsSelected: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val options = listOf(5, 10, 15, 30, 60, 85)
+
+    BasicAlertDialog(
+        onDismissRequest = onDismiss,
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = stringResource(Res.string.settings_playback_seek_forward_seconds),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                )
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    options.forEach { seconds ->
+                        val isSelected = seconds == selectedSeconds
+                        val containerColor = if (isSelected) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                        }
+
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSecondsSelected(seconds) },
+                            shape = RoundedCornerShape(12.dp),
+                            color = containerColor,
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = "+$seconds s",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Box(
+                                    modifier = Modifier.size(24.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    if (isSelected) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = stringResource(Res.string.settings_playback_dialog_close),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun LibassRenderTypeDialog(
     selectedRenderType: String,
     onRenderTypeSelected: (String) -> Unit,
@@ -3335,6 +3467,63 @@ private fun IntroDbApiKeyDialog(
                         } else {
                             Text(stringResource(Res.string.action_save)) 
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun TheIntroDbApiKeyDialog(
+    initialValue: String,
+    onSave: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var value by remember { mutableStateOf(initialValue) }
+
+    BasicAlertDialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = stringResource(Res.string.settings_playback_theintrodb_api_key),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = stringResource(Res.string.settings_playback_theintrodb_api_key_description),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                SettingsSecretTextField(
+                    value = value,
+                    onValueChange = { value = it },
+                    label = stringResource(Res.string.settings_playback_theintrodb_api_key),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text(stringResource(Res.string.action_cancel))
+                    }
+                    TextButton(
+                        onClick = {
+                            onSave(value.trim())
+                            onDismiss()
+                        },
+                    ) {
+                        Text(stringResource(Res.string.action_save))
                     }
                 }
             }

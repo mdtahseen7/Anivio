@@ -183,6 +183,13 @@ fun SubtitleStylePanel(
             )
         }
 
+        SubtitleStyleSection(title = "Override embedded styles") {
+            SubtitleToggleChip(
+                enabled = style.overrideEmbeddedStyles,
+                onClick = { onStyleChanged(style.copy(overrideEmbeddedStyles = !style.overrideEmbeddedStyles)) },
+            )
+        }
+
         SubtitleAutoSyncSection(
             selectedAddonSubtitle = selectedAddonSubtitle,
             state = subtitleAutoSyncState,

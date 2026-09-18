@@ -63,6 +63,27 @@ data class SubmitIntroRequest(
     @SerialName("segment_type") val segmentType: String,
 )
 
+// --- TheIntroDB (theintrodb.org) v3 API models ---
+
+@Serializable
+data class TheIntroDbMediaResponse(
+    @SerialName("tmdb_id") val tmdbId: Long? = null,
+    @SerialName("type") val type: String? = null,
+    @SerialName("season") val season: Int? = null,
+    @SerialName("episode") val episode: Int? = null,
+    @SerialName("intro") val intro: List<TheIntroDbSpan> = emptyList(),
+    @SerialName("recap") val recap: List<TheIntroDbSpan> = emptyList(),
+    @SerialName("credits") val credits: List<TheIntroDbSpan> = emptyList(),
+    @SerialName("preview") val preview: List<TheIntroDbSpan> = emptyList(),
+)
+
+/** Spans use milliseconds; either bound can be null ("from the start" / "to the end"). */
+@Serializable
+data class TheIntroDbSpan(
+    @SerialName("start_ms") val startMs: Long? = null,
+    @SerialName("end_ms") val endMs: Long? = null,
+)
+
 // --- AniSkip API response models ---
 
 @Serializable

@@ -8,6 +8,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.layout.width
 import com.nuvio.app.features.anilist.AniListAuthRepository
+import com.nuvio.app.features.anilist.ANILIST_ID_PREFIX
+import com.nuvio.app.features.schedule.ScheduleScreen
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -38,6 +40,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
+import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.GridView
@@ -118,6 +121,8 @@ fun LibraryScreen(
      * the local library's, so they take home's poster-actions callback instead of the library one.
      */
     onAniListPosterLongClick: ((MetaPreview) -> Unit)? = null,
+    /** Opens the AniList detail page for a schedule entry (id already carries the prefix). */
+    onAniListPosterClick: ((MetaPreview) -> Unit)? = null,
     onSectionViewAllClick: ((LibrarySection, LibrarySortOption) -> Unit)? = null,
     onCloudFilePlay: ((CloudLibraryItem, CloudLibraryFile) -> Unit)? = null,
     onConnectCloudClick: (() -> Unit)? = null,
@@ -148,6 +153,7 @@ fun LibraryScreen(
     val networkStatusUiState by NetworkStatusRepository.uiState.collectAsStateWithLifecycle()
     var observedOfflineState by remember { mutableStateOf(false) }
     var sourceModeName by rememberSaveable { mutableStateOf(LibraryViewMode.Saved.name) }
+    var showSchedule by rememberSaveable { mutableStateOf(false) }
     val sourceMode = remember(sourceModeName) {
         runCatching { LibraryViewMode.valueOf(sourceModeName) }.getOrDefault(LibraryViewMode.Saved)
     }
@@ -265,6 +271,24 @@ fun LibraryScreen(
         emptyList()
     }
 
+    if (showSchedule) {
+        ScheduleScreen(
+            onBack = { showSchedule = false },
+            onEntryClick = { entry ->
+                onAniListPosterClick?.invoke(
+                    MetaPreview(
+                        id = "$ANILIST_ID_PREFIX${entry.mediaId}",
+                        type = "series",
+                        name = entry.title,
+                        poster = entry.imageUrl,
+                    ),
+                )
+            },
+            modifier = modifier.fillMaxSize(),
+        )
+        return
+    }
+
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val gridColumns = remember(maxWidth) { posterGridColumnCountForWidth(maxWidth) }
 
@@ -300,6 +324,13 @@ fun LibraryScreen(
                             modifier = Modifier.padding(horizontal = 16.dp),
                             backgroundColor = Color.Black,
                             actions = {
+                                IconButton(onClick = { showSchedule = true }) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.CalendarMonth,
+                                        contentDescription = stringResource(Res.string.schedule_title),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                                 aniListAuth.avatarUrl?.takeIf { it.isNotBlank() }?.let { avatar ->
                                     AsyncImage(
                                         model = avatar,

@@ -154,3 +154,45 @@ private fun skipLabel(type: String?): String =
         "recap" -> stringResource(Res.string.player_skip_recap)
         else -> stringResource(Res.string.player_skip)
     }
+
+/**
+ * Always-visible floating "+Ns" seek pill, bottom-right. It shows while controls are hidden so
+ * users can jump past a segment without revealing the full control sheet; it hides while the
+ * sheet is up because the seek buttons there do the same job. Hidden while controls are locked.
+ */
+@Composable
+fun SeekForwardPillButton(
+    seconds: Int,
+    visible: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(tween(300)) + scaleIn(tween(300), initialScale = 0.8f),
+        exit = fadeOut(tween(200)) + scaleOut(tween(200), targetScale = 0.8f),
+        modifier = modifier,
+    ) {
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color(0xFF1E1E1E).copy(alpha = 0.85f))
+                .clickable { onClick() }
+                .padding(horizontal = 18.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Default.SkipNext,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(20.dp),
+            )
+            Text(
+                text = "+${seconds}s",
+                color = Color.White,
+                fontSize = 14.sp,
+                modifier = Modifier.padding(start = 8.dp),
+            )
+        }
+    }
+}

@@ -102,6 +102,8 @@ object AniListClient {
      * once rather than per-caller.
      */
     private val cooldownUntilMsRef = atomic(0L)
+    private val _rateLimitUntilMs = kotlinx.coroutines.flow.MutableStateFlow(0L)
+    val rateLimitUntilMs: kotlinx.coroutines.flow.StateFlow<Long> = _rateLimitUntilMs
 
     /** Runs [query] and returns the GraphQL `data` object. Throws when AniList returns no data. */
     suspend fun query(
@@ -380,7 +382,10 @@ object AniListClient {
         while (true) {
             val current = cooldownUntilMsRef.value
             if (current >= until) return
-            if (cooldownUntilMsRef.compareAndSet(current, until)) return
+            if (cooldownUntilMsRef.compareAndSet(current, until)) {
+                _rateLimitUntilMs.value = until
+                return
+            }
         }
     }
 

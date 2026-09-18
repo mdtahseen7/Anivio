@@ -52,6 +52,7 @@ fun PlayerSourcesPanel(
     currentEpisodeTitle: String?,
     currentStreamUrl: String?,
     currentStreamName: String?,
+    currentStreamIdentityKey: String? = null,
     onFilterSelected: (String?) -> Unit,
     onStreamSelected: (StreamItem) -> Unit,
     onReload: () -> Unit,
@@ -140,6 +141,7 @@ fun PlayerSourcesPanel(
                 modifier = Modifier.weight(1f),
                 currentStreamUrl = currentStreamUrl,
                 currentStreamName = currentStreamName,
+                currentStreamIdentityKey = currentStreamIdentityKey,
                 currentLabel = stringResource(Res.string.compose_player_playing),
             )
         }
@@ -163,8 +165,14 @@ internal fun List<StreamItem>.stablePlayerKeys(): List<String> {
 internal fun StreamItem.isCurrentPlayerStream(
     currentUrl: String?,
     currentName: String?,
+    currentIdentityKey: String? = null,
 ): Boolean {
-    if (!currentUrl.isNullOrBlank() && playableDirectUrl == currentUrl) return true
-    return !currentName.isNullOrBlank() && streamLabel.equals(currentName, ignoreCase = true) &&
-        playableDirectUrl == currentUrl
+    val identityKey = playerSourceIdentityKey()
+    if (!currentIdentityKey.isNullOrBlank() && !identityKey.isNullOrBlank() && identityKey == currentIdentityKey) return true
+    if (!currentUrl.isNullOrBlank() && playableDirectUrl == currentUrl) {
+        // Direct URL match is only definitive when we don't have identity keys (fallback).
+        // If identity keys exist for both, require identity match above.
+        if (currentIdentityKey.isNullOrBlank() || identityKey.isNullOrBlank()) return true
+    }
+    return false
 }
