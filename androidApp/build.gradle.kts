@@ -46,6 +46,8 @@ val requestedTaskNames = gradle.startParameter.taskNames.map { it.substringAfter
 val buildsReleaseApks = requestedTaskNames.any {
     it.startsWith("assemble", ignoreCase = true) && it.endsWith("Release", ignoreCase = true)
 }
+// CI override: -PanivioAbi=<arm64-v8a|armeabi-v7a|x86_64|all> picks the ABI split for the build.
+val requestedAbi = (findProperty("anivioAbi") as? String)?.takeIf { it.isNotBlank() }
 
 android {
     namespace = "com.nuvio.android"
@@ -108,12 +110,16 @@ android {
 
     splits {
         abi {
-            isEnable = buildsReleaseApks
+            isEnable = when {
+                requestedAbi == "all" -> false
+                requestedAbi != null -> true
+                else -> buildsReleaseApks
+            }
             reset()
             // arm64-v8a only. Every 64-bit Android device since 2015 is arm64, and dropping the
             // other three cuts the release build from four APKs to one — no more picking the right
             // file out of the output directory. Add an ABI back here if a target device needs it.
-            include("arm64-v8a")
+            if (requestedAbi != null && requestedAbi != "all") include(requestedAbi) else include("arm64-v8a")
             isUniversalApk = false
         }
     }
