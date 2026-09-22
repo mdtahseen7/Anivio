@@ -44,6 +44,8 @@ jobs:
         run: |
           curl -sSL -o /tmp/platform-37.zip https://dl.google.com/android/repository/platform-37.0_r01.zip
           unzip -q -o /tmp/platform-37.zip -d "$ANDROID_SDK_ROOT/platforms"
+          # zip's top-level dir is android-37.0; Gradle expects android-37
+          mv "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
           test -f "$ANDROID_SDK_ROOT/platforms/android-37/android.jar"
 
       - name: Build debug APK (${{ inputs.arch }})
