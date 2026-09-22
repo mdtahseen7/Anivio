@@ -38,7 +38,13 @@ jobs:
         with:
           # Override the action's stale default ("tools platform-tools"):
           # the legacy "tools" package no longer exists and makes sdkmanager fail.
-          packages: platform-tools build-tools;37.0.0 platforms;android-37
+          packages: platform-tools build-tools;37.0.0
+
+      - name: Install android-37 platform (missing from sdkmanager repo index)
+        run: |
+          curl -sSL -o /tmp/platform-37.zip https://dl.google.com/android/repository/platform-37.0_r01.zip
+          unzip -q -o /tmp/platform-37.zip -d "$ANDROID_SDK_ROOT/platforms"
+          test -f "$ANDROID_SDK_ROOT/platforms/android-37/android.jar"
 
       - name: Build debug APK (${{ inputs.arch }})
         run: ./gradlew :androidApp:assembleFullDebug "-PanivioAbi=${{ inputs.arch }}" --console=plain
