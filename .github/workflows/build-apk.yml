@@ -64,11 +64,46 @@ jobs:
           mv "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
           test -f "$ANDROID_SDK_ROOT/platforms/android-37/android.jar"
 
-      - name: Create local.properties (CI stub)
+      - name: Create local.properties from secrets
         run: |
-          # generateRuntimeConfigs validates that this file exists; values fall
-          # back to env vars (blank in CI), which the app handles gracefully.
-          touch local.properties
+          # generateRuntimeConfigs reads every key below from local.properties.
+          # Secrets that don't exist yet expand to blank, which the app handles
+          # gracefully (that feature simply stays disabled). Add values under
+          # repo Settings -> Secrets and variables -> Actions.
+          cat > local.properties <<'EOF'
+          ANIVIO_SUPABASE_URL=${{ secrets.ANIVIO_SUPABASE_URL }}
+          ANIVIO_SUPABASE_ANON_KEY=${{ secrets.ANIVIO_SUPABASE_ANON_KEY }}
+          ANIVIO_SUPABASE_FALLBACK_URL=${{ secrets.ANIVIO_SUPABASE_FALLBACK_URL }}
+          NUVIO_SUPABASE_URL=${{ secrets.NUVIO_SUPABASE_URL }}
+          NUVIO_SUPABASE_ANON_KEY=${{ secrets.NUVIO_SUPABASE_ANON_KEY }}
+          NUVIO_SUPABASE_FALLBACK_URL=${{ secrets.NUVIO_SUPABASE_FALLBACK_URL }}
+          SENTRY_DSN=${{ secrets.SENTRY_DSN }}
+          FANART_API_KEY=${{ secrets.FANART_API_KEY }}
+          TVDB_API_KEY=${{ secrets.TVDB_API_KEY }}
+          DISCORD_APP_ID=${{ secrets.DISCORD_APP_ID }}
+          MAL_CLIENT_ID=${{ secrets.MAL_CLIENT_ID }}
+          MAL_REDIRECT_URI=${{ secrets.MAL_REDIRECT_URI }}
+          ANIVIO_UPDATE_GITHUB_OWNER=${{ secrets.ANIVIO_UPDATE_GITHUB_OWNER }}
+          ANIVIO_UPDATE_GITHUB_REPO=${{ secrets.ANIVIO_UPDATE_GITHUB_REPO }}
+          ANIVIO_UPDATE_CHANNEL=${{ secrets.ANIVIO_UPDATE_CHANNEL }}
+          ANIVIO_UPDATE_USER_AGENT=${{ secrets.ANIVIO_UPDATE_USER_AGENT }}
+          ANILIST_CLIENT_ID=${{ secrets.ANILIST_CLIENT_ID }}
+          ANILIST_REDIRECT_URI=${{ secrets.ANILIST_REDIRECT_URI }}
+          TRAKT_CLIENT_ID=${{ secrets.TRAKT_CLIENT_ID }}
+          TRAKT_CLIENT_SECRET=${{ secrets.TRAKT_CLIENT_SECRET }}
+          TRAKT_REDIRECT_URI=${{ secrets.TRAKT_REDIRECT_URI }}
+          SIMKL_CLIENT_ID=${{ secrets.SIMKL_CLIENT_ID }}
+          SIMKL_REDIRECT_URI=${{ secrets.SIMKL_REDIRECT_URI }}
+          SIMKL_APP_NAME=${{ secrets.SIMKL_APP_NAME }}
+          PREMIUMIZE_CLIENT_ID=${{ secrets.PREMIUMIZE_CLIENT_ID }}
+          INTRODB_API_URL=${{ secrets.INTRODB_API_URL }}
+          IMDB_RATINGS_API_BASE_URL=${{ secrets.IMDB_RATINGS_API_BASE_URL }}
+          IMDB_TAPFRAME_API_BASE_URL=${{ secrets.IMDB_TAPFRAME_API_BASE_URL }}
+          CONTRIBUTIONS_URL=${{ secrets.CONTRIBUTIONS_URL }}
+          SUPPORTERS_WALL_URL=${{ secrets.SUPPORTERS_WALL_URL }}
+          DONATIONS_BASE_URL=${{ secrets.DONATIONS_BASE_URL }}
+          DONATIONS_DONATE_URL=${{ secrets.DONATIONS_DONATE_URL }}
+          EOF
 
       - name: Build APK (${{ inputs.arch }}, ${{ inputs.build_type }})
         run: |
