@@ -48,6 +48,9 @@ val buildsReleaseApks = requestedTaskNames.any {
 }
 // CI override: -PanivioAbi=<arm64-v8a|armeabi-v7a|x86_64|all> picks the ABI split for the build.
 val requestedAbi = (findProperty("anivioAbi") as? String)?.takeIf { it.isNotBlank() }
+// CI override: -PanivioCiBuild=true signs release APKs with the debug key (no
+// keystore secrets in CI) and skips FULL native debug symbols (no NDK on the runner).
+val isCiBuild = (findProperty("anivioCiBuild") as? String).toBoolean()
 
 android {
     namespace = "com.nuvio.android"
@@ -132,9 +135,10 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "../composeApp/proguard-rules.pro",
             )
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = if (isCiBuild) signingConfigs.getByName("debug")
+                            else signingConfigs.getByName("release")
             ndk {
-                debugSymbolLevel = "FULL"
+                debugSymbolLevel = if (isCiBuild) "NONE" else "FULL"
             }
         }
     }

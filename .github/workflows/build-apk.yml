@@ -17,10 +17,20 @@ on:
           - armeabi-v7a
           - x86_64
           - all
+      build_type:
+        description: 'Build type (release = minified + smaller, like a laptop build)'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - release
+          - debug
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # needed to publish the APK as a GitHub Release
     steps:
       - name: Check out ${{ inputs.ref }}
         uses: actions/checkout@v4
@@ -32,6 +42,12 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+
+      - name: Set up Gradle caching
+        # Caches Gradle dependencies + build outputs between runs so CI builds
+        # stop starting from zero every time (the main reason CI was ~35 min
+        # vs ~4 min on a warm laptop).
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -54,12 +70,23 @@ jobs:
           # back to env vars (blank in CI), which the app handles gracefully.
           touch local.properties
 
-      - name: Build debug APK (${{ inputs.arch }})
-        run: ./gradlew :androidApp:assembleFullDebug "-PanivioAbi=${{ inputs.arch }}" --console=plain
+      - name: Build APK (${{ inputs.arch }}, ${{ inputs.build_type }})
+        run: |
+          TYPE="${{ inputs.build_type }}"
+          TASK="assembleFull$(tr '[:lower:]' '[:upper:]' <<< "${TYPE:0:1}")${TYPE:1}"
+          ./gradlew ":androidApp:$TASK" "-PanivioAbi=${{ inputs.arch }}" -PanivioCiBuild=true --console=plain
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: anivio-${{ inputs.arch }}-${{ github.sha }}
-          path: androidApp/build/outputs/apk/full/debug/*.apk
-          if-no-files-found: error
+      - name: Publish raw APK as GitHub Release (no zip)
+        # GitHub Action artifacts are always zipped; attaching the APK to a
+        # release gives a direct raw .apk download link instead.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          APK_DIR="androidApp/build/outputs/apk/full/${{ inputs.build_type }}"
+          ls "$APK_DIR"/*.apk
+          TAG="ci-${{ inputs.arch }}-${{ github.run_id }}"
+          gh release create "$TAG" \
+            --prerelease \
+            --title "CI ${{ inputs.build_type }} build · ${{ inputs.arch }} · ${GITHUB_SHA:0:7}" \
+            --notes "Automated CI build of \`${{ inputs.ref }}\` (${GITHUB_SHA}). Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            "$APK_DIR"/*.apk
