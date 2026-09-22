@@ -48,6 +48,12 @@ jobs:
           mv "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
           test -f "$ANDROID_SDK_ROOT/platforms/android-37/android.jar"
 
+      - name: Create local.properties (CI stub)
+        run: |
+          # generateRuntimeConfigs validates that this file exists; values fall
+          # back to env vars (blank in CI), which the app handles gracefully.
+          touch local.properties
+
       - name: Build debug APK (${{ inputs.arch }})
         run: ./gradlew :androidApp:assembleFullDebug "-PanivioAbi=${{ inputs.arch }}" --console=plain
 
