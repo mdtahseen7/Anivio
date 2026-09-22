@@ -35,6 +35,10 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # Override the action's stale default ("tools platform-tools"):
+          # the legacy "tools" package no longer exists and makes sdkmanager fail.
+          packages: platform-tools "build-tools;37.0.0" "platforms;android-37"
 
       - name: Build debug APK (${{ inputs.arch }})
         run: ./gradlew :androidApp:assembleFullDebug "-PanivioAbi=${{ inputs.arch }}" --console=plain
