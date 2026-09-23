@@ -46,6 +46,15 @@ val requestedTaskNames = gradle.startParameter.taskNames.map { it.substringAfter
 val buildsReleaseApks = requestedTaskNames.any {
     it.startsWith("assemble", ignoreCase = true) && it.endsWith("Release", ignoreCase = true)
 }
+// CI override: -PanivioAbi=<arm64-v8a|armeabi-v7a|x86_64|all> picks the ABI split for the build.
+val requestedAbi = (findProperty("anivioAbi") as? String)?.takeIf { it.isNotBlank() }
+// CI override: -PanivioCiBuild=true skips FULL native debug symbols (no NDK on the
+// runner). Release APKs use the release keystore when the NUVIO_RELEASE_* keys are
+// present in local.properties (wired from secrets in CI); otherwise CI signs with
+// the debug key.
+val isCiBuild = (findProperty("anivioCiBuild") as? String).toBoolean()
+val hasReleaseKeystore = releaseKeystore != null && releaseStorePassword != null &&
+        releaseKeyAlias != null && releaseKeyPassword != null
 
 android {
     namespace = "com.nuvio.android"
@@ -108,12 +117,16 @@ android {
 
     splits {
         abi {
-            isEnable = buildsReleaseApks
+            isEnable = when {
+                requestedAbi == "all" -> false
+                requestedAbi != null -> true
+                else -> buildsReleaseApks
+            }
             reset()
             // arm64-v8a only. Every 64-bit Android device since 2015 is arm64, and dropping the
             // other three cuts the release build from four APKs to one — no more picking the right
             // file out of the output directory. Add an ABI back here if a target device needs it.
-            include("arm64-v8a")
+            if (requestedAbi != null && requestedAbi != "all") include(requestedAbi) else include("arm64-v8a")
             isUniversalApk = false
         }
     }
@@ -126,9 +139,10 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "../composeApp/proguard-rules.pro",
             )
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = if (isCiBuild && !hasReleaseKeystore) signingConfigs.getByName("debug")
+                            else signingConfigs.getByName("release")
             ndk {
-                debugSymbolLevel = "FULL"
+                debugSymbolLevel = if (isCiBuild) "NONE" else "FULL"
             }
         }
     }

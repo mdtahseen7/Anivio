@@ -1,0 +1,139 @@
+name: Build APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch, tag, or full commit SHA to build'
+        required: true
+        default: 'cmp-rewrite'
+      arch:
+        description: 'CPU architecture for native libraries'
+        required: true
+        default: 'arm64-v8a'
+        type: choice
+        options:
+          - arm64-v8a
+          - armeabi-v7a
+          - x86_64
+          - all
+      build_type:
+        description: 'Build type (release = minified + smaller, like a laptop build)'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - release
+          - debug
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # needed to publish the APK as a GitHub Release
+    steps:
+      - name: Check out ${{ inputs.ref }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle caching
+        # Caches Gradle dependencies + build outputs between runs so CI builds
+        # stop starting from zero every time (the main reason CI was ~35 min
+        # vs ~4 min on a warm laptop).
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          # Override the action's stale default ("tools platform-tools"):
+          # the legacy "tools" package no longer exists and makes sdkmanager fail.
+          packages: platform-tools build-tools;37.0.0
+
+      - name: Install android-37 platform (missing from sdkmanager repo index)
+        run: |
+          curl -sSL -o /tmp/platform-37.zip https://dl.google.com/android/repository/platform-37.0_r01.zip
+          unzip -q -o /tmp/platform-37.zip -d "$ANDROID_SDK_ROOT/platforms"
+          # zip's top-level dir is android-37.0; Gradle expects android-37
+          mv "$ANDROID_SDK_ROOT/platforms/android-37.0" "$ANDROID_SDK_ROOT/platforms/android-37"
+          test -f "$ANDROID_SDK_ROOT/platforms/android-37/android.jar"
+
+      - name: Create local.properties from secrets
+        run: |
+          # generateRuntimeConfigs reads every key below from local.properties.
+          # Secrets that don't exist yet expand to blank, which the app handles
+          # gracefully (that feature simply stays disabled). Add values under
+          # repo Settings -> Secrets and variables -> Actions.
+          cat > local.properties <<'EOF'
+          ANIVIO_SUPABASE_URL=${{ secrets.ANIVIO_SUPABASE_URL }}
+          ANIVIO_SUPABASE_ANON_KEY=${{ secrets.ANIVIO_SUPABASE_ANON_KEY }}
+          ANIVIO_SUPABASE_FALLBACK_URL=${{ secrets.ANIVIO_SUPABASE_FALLBACK_URL }}
+          NUVIO_SUPABASE_URL=${{ secrets.NUVIO_SUPABASE_URL }}
+          NUVIO_SUPABASE_ANON_KEY=${{ secrets.NUVIO_SUPABASE_ANON_KEY }}
+          NUVIO_SUPABASE_FALLBACK_URL=${{ secrets.NUVIO_SUPABASE_FALLBACK_URL }}
+          SENTRY_DSN=${{ secrets.SENTRY_DSN }}
+          FANART_API_KEY=${{ secrets.FANART_API_KEY }}
+          TVDB_API_KEY=${{ secrets.TVDB_API_KEY }}
+          DISCORD_APP_ID=${{ secrets.DISCORD_APP_ID }}
+          MAL_CLIENT_ID=${{ secrets.MAL_CLIENT_ID }}
+          MAL_REDIRECT_URI=${{ secrets.MAL_REDIRECT_URI }}
+          ANIVIO_UPDATE_GITHUB_OWNER=mdtahseen7
+          ANIVIO_UPDATE_GITHUB_REPO=Anivio
+          ANIVIO_UPDATE_CHANNEL=
+          ANIVIO_UPDATE_USER_AGENT=
+          ANILIST_CLIENT_ID=${{ secrets.ANILIST_CLIENT_ID }}
+          ANILIST_REDIRECT_URI=${{ secrets.ANILIST_REDIRECT_URI }}
+          TRAKT_CLIENT_ID=${{ secrets.TRAKT_CLIENT_ID }}
+          TRAKT_CLIENT_SECRET=${{ secrets.TRAKT_CLIENT_SECRET }}
+          TRAKT_REDIRECT_URI=${{ secrets.TRAKT_REDIRECT_URI }}
+          SIMKL_CLIENT_ID=${{ secrets.SIMKL_CLIENT_ID }}
+          SIMKL_REDIRECT_URI=${{ secrets.SIMKL_REDIRECT_URI }}
+          SIMKL_APP_NAME=${{ secrets.SIMKL_APP_NAME }}
+          PREMIUMIZE_CLIENT_ID=${{ secrets.PREMIUMIZE_CLIENT_ID }}
+          INTRODB_API_URL=${{ secrets.INTRODB_API_URL }}
+          IMDB_RATINGS_API_BASE_URL=${{ secrets.IMDB_RATINGS_API_BASE_URL }}
+          IMDB_TAPFRAME_API_BASE_URL=${{ secrets.IMDB_TAPFRAME_API_BASE_URL }}
+          CONTRIBUTIONS_URL=${{ secrets.CONTRIBUTIONS_URL }}
+          SUPPORTERS_WALL_URL=${{ secrets.SUPPORTERS_WALL_URL }}
+          DONATIONS_BASE_URL=${{ secrets.DONATIONS_BASE_URL }}
+          DONATIONS_DONATE_URL=${{ secrets.DONATIONS_DONATE_URL }}
+          EOF
+          # CI release signing: decode the keystore (if the secret exists) and
+          # point the NUVIO_RELEASE_* keys at it. Without it, the build falls
+          # back to the debug key (see -PanivioCiBuild in androidApp).
+          if [ -n "${{ secrets.NUVIO_RELEASE_KEYSTORE_BASE64 }}" ]; then
+            echo '${{ secrets.NUVIO_RELEASE_KEYSTORE_BASE64 }}' | base64 -d > ci-release.p12
+            cat >> local.properties <<'EOF'
+          NUVIO_RELEASE_STORE_FILE=ci-release.p12
+          NUVIO_RELEASE_STORE_PASSWORD=${{ secrets.NUVIO_RELEASE_STORE_PASSWORD }}
+          NUVIO_RELEASE_KEY_ALIAS=${{ secrets.NUVIO_RELEASE_KEY_ALIAS }}
+          NUVIO_RELEASE_KEY_PASSWORD=${{ secrets.NUVIO_RELEASE_KEY_PASSWORD }}
+          EOF
+          fi
+
+      - name: Build APK (${{ inputs.arch }}, ${{ inputs.build_type }})
+        run: |
+          TYPE="${{ inputs.build_type }}"
+          TASK="assembleFull$(tr '[:lower:]' '[:upper:]' <<< "${TYPE:0:1}")${TYPE:1}"
+          ./gradlew ":androidApp:$TASK" "-PanivioAbi=${{ inputs.arch }}" -PanivioCiBuild=true --console=plain
+
+      - name: Publish raw APK as GitHub Release (no zip)
+        # GitHub Action artifacts are always zipped; attaching the APK to a
+        # release gives a direct raw .apk download link instead.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          APK_DIR="androidApp/build/outputs/apk/full/${{ inputs.build_type }}"
+          ls "$APK_DIR"/*.apk
+          TAG="ci-${{ inputs.arch }}-${{ github.run_id }}"
+          gh release create "$TAG" \
+            --prerelease \
+            --title "CI ${{ inputs.build_type }} build · ${{ inputs.arch }} · ${GITHUB_SHA:0:7}" \
+            --notes "Automated CI build of \`${{ inputs.ref }}\` (${GITHUB_SHA}). Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            "$APK_DIR"/*.apk
