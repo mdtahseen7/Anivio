@@ -108,9 +108,9 @@ jobs:
           # point the NUVIO_RELEASE_* keys at it. Without it, the build falls
           # back to the debug key (see -PanivioCiBuild in androidApp).
           if [ -n "${{ secrets.NUVIO_RELEASE_KEYSTORE_BASE64 }}" ]; then
-            echo '${{ secrets.NUVIO_RELEASE_KEYSTORE_BASE64 }}' | base64 -d > ci-release.jks
+            echo '${{ secrets.NUVIO_RELEASE_KEYSTORE_BASE64 }}' | base64 -d > ci-release.p12
             cat >> local.properties <<'EOF'
-          NUVIO_RELEASE_STORE_FILE=ci-release.jks
+          NUVIO_RELEASE_STORE_FILE=ci-release.p12
           NUVIO_RELEASE_STORE_PASSWORD=${{ secrets.NUVIO_RELEASE_STORE_PASSWORD }}
           NUVIO_RELEASE_KEY_ALIAS=${{ secrets.NUVIO_RELEASE_KEY_ALIAS }}
           NUVIO_RELEASE_KEY_PASSWORD=${{ secrets.NUVIO_RELEASE_KEY_PASSWORD }}
