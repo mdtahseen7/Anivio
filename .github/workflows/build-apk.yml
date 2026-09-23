@@ -83,10 +83,10 @@ jobs:
           DISCORD_APP_ID=${{ secrets.DISCORD_APP_ID }}
           MAL_CLIENT_ID=${{ secrets.MAL_CLIENT_ID }}
           MAL_REDIRECT_URI=${{ secrets.MAL_REDIRECT_URI }}
-          ANIVIO_UPDATE_GITHUB_OWNER=${{ secrets.ANIVIO_UPDATE_GITHUB_OWNER }}
-          ANIVIO_UPDATE_GITHUB_REPO=${{ secrets.ANIVIO_UPDATE_GITHUB_REPO }}
-          ANIVIO_UPDATE_CHANNEL=${{ secrets.ANIVIO_UPDATE_CHANNEL }}
-          ANIVIO_UPDATE_USER_AGENT=${{ secrets.ANIVIO_UPDATE_USER_AGENT }}
+          ANIVIO_UPDATE_GITHUB_OWNER=mdtahseen7
+          ANIVIO_UPDATE_GITHUB_REPO=Anivio
+          ANIVIO_UPDATE_CHANNEL=
+          ANIVIO_UPDATE_USER_AGENT=
           ANILIST_CLIENT_ID=${{ secrets.ANILIST_CLIENT_ID }}
           ANILIST_REDIRECT_URI=${{ secrets.ANILIST_REDIRECT_URI }}
           TRAKT_CLIENT_ID=${{ secrets.TRAKT_CLIENT_ID }}
@@ -104,6 +104,18 @@ jobs:
           DONATIONS_BASE_URL=${{ secrets.DONATIONS_BASE_URL }}
           DONATIONS_DONATE_URL=${{ secrets.DONATIONS_DONATE_URL }}
           EOF
+          # CI release signing: decode the keystore (if the secret exists) and
+          # point the NUVIO_RELEASE_* keys at it. Without it, the build falls
+          # back to the debug key (see -PanivioCiBuild in androidApp).
+          if [ -n "${{ secrets.NUVIO_RELEASE_KEYSTORE_BASE64 }}" ]; then
+            echo '${{ secrets.NUVIO_RELEASE_KEYSTORE_BASE64 }}' | base64 -d > ci-release.jks
+            cat >> local.properties <<'EOF'
+          NUVIO_RELEASE_STORE_FILE=ci-release.jks
+          NUVIO_RELEASE_STORE_PASSWORD=${{ secrets.NUVIO_RELEASE_STORE_PASSWORD }}
+          NUVIO_RELEASE_KEY_ALIAS=${{ secrets.NUVIO_RELEASE_KEY_ALIAS }}
+          NUVIO_RELEASE_KEY_PASSWORD=${{ secrets.NUVIO_RELEASE_KEY_PASSWORD }}
+          EOF
+          fi
 
       - name: Build APK (${{ inputs.arch }}, ${{ inputs.build_type }})
         run: |
