@@ -349,12 +349,6 @@ data class AniListDiscoverPage(val items: List<MetaPreview>, val nextPage: Int?)
         AniListClient.query("query { GenreCollection }")["GenreCollection"]
             ?.jsonArray
             ?.mapNotNull { it.jsonPrimitive.content.takeIf { name -> name.isNotBlank() } }
-            // Only worth offering once adult titles are allowed through: while they are filtered out
-            // this genre can only ever produce an empty grid.
-            ?.filter { name ->
-                AniListCatalogSource.adultContentEnabled() ||
-                    !name.equals("Hentai", ignoreCase = true)
-            }
             .orEmpty()
     }.onFailure { error ->
         log.w(error) { "AniList genre list lookup failed" }

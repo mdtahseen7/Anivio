@@ -53,6 +53,7 @@ private const val WATCH_PROGRESS_METADATA_RESOLUTION_LIMIT = 64
 private const val WATCH_PROGRESS_METADATA_FETCH_ATTEMPTS = 3
 private const val WATCH_PROGRESS_METADATA_RETRY_BASE_DELAY_MS = 750L
 private const val WATCH_PROGRESS_DELTA_PAGE_SIZE = 900
+private const val OFFLINE_RETRY_DEBOUNCE_MS = 3_000L
 private const val WATCH_PROGRESS_DELTA_OPERATION_UPSERT = "upsert"
 private const val WATCH_PROGRESS_DELTA_OPERATION_DELETE = "delete"
 private const val WATCH_PROGRESS_REMOTE_WRITE_DEDUP_WINDOW_MS = 5_000L
@@ -260,27 +261,52 @@ object WatchProgressRepository {
     private val remoteWriteDeduplicator = RemoteProgressWriteDeduplicator()
     internal var syncAdapter: ProgressSyncAdapter = SupabaseProgressSyncAdapter
 
+    private var offlineRetryJob: Job? = null
+
     init {
-        ensureTrackingProvidersRegistered()
-        TrackingProviderRegistry.progressProviders().forEach { provider ->
-            syncScope.launch {
-                provider.changes.collectLatest {
-                    if (activeSource.providerId == provider.providerId) {
-                        publish()
-                        if (hasLoaded && !provider.providesCompleteMetadata) {
-                            resolveRemoteMetadata()
-                        }
-                    }
+        // Offline watch-history support: entries whose remote push failed while the device was
+        // offline are marked dirty; when connectivity returns, replay them in the background.
+        syncScope.launch {
+            NetworkStatusRepository.uiState.collectLatest { status ->
+                if (status.isOnline) {
+                    scheduleDirtyPushRetry()
                 }
             }
         }
+    }
 
-        syncScope.launch {
-            AddonRepository.uiState.collectLatest { state ->
-                retryMetadataResolutionWhenAddonMetaProvidersReady(state)
+    private fun scheduleDirtyPushRetry() {
+        if (!hasLoaded) return
+        val authState = AuthRepository.state.value
+        if (authState !is AuthState.Authenticated || authState.isAnonymous) return
+        if (dirtyProgressKeysSnapshot().isEmpty()) return
+        if (offlineRetryJob?.isActive == true) return
+
+        val targetProfileId = currentProfileId
+        val targetGeneration = profileGeneration
+        offlineRetryJob = syncScope.launch {
+            // Small delay so a flapping connection doesn't fire the push immediately.
+            delay(OFFLINE_RETRY_DEBOUNCE_MS)
+            if (targetProfileId != currentProfileId || targetGeneration != profileGeneration) return@launch
+            val dirtyKeys = dirtyProgressKeysSnapshot()
+            if (dirtyKeys.isEmpty()) return@launch
+            val entriesToPush = currentEntries().filter { it.resolvedProgressKey() in dirtyKeys }
+            if (entriesToPush.isEmpty()) return@launch
+
+            log.d {
+                "Replaying ${entriesToPush.size} offline watch-progress entries for profile $targetProfileId"
+            }
+            runCatching {
+                syncAdapter.push(profileId = targetProfileId, entries = entriesToPush)
+                recordSuccessfulPush(
+                    profileId = targetProfileId,
+                    operationGeneration = targetGeneration.takeIf { targetProfileId == currentProfileId },
+                    entries = entriesToPush,
+                )
+            }.onFailure { e ->
+                log.e(e) { "Failed to replay offline watch-progress entries" }
             }
         }
-
     }
 
     fun ensureLoaded() {
@@ -363,6 +389,8 @@ object WatchProgressRepository {
         }
         publish()
         resolveRemoteMetadata()
+        // Entries left dirty from a previous offline session get pushed as soon as we are online.
+        scheduleDirtyPushRetry()
     }
 
     private fun activeOperationGeneration(profileId: Int): Long? {

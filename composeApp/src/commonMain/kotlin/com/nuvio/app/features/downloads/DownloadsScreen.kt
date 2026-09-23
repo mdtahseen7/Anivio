@@ -1,5 +1,6 @@
 package com.nuvio.app.features.downloads
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,7 +13,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Pause
@@ -24,23 +28,36 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil3.compose.AsyncImage
 import com.nuvio.app.core.i18n.localizedByteUnit
+import com.nuvio.app.core.ui.NuvioBottomSheetActionRow
+import com.nuvio.app.core.ui.NuvioModalBottomSheet
 import com.nuvio.app.core.ui.NuvioScreen
 import com.nuvio.app.core.ui.NuvioScreenHeader
 import com.nuvio.app.core.ui.NuvioStatusModal
 import com.nuvio.app.core.ui.NuvioToastController
+import com.nuvio.app.core.ui.dismissNuvioBottomSheet
+import com.nuvio.app.core.ui.nuvio
+import com.nuvio.app.features.addons.AddonRepository
+import com.nuvio.app.features.addons.enabledAddons
+import kotlinx.coroutines.launch
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
 
@@ -59,7 +76,13 @@ fun DownloadsScreen(
 
     var selectedShowId by rememberSaveable(initialShowId) { mutableStateOf(initialShowId) }
     var downloadPendingDeletionId by rememberSaveable { mutableStateOf<String?>(null) }
+    var showServerPicker by rememberSaveable { mutableStateOf(false) }
     val openDownloadsDirectoryFailedText = stringResource(Res.string.downloads_open_directory_failed)
+
+    val downloadSettings by remember {
+        DownloadSettingsRepository.ensureLoaded()
+        DownloadSettingsRepository.uiState
+    }.collectAsStateWithLifecycle()
 
     val completedEpisodes = remember(uiState.items) {
         uiState.completedItems
@@ -108,6 +131,8 @@ fun DownloadsScreen(
         if (selectedShowId == null) {
             downloadsRootContent(
                 uiState = uiState,
+                defaultServerName = downloadSettings.defaultServerAddonName,
+                onPickDefaultServer = { showServerPicker = true },
                 onOpenDownload = onOpenDownload,
                 onOpenShow = { showId, title ->
                     onNavigateToShow?.invoke(showId, title) ?: run { selectedShowId = showId }
@@ -139,14 +164,89 @@ fun DownloadsScreen(
             onDismiss = { downloadPendingDeletionId = null },
         )
     }
+
+    if (showServerPicker) {
+        DefaultDownloadServerSheet(
+            currentServerName = downloadSettings.defaultServerAddonName,
+            onSelect = {
+                DownloadSettingsRepository.setDefaultServerAddonName(it)
+            },
+            onDismiss = { showServerPicker = false },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DefaultDownloadServerSheet(
+    currentServerName: String?,
+    onSelect: (String?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+    val tokens = MaterialTheme.nuvio
+    val addonNames = remember {
+        AddonRepository.uiState.value.addons.enabledAddons().map { it.displayTitle }.distinct()
+    }
+
+    fun choose(name: String?) {
+        onSelect(name)
+        scope.launch { dismissNuvioBottomSheet(sheetState, onDismiss) }
+    }
+
+    NuvioModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = tokens.spacing.screenHorizontal),
+        ) {
+            Text(
+                text = stringResource(Res.string.download_default_server),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = tokens.colors.textPrimary,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+            NuvioBottomSheetActionRow(
+                title = stringResource(Res.string.download_default_server_none),
+                onClick = { choose(null) },
+                trailingContent = if (currentServerName.isNullOrBlank()) {
+                    { Icon(Icons.Rounded.Check, contentDescription = null, tint = tokens.colors.accent) }
+                } else null,
+            )
+            addonNames.forEach { name ->
+                NuvioBottomSheetActionRow(
+                    title = name,
+                    onClick = { choose(name) },
+                    trailingContent = if (currentServerName == name) {
+                        { Icon(Icons.Rounded.Check, contentDescription = null, tint = tokens.colors.accent) }
+                    } else null,
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+    }
 }
 
 private fun LazyListScope.downloadsRootContent(
     uiState: DownloadsUiState,
+    defaultServerName: String?,
+    onPickDefaultServer: () -> Unit,
     onOpenDownload: (DownloadItem) -> Unit,
     onOpenShow: (showId: String, title: String) -> Unit,
     onDeleteDownload: (String) -> Unit,
 ) {
+    item {
+        DefaultServerRow(
+            serverName = defaultServerName,
+            onClick = onPickDefaultServer,
+        )
+    }
+
     val activeItems = uiState.activeItems
     val completedMovies = uiState.completedItems.filterNot(DownloadItem::isEpisode)
     val completedShows = uiState.completedItems
@@ -205,6 +305,7 @@ private fun LazyListScope.downloadsRootContent(
             items = completedShows,
             key = { (item, _) -> item.parentMetaId },
         ) { (item, episodes) ->
+            val showPoster = item.poster ?: item.background
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -216,10 +317,27 @@ private fun LazyListScope.downloadsRootContent(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                        .padding(10.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .size(width = 48.dp, height = 68.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                    ) {
+                        if (showPoster != null) {
+                            AsyncImage(
+                                model = showPoster,
+                                contentDescription = item.title,
+                                modifier = Modifier
+                                    .size(width = 48.dp, height = 68.dp)
+                                    .clip(RoundedCornerShape(8.dp)),
+                                contentScale = ContentScale.Crop,
+                            )
+                        }
+                    }
                     Column(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -346,6 +464,8 @@ private fun DownloadRow(
         displayTitle = displayTitle,
     )
 
+    val thumbnailUrl = item.episodeThumbnail ?: item.poster ?: item.background
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -355,16 +475,52 @@ private fun DownloadRow(
         color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 10.dp, top = 10.dp, end = 4.dp, bottom = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.Top,
             ) {
+                Box(
+                    modifier = Modifier
+                        .size(width = 100.dp, height = 60.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (thumbnailUrl != null) {
+                        AsyncImage(
+                            model = thumbnailUrl,
+                            contentDescription = displayTitle,
+                            modifier = Modifier
+                                .size(width = 100.dp, height = 60.dp)
+                                .clip(RoundedCornerShape(8.dp)),
+                            contentScale = ContentScale.Crop,
+                        )
+                    }
+                    if (item.status == DownloadStatus.Downloading) {
+                        Box(
+                            modifier = Modifier
+                                .size(width = 100.dp, height = 60.dp)
+                                .background(
+                                    MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+                                    RoundedCornerShape(8.dp),
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "${(item.progressFraction * 100).toInt()}%",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+                }
+
                 Column(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -377,17 +533,23 @@ private fun DownloadRow(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Text(
-                        text = displaySubtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    if (displaySubtitle.isNotBlank()) {
+                        Text(
+                            text = displaySubtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                     Text(
                         text = statusText(item),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = when (item.status) {
+                            DownloadStatus.Completed -> MaterialTheme.colorScheme.primary
+                            DownloadStatus.Failed -> MaterialTheme.colorScheme.error
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        },
                     )
                 }
 
@@ -438,14 +600,26 @@ private fun DownloadRow(
             if (item.status == DownloadStatus.Downloading) {
                 if (item.totalBytes != null && item.totalBytes > 0L) {
                     LinearProgressIndicator(
-                        progress = item.progressFraction,
-                        modifier = Modifier.fillMaxWidth(),
+                        progress = { item.progressFraction },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp)
+                            .padding(bottom = 10.dp)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp)),
                     )
                 } else {
                     LinearProgressIndicator(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp)
+                            .padding(bottom = 10.dp)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp)),
                     )
                 }
+            } else {
+                Spacer(modifier = Modifier.height(6.dp))
             }
         }
     }
@@ -479,6 +653,47 @@ private fun downloadDisplaySubtitle(
         item.episodeTitle?.trim().orEmpty().takeIf { it.isNotBlank() && it != displayTitle },
         item.title.trim().takeIf { it.isNotBlank() && it != displayTitle },
     ).filterNotNull().joinToString(" • ")
+}
+
+@Composable
+private fun DefaultServerRow(
+    serverName: String?,
+    onClick: () -> Unit,
+) {
+    val tokens = MaterialTheme.nuvio
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp, vertical = 6.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(tokens.colors.surfaceElevated)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 14.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.Dns,
+            contentDescription = null,
+            tint = tokens.colors.accent,
+            modifier = Modifier.size(22.dp),
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(Res.string.download_default_server),
+                style = MaterialTheme.typography.bodyLarge,
+                color = tokens.colors.textPrimary,
+            )
+            Text(
+                text = serverName?.takeIf { it.isNotBlank() }
+                    ?: stringResource(Res.string.download_default_server_none),
+                style = MaterialTheme.typography.bodySmall,
+                color = tokens.colors.textSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
 }
 
 @Composable

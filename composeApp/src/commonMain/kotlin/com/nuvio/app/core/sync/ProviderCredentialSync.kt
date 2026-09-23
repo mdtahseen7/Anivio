@@ -4,6 +4,7 @@ import co.touchlab.kermit.Logger
 import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
 import com.nuvio.app.core.network.SupabaseProvider
+import com.nuvio.app.features.anilist.AniListAuthStorage
 import com.nuvio.app.features.debrid.DebridProviders
 import com.nuvio.app.features.debrid.DebridSettings
 import com.nuvio.app.features.debrid.DebridSettingsRepository
@@ -53,6 +54,8 @@ object ProviderCredentialSync {
     private var observeJob: Job? = null
     private var isApplyingRemote = false
 
+    private var anilistObserveJob: Job? = null
+
     @OptIn(FlowPreview::class)
     fun startObserving() {
         if (observeJob?.isActive == true) return
@@ -63,11 +66,21 @@ object ProviderCredentialSync {
                 .debounce(PROVIDER_CREDENTIAL_PUSH_DEBOUNCE_MS)
                 .collect(::handleLocalSnapshot)
         }
+        anilistObserveJob = scope.launch {
+            com.nuvio.app.features.anilist.AniListAuthRepository.uiState
+                .debounce(PROVIDER_CREDENTIAL_PUSH_DEBOUNCE_MS)
+                .collect {
+                    val snap = currentSnapshot(ProfileRepository.activeProfileId)
+                    handleLocalSnapshot(snap)
+                }
+        }
     }
 
     fun clearAccountState() {
         observeJob?.cancel()
         observeJob = null
+        anilistObserveJob?.cancel()
+        anilistObserveJob = null
         synchronized(stateLock) {
             observedSnapshots.clear()
             baselineSnapshots.clear()
@@ -152,11 +165,16 @@ object ProviderCredentialSync {
 
     private fun credentialParams(snapshot: ProviderCredentialSnapshot) = buildJsonObject {
         put("p_profile_id", snapshot.profileId)
+        val userId = (AuthRepository.state.value as? AuthState.Authenticated)?.userId ?: ""
         put("p_credentials", buildJsonArray {
             snapshot.values.forEach { credential ->
+                val encryptedValue = if (userId.isNotBlank()) {
+                    try { ProviderCredentialCrypto.encrypt(credential.value, userId) } catch (_: Exception) { credential.value }
+                } else credential.value
+                val encryptedCredential = credential.copy(value = encryptedValue)
                 add(buildJsonObject {
-                    put("provider", credential.provider)
-                    put("credential_json", credential.credentialJson())
+                    put("provider", encryptedCredential.provider)
+                    put("credential_json", encryptedCredential.credentialJson())
                 })
             }
         })
@@ -226,6 +244,21 @@ object ProviderCredentialSync {
                     player.introDbApiKey.trim(),
                 ),
             )
+            // Encrypted per-user: AniList OAuth token + metadata (follows account, not just device)
+            add(
+                ProviderCredentialValue(
+                    ProviderCredentialIds.ANILIST,
+                    PROVIDER_API_KEY_FIELD,
+                    AniListAuthStorage.loadAccessToken()?.trim().orEmpty(),
+                ),
+            )
+            add(
+                ProviderCredentialValue(
+                    "${ProviderCredentialIds.ANILIST}:meta",
+                    "payload",
+                    AniListAuthStorage.loadMetadataPayload()?.trim().orEmpty(),
+                ),
+            )
         },
     )
 
@@ -235,24 +268,36 @@ object ProviderCredentialSync {
     ) {
         snapshot.values.forEach { credential ->
             requireCurrentScope(expectedScope)
+            val plain = try {
+                ProviderCredentialCrypto.decrypt(credential.value, expectedScope.userId)
+            } catch (_: Exception) {
+                credential.value
+            }
             when {
                 credential.provider.startsWith("debrid:") -> {
                     DebridSettingsRepository.setProviderApiKey(
                         credential.provider.substringAfter("debrid:"),
-                        credential.value,
+                        plain,
                     )
                 }
                 credential.provider == ProviderCredentialIds.TMDB -> {
-                    TmdbSettingsRepository.setApiKey(credential.value)
+                    TmdbSettingsRepository.setApiKey(plain)
                 }
                 credential.provider == ProviderCredentialIds.MDBLIST -> {
-                    MdbListSettingsRepository.setApiKey(credential.value)
+                    MdbListSettingsRepository.setApiKey(plain)
                 }
                 credential.provider == ProviderCredentialIds.ANIMESKIP -> {
-                    PlayerSettingsRepository.setAnimeSkipClientId(credential.value)
+                    PlayerSettingsRepository.setAnimeSkipClientId(plain)
                 }
                 credential.provider == ProviderCredentialIds.INTRODB -> {
-                    PlayerSettingsRepository.setIntroDbApiKey(credential.value)
+                    PlayerSettingsRepository.setIntroDbApiKey(plain)
+                }
+                credential.provider == ProviderCredentialIds.ANILIST -> {
+                    if (plain.isNotBlank()) AniListAuthStorage.saveAccessToken(plain)
+                }
+                credential.provider == "${ProviderCredentialIds.ANILIST}:meta" -> {
+                    if (plain.isNotBlank()) AniListAuthStorage.saveMetadataPayload(plain)
+                    else AniListAuthStorage.saveMetadataPayload("")
                 }
             }
         }

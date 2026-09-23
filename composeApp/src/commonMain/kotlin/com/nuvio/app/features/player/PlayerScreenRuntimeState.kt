@@ -57,7 +57,9 @@ internal class PlayerScreenRuntime(
     val torrentTrackers: List<String> get() = args.torrentTrackers
     val initialPositionMs: Long get() = args.initialPositionMs
     val initialProgressFraction: Float? get() = args.initialProgressFraction
-    val externalSubtitles: List<com.nuvio.app.features.streams.StreamSubtitle> get() = args.externalSubtitles
+    var activeExternalSubtitles by mutableStateOf(args.externalSubtitles)
+    @Deprecated("Use activeExternalSubtitles", ReplaceWith("activeExternalSubtitles"))
+    val externalSubtitles: List<com.nuvio.app.features.streams.StreamSubtitle> get() = activeExternalSubtitles
     val isSeries: Boolean get() = parentMetaType == "series"
 
     lateinit var scope: CoroutineScope

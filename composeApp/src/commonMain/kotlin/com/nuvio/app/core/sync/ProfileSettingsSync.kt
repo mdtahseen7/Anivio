@@ -10,6 +10,8 @@ import com.nuvio.app.features.debrid.DebridSettingsRepository
 import com.nuvio.app.features.debrid.DebridSettingsStorage
 import com.nuvio.app.features.details.MetaScreenSettingsStorage
 import com.nuvio.app.features.details.MetaScreenSettingsRepository
+import com.nuvio.app.features.home.HomeCatalogSettingsStorage
+import com.nuvio.app.features.library.LibraryDisplaySettingsStorage
 import com.nuvio.app.features.mdblist.MdbListMetadataService
 import com.nuvio.app.features.mdblist.MdbListSettingsStorage
 import com.nuvio.app.features.mdblist.MdbListSettingsRepository
@@ -21,6 +23,7 @@ import com.nuvio.app.core.ui.CardDepthStyleRepository
 import com.nuvio.app.core.ui.CardDepthStyleStorage
 import com.nuvio.app.core.ui.PosterCardStyleRepository
 import com.nuvio.app.core.ui.PosterCardStyleStorage
+import com.nuvio.app.features.settings.SentrySettingsStorage
 import com.nuvio.app.features.settings.ThemeSettingsStorage
 import com.nuvio.app.features.settings.ThemeSettingsRepository
 import com.nuvio.app.features.streams.StreamBadgeSettingsRepository
@@ -250,6 +253,9 @@ object ProfileSettingsSync {
                 notificationsSettings = NotificationsSettingsPayload(
                     episodeReleaseAlertsEnabled = EpisodeReleaseNotificationsRepository.uiState.value.isEnabled,
                 ),
+                homeCatalogSettingsPayload = HomeCatalogSettingsStorage.loadPayload().orEmpty().trim(),
+                libraryDisplaySettingsPayload = LibraryDisplaySettingsStorage.loadPayload().orEmpty().trim(),
+                sentrySettingsPayload = SentrySettingsStorage.loadPayload().orEmpty().trim(),
             ),
         )
     }
@@ -320,6 +326,10 @@ object ProfileSettingsSync {
         TrackingSettingsRepository.onProfileChanged()
 
         EpisodeReleaseNotificationsRepository.applyFromSyncEnabled(blob.features.notificationsSettings.episodeReleaseAlertsEnabled)
+
+        HomeCatalogSettingsStorage.savePayload(blob.features.homeCatalogSettingsPayload)
+        LibraryDisplaySettingsStorage.savePayload(blob.features.libraryDisplaySettingsPayload)
+        SentrySettingsStorage.savePayload(blob.features.sentrySettingsPayload)
     }
 
     private fun ensureRepositoriesLoaded() {
@@ -347,7 +357,7 @@ object ProfileSettingsSync {
 
 @Serializable
 private data class MobileProfileSettingsBlob(
-    val version: Int = 3,
+    val version: Int = 4,
     val features: MobileProfileSettingsFeatures = MobileProfileSettingsFeatures(),
 )
 
@@ -366,6 +376,9 @@ private data class MobileProfileSettingsFeatures(
     @SerialName("continue_watching_settings_payload") val continueWatchingSettingsPayload: String = "",
     @SerialName("tracking_settings") val trackingSettings: JsonObject = JsonObject(emptyMap()),
     @SerialName("notifications_settings") val notificationsSettings: NotificationsSettingsPayload = NotificationsSettingsPayload(),
+    @SerialName("home_catalog_settings_payload") val homeCatalogSettingsPayload: String = "",
+    @SerialName("library_display_settings_payload") val libraryDisplaySettingsPayload: String = "",
+    @SerialName("sentry_settings_payload") val sentrySettingsPayload: String = "",
 )
 
 @Serializable

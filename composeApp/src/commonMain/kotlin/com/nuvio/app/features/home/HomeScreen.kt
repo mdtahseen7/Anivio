@@ -1,8 +1,13 @@
 package com.nuvio.app.features.home
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -13,7 +18,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -24,7 +32,13 @@ import com.nuvio.app.core.network.NetworkCondition
 import com.nuvio.app.core.network.NetworkStatusRepository
 import com.nuvio.app.core.anilist.AniListServiceStatus
 import com.nuvio.app.core.ui.AniListUnavailableCard
+import com.nuvio.app.core.ui.nuvio
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import com.nuvio.app.core.ui.LocalNuvioBottomNavigationOverlayPadding
+import com.nuvio.app.core.ui.NuvioCircularGlassButton
 import com.nuvio.app.core.ui.NuvioScreen
 import com.nuvio.app.core.ui.NuvioNetworkOfflineCard
 import com.nuvio.app.core.ui.nuvioSafeBottomPadding
@@ -33,7 +47,9 @@ import com.nuvio.app.core.ui.rememberPosterCardStyleUiState
 import com.nuvio.app.core.ui.withDuplicateSafeLazyKeys
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.enabledAddons
+import com.nuvio.app.features.anilist.AniListAuthRepository
 import com.nuvio.app.features.anilist.AniListEpisodeThumbnails
+import com.nuvio.app.features.anilist.AniListNotificationsRepository
 import com.nuvio.app.features.anilist.withAniListEpisodeThumbnails
 import com.nuvio.app.features.anilist.AniListListRepository
 import com.nuvio.app.features.anilist.aniListContinueWatchingItems
@@ -114,6 +130,7 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
     animateCollectionGifs: Boolean = true,
     scrollToTopRequests: Flow<Unit> = emptyFlow(),
+    onNotificationsClick: (() -> Unit)? = null,
     onCatalogClick: ((HomeCatalogSection) -> Unit)? = null,
     onPosterClick: ((MetaPreview) -> Unit)? = null,
     onPosterLongClick: ((MetaPreview) -> Unit)? = null,
@@ -940,6 +957,45 @@ fun HomeScreen(
             Modifier.nestedScroll(heroStretchState.nestedScrollConnection)
         } else {
             Modifier
+        }
+
+        // Notification bell floats top-left, mirroring the search glass button top-right. Only
+        // rendered when there is an AniList account to read a badge/feed from.
+        val showNotificationsBell = onNotificationsClick != null &&
+            AniListAuthRepository.isAuthenticated.value
+        if (showNotificationsBell) {
+            val bellNotificationsUiState by AniListNotificationsRepository.uiState
+                .collectAsStateWithLifecycle()
+            LaunchedEffect(Unit) {
+                AniListNotificationsRepository.refresh()
+            }
+            NuvioCircularGlassButton(
+                onClick = onNotificationsClick!!,
+                size = 48.dp,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .statusBarsPadding()
+                    .padding(top = 8.dp, start = 16.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Rounded.Notifications,
+                        contentDescription = "Notifications",
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp),
+                    )
+                    if (bellNotificationsUiState.unreadCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(top = 1.dp, end = 1.dp)
+                                .size(9.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.nuvio.colors.accent),
+                        )
+                    }
+                }
+            }
         }
 
         NuvioScreen(

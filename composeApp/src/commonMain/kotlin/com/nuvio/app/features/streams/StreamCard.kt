@@ -25,7 +25,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -41,6 +46,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.nuvio.app.features.debrid.DebridProviders
+import nuvio.composeapp.generated.resources.Res
+import nuvio.composeapp.generated.resources.downloads_section_active
+import nuvio.composeapp.generated.resources.streams_download_file
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun StreamCard(
@@ -55,6 +64,8 @@ internal fun StreamCard(
     modifier: Modifier = Modifier,
     isCurrent: Boolean = false,
     currentLabel: String? = null,
+    onDownloadClick: (() -> Unit)? = null,
+    isDownloaded: Boolean = false,
 ) {
     val cardShape = RoundedCornerShape(12.dp)
     val badgeImages = stream.badges.filter { it.imageURL.isNotBlank() }
@@ -135,6 +146,33 @@ internal fun StreamCard(
                     badgeImages = badgeImages,
                     stream = stream,
                     showFileSizeBadges = showFileSizeBadges,
+                )
+            }
+        }
+
+        if (onDownloadClick != null) {
+            Spacer(modifier = Modifier.width(8.dp))
+            IconButton(
+                onClick = onDownloadClick,
+                modifier = Modifier.size(34.dp),
+            ) {
+                Icon(
+                    imageVector = if (isDownloaded) {
+                        Icons.Rounded.CheckCircle
+                    } else {
+                        Icons.Rounded.Download
+                    },
+                    contentDescription = if (isDownloaded) {
+                        stringResource(Res.string.downloads_section_active)
+                    } else {
+                        stringResource(Res.string.streams_download_file)
+                    },
+                    tint = if (isDownloaded) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    modifier = Modifier.size(20.dp),
                 )
             }
         }

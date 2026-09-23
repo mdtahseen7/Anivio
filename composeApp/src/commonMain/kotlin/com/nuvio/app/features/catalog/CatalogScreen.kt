@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
@@ -21,6 +22,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.nuvio.app.core.ui.NuvioLoadingIndicator
 import androidx.compose.material3.MaterialTheme
@@ -52,6 +54,7 @@ import com.nuvio.app.core.format.formatReleaseDateForDisplay
 import com.nuvio.app.core.ui.NuvioBackButton
 import com.nuvio.app.core.ui.NuvioCardDepthSurface
 import com.nuvio.app.core.ui.NuvioPosterWatchedOverlay
+import com.nuvio.app.core.ui.airingStatusDotColor
 import com.nuvio.app.core.ui.nuvioCardDepth
 import com.nuvio.app.core.ui.rememberPosterCardStyleUiState
 import com.nuvio.app.core.ui.posterCardClickable
@@ -207,6 +210,7 @@ fun CatalogScreen(
                             item = item,
                             cornerRadiusDp = posterCardStyle.cornerRadiusDp,
                             hideLabels = posterCardStyle.hideLabelsEnabled,
+                            showAiringStatusDots = posterCardStyle.showAiringStatusDots,
                             isWatched = WatchingState.isPosterWatched(
                                 watchedKeys = watchedUiState.watchedKeys,
                                 item = item,
@@ -293,6 +297,7 @@ private fun CatalogPosterTile(
     item: MetaPreview,
     cornerRadiusDp: Int,
     hideLabels: Boolean,
+    showAiringStatusDots: Boolean,
     isWatched: Boolean,
     onClick: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
@@ -328,13 +333,28 @@ private fun CatalogPosterTile(
             NuvioPosterWatchedOverlay(isWatched = isWatched)
         }
         if (!hideLabels) {
-            Text(
-                text = item.name,
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                if (showAiringStatusDots) {
+                    val dotColor = airingStatusDotColor(item.airingStatus)
+                    if (dotColor != null) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .background(dotColor, CircleShape),
+                        )
+                    }
+                }
+                Text(
+                    text = item.name,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onBackground,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             val detail = item.releaseInfo?.let { formatReleaseDateForDisplay(it) }
             if (detail != null) {
                 Text(

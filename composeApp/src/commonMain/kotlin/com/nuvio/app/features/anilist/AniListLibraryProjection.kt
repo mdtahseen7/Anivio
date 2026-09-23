@@ -101,6 +101,28 @@ fun aniListLibraryProjection(snapshot: AniListListsSnapshot): List<LibrarySectio
         }
     }
 
+/**
+ * The status groups the AniList lists browser shows, in tab order. CURRENT and REPEATING are one
+ * "Watching" tab — a rewatch is still watching. Manga is left out; this drives the anime lists view.
+ */
+enum class AniListListTab(val statuses: Set<String>) {
+    WATCHING(setOf(AniListListStatus.CURRENT, AniListListStatus.REPEATING)),
+    COMPLETED(setOf(AniListListStatus.COMPLETED)),
+    PAUSED(setOf(AniListListStatus.PAUSED)),
+    DROPPED(setOf(AniListListStatus.DROPPED)),
+    PLANNING(setOf(AniListListStatus.PLANNING)),
+}
+
+/** Anime entries for one status tab, newest first, mapped to library items. Pure — no fetch. */
+fun aniListEntriesForTab(snapshot: AniListListsSnapshot, tab: AniListListTab): List<LibraryItem> =
+    snapshot.anime
+        .asSequence()
+        .filter { entry -> entry.status in tab.statuses }
+        .mapNotNull { entry -> entry.toLibraryItem("anilist:${tab.name.lowercase()}") }
+        .distinctBy { item -> item.id }
+        .sortedByDescending(LibraryItem::savedAtEpochMs)
+        .toList()
+
 private fun AniListMediaListEntry.toLibraryItem(sectionKey: String): LibraryItem? {
     val media = media ?: return null
     val name = media.displayTitle() ?: return null

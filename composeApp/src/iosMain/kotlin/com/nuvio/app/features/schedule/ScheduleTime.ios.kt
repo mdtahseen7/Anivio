@@ -4,6 +4,8 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import platform.Foundation.NSCalendar
 import platform.Foundation.NSCalendarUnitCalendar
 import platform.Foundation.NSCalendarUnitDay
+import platform.Foundation.NSCalendarUnitMonth
+import platform.Foundation.NSCalendarUnitYear
 import platform.Foundation.NSDate
 import platform.Foundation.NSDateComponents
 import platform.Foundation.NSDateFormatter
@@ -29,7 +31,7 @@ internal actual object ScheduleTime {
 
     actual fun startOfDayEpochSec(epochSec: Long): Long {
         val date = NSDate(epochSec.toDouble())
-        val components = calendar.components(NSCalendarUnitCalendar or NSCalendarUnitDay, date)
+        val components = calendar.components(NSCalendarUnitYear or NSCalendarUnitMonth or NSCalendarUnitDay, date)
         components.hour = 0
         components.minute = 0
         components.second = 0
@@ -54,7 +56,7 @@ internal actual object ScheduleTime {
     }
 
     private fun startOfDay(date: NSDate): NSDate {
-        val components = calendar.components(NSCalendarUnitCalendar or NSCalendarUnitDay, date)
+        val components = calendar.components(NSCalendarUnitYear or NSCalendarUnitMonth or NSCalendarUnitDay, date)
         components.hour = 0
         components.minute = 0
         components.second = 0

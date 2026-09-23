@@ -4,15 +4,18 @@ import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import com.nuvio.app.features.anilist.AniListNotificationsScreen
 import com.nuvio.app.features.details.MetaDetailsScreen
 import com.nuvio.app.features.details.PersonDetailScreen
 import com.nuvio.app.features.details.TmdbEntityBrowseScreen
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.tmdb.TmdbEntityKind
 import com.nuvio.app.features.tmdb.TmdbService
+import com.nuvio.app.navigation.AniListNotificationsRoute
 import com.nuvio.app.navigation.DetailRoute
 import com.nuvio.app.navigation.EntityBrowseRoute
 import com.nuvio.app.navigation.NuvioNavigator
@@ -66,6 +69,31 @@ private fun rememberOpenMeta(navController: NuvioNavigator): (MetaPreview) -> Un
             )
         }
     }
+}
+
+@Composable
+internal fun AniListNotificationsDestination(
+    navController: NuvioNavigator,
+    onPosterClick: (MetaPreview) -> Unit,
+) {
+    val route = AniListNotificationsRoute(title = "")
+    val onBack = rememberGuardedPopBackStack(navController, route)
+    AniListNotificationsScreen(
+        listState = rememberLazyListState(),
+        onBack = onBack,
+        onPosterClick = { mediaId, title ->
+            onPosterClick(
+                MetaPreview(
+                    id = "anilist:$mediaId",
+                    // Anime is type-agnostic in the details stack (AniListMetaSource reads the
+                    // movie-ness from AniList's format itself); "series" keeps routing simple.
+                    type = "series",
+                    name = title ?: "",
+                ),
+            )
+        },
+        modifier = Modifier.fillMaxSize(),
+    )
 }
 
 @OptIn(ExperimentalSharedTransitionApi::class)

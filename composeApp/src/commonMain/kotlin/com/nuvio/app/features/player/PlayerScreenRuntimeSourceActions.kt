@@ -176,6 +176,7 @@ internal fun PlayerScreenRuntime.switchToP2pSourceStream(stream: StreamItem) {
     activeSourceHeaders = emptyMap()
     activeSourceResponseHeaders = emptyMap()
     activeStreamType = null
+    activeExternalSubtitles = stream.externalSubtitles
     activeTorrentInfoHash = infoHash
     activeTorrentFileIdx = stream.p2pFileIdx
     activeTorrentFilename = stream.behaviorHints.filename
@@ -219,6 +220,7 @@ internal fun PlayerScreenRuntime.switchToP2pEpisodeStream(
     activeSourceHeaders = emptyMap()
     activeSourceResponseHeaders = emptyMap()
     activeStreamType = null
+    activeExternalSubtitles = stream.externalSubtitles
     activeTorrentInfoHash = infoHash
     activeTorrentFileIdx = stream.p2pFileIdx
     activeTorrentFilename = stream.behaviorHints.filename
@@ -271,6 +273,7 @@ internal fun PlayerScreenRuntime.switchToSource(stream: StreamItem) {
     activeSourceResponseHeaders = sanitizePlaybackResponseHeaders(stream.behaviorHints.proxyHeaders?.response)
     activeStreamType = stream.streamType
     activeSourceIdentityKey = sourceIdentityKey
+    activeExternalSubtitles = stream.externalSubtitles
     activeStreamTitle = stream.streamLabel
     activeStreamSubtitle = stream.streamSubtitle
     activeProviderName = stream.addonName
@@ -319,6 +322,7 @@ internal fun PlayerScreenRuntime.switchToEpisodeStream(stream: StreamItem, episo
     activeSourceHeaders = sanitizePlaybackHeaders(stream.behaviorHints.proxyHeaders?.request)
     activeSourceResponseHeaders = sanitizePlaybackResponseHeaders(stream.behaviorHints.proxyHeaders?.response)
     activeStreamType = stream.streamType
+    activeExternalSubtitles = stream.externalSubtitles
     applyEpisodeStreamMetadata(stream, episode, resume)
 }
 
@@ -353,6 +357,7 @@ internal fun PlayerScreenRuntime.switchToDownloadedEpisode(downloadItem: Downloa
     activeSourceResponseHeaders = emptyMap()
     activeStreamType = null
     activeSourceIdentityKey = null
+    activeExternalSubtitles = emptyList()
     activeStreamTitle = downloadItem.streamTitle.ifBlank {
         episode.title.ifBlank { title }
     }

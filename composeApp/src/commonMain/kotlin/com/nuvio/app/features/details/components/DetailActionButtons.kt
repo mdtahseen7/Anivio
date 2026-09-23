@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -48,6 +49,7 @@ import org.jetbrains.compose.resources.stringResource
 data class DetailSecondaryAction(
     val label: String,
     val icon: ImageVector,
+    val shortLabel: String = label,
     val isActive: Boolean = false,
     val onClick: () -> Unit = {},
     val onLongClick: (() -> Unit)? = null,
@@ -145,7 +147,7 @@ fun DetailActionButtons(
                     ) {
                         if (actionsExpanded || menuProgress > 0.01f) {
                             DetailIconAction(
-                                label = action.label,
+                                label = action.shortLabel,
                                 icon = action.icon,
                                 active = action.isActive,
                                 progress = menuProgress,
@@ -252,11 +254,23 @@ private fun DetailIconAction(
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                modifier = Modifier.size(21.dp),
-            )
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = label,
+                    modifier = Modifier.size(18.dp),
+                )
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = size - 8.dp),
+                )
+            }
         }
     }
 }

@@ -47,6 +47,7 @@ fun AniListMedia.toMetaPreview(): MetaPreview? {
         popularity = popularity?.toDouble(),
         imdbRating = averageScore?.takeIf { it > 0 }?.let { (it / 10.0).toString() },
         genres = genres,
+        airingStatus = status,
     )
 }
 

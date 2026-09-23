@@ -11,7 +11,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -22,7 +26,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.core.network.NetworkStatusRepository
 import com.nuvio.app.core.ui.NuvioScreen
-import com.nuvio.app.core.ui.NuvioScreenHeader
 import com.nuvio.app.core.ui.nuvioConsumePointerEvents
 import com.nuvio.app.features.anilist.AniListDiscoverRepository
 import com.nuvio.app.features.home.MetaPreview
@@ -97,9 +100,16 @@ fun DiscoverScreen(
                             .nuvioConsumePointerEvents(),
                     )
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        NuvioScreenHeader(
-                            title = stringResource(Res.string.compose_search_discover_title),
-                            modifier = Modifier.padding(horizontal = 16.dp),
+                        Text(
+                            text = stringResource(Res.string.compose_search_discover_title),
+                            modifier = Modifier
+                                .padding(horizontal = 16.dp)
+                                .padding(
+                                    top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding(),
+                                    bottom = 4.dp,
+                                ),
+                            style = MaterialTheme.typography.headlineLarge,
+                            color = MaterialTheme.colorScheme.onBackground,
                         )
                     }
                 }

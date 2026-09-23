@@ -29,6 +29,7 @@ import com.nuvio.app.features.anime.AnimeEnrichment
 import com.nuvio.app.features.anime.buildEnrichedEpisodes
 import com.nuvio.app.features.anime.loadAnimeEnrichment
 import com.nuvio.app.features.details.MetaCompany
+import com.nuvio.app.features.details.AnimeReview
 import com.nuvio.app.features.details.MetaDetails
 import com.nuvio.app.features.details.MetaLink
 import com.nuvio.app.features.details.MetaPerson
@@ -96,6 +97,9 @@ object AniListMetaSource {
 
     /** AniList `format` values that are not watchable. */
     private val MANGA_FORMATS = setOf("MANGA", "NOVEL", "ONE_SHOT")
+
+    /** Story relations shown in the related-titles rail, in the order they should appear. */
+    private val RELATION_TYPES = listOf("PREQUEL", "SEQUEL")
 
     /**
      * How long the fully enriched result gets before a partial paint is published instead.
@@ -344,6 +348,8 @@ object AniListMetaSource {
             country = countryOfOrigin?.takeIf { it.isNotBlank() },
             moreLikeThis = recommendedTitles,
             moreLikeThisSource = MoreLikeThisSource.ANILIST.takeIf { recommendedTitles.isNotEmpty() },
+            relatedTitles = aniListRelations(),
+            animeReviews = aniListReviews(),
             hasScheduledVideos = nextAiringEpisode != null,
             trailers = trailerOrNull(),
             links = externalLinks.mapNotNull { link ->
@@ -380,8 +386,7 @@ object AniListMetaSource {
      * community actively rejected the suggestion. Adult titles are dropped too, matching the rest of
      * the catalog surfaces.
      */
-    private fun AniListMediaDetail.aniListRecommendations(): List<MetaPreview> =
-        recommendations?.nodes.orEmpty()
+    private fun AniListMediaDetail.aniListRecommendations(): List<MetaPreview> =        recommendations?.nodes.orEmpty()
             .filter { (it.rating ?: 0) >= 0 }
             .mapNotNull { it.mediaRecommendation }
             .filterNot { it.isAdult }
@@ -391,6 +396,40 @@ object AniListMetaSource {
             .distinctBy { it.id }
             .mapNotNull { it.toMetaPreview() }
             .take(MAX_MORE_LIKE_THIS)
+
+    /**
+     * Prequels and sequels from AniList's relation graph, prequels first so the rail reads in story
+     * order. Manga/novel sources are dropped (nothing to play) and each carries an `anilist:` id the
+     * details resolver already opens.
+     */
+    private fun AniListMediaDetail.aniListRelations(): List<MetaPreview> =
+        relations?.edges.orEmpty()
+            .filter { it.relationType?.uppercase() in RELATION_TYPES }
+            .sortedBy { RELATION_TYPES.indexOf(it.relationType?.uppercase()) }
+            .mapNotNull { it.node }
+            .filterNot { it.isAdult }
+            .filterNot { it.format?.uppercase() in MANGA_FORMATS }
+            .distinctBy { it.id }
+            .mapNotNull { it.toMetaPreview() }
+
+    /**
+     * AniList community reviews, sorted by how many users found them helpful. A review needs both a
+     * summary and a body to be worth showing — an empty card helps no one.
+     */
+    private fun AniListMediaDetail.aniListReviews(): List<AnimeReview> =
+        reviews?.nodes.orEmpty()
+            .mapNotNull { node ->
+                val summary = node.summary?.trim()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                val body = node.body?.stripAniListMarkup()?.trim()?.takeIf { it.isNotBlank() } ?: summary
+                AnimeReview(
+                    id = node.id?.toString() ?: return@mapNotNull null,
+                    author = node.user?.name?.takeIf { it.isNotBlank() } ?: return@mapNotNull null,
+                    avatar = node.user.avatar?.large ?: node.user.avatar?.medium,
+                    score = node.score?.takeIf { it in 1..100 },
+                    summary = summary,
+                    body = body,
+                )
+            }
 
     /**
      * One [MetaVideo] per AniList episode, enriched from ani.zip where it has a matching entry.

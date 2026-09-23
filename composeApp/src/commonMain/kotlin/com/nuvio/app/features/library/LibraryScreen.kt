@@ -40,10 +40,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
+import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.GridView
+import androidx.compose.material.icons.automirrored.rounded.ViewList
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
@@ -101,6 +103,7 @@ import com.nuvio.app.features.home.components.HomePosterCard
 import com.nuvio.app.features.home.components.HomeSkeletonRow
 import com.nuvio.app.features.home.components.posterGridColumnCountForWidth
 import com.nuvio.app.features.profiles.ProfileRepository
+import com.nuvio.app.features.stats.StatsScreen
 import com.nuvio.app.features.tracking.TrackingRefreshIntent
 import com.nuvio.app.features.watched.WatchedRepository
 import com.nuvio.app.features.watching.application.WatchingState
@@ -154,6 +157,8 @@ fun LibraryScreen(
     var observedOfflineState by remember { mutableStateOf(false) }
     var sourceModeName by rememberSaveable { mutableStateOf(LibraryViewMode.Saved.name) }
     var showSchedule by rememberSaveable { mutableStateOf(false) }
+    var showAniListLists by rememberSaveable { mutableStateOf(false) }
+    var showStats by rememberSaveable { mutableStateOf(false) }
     val sourceMode = remember(sourceModeName) {
         runCatching { LibraryViewMode.valueOf(sourceModeName) }.getOrDefault(LibraryViewMode.Saved)
     }
@@ -289,6 +294,24 @@ fun LibraryScreen(
         return
     }
 
+    if (showAniListLists) {
+        AniListListsScreen(
+            onBack = { showAniListLists = false },
+            onPosterClick = { preview -> onAniListPosterClick?.invoke(preview) },
+            onPosterLongClick = onAniListPosterLongClick,
+            modifier = modifier.fillMaxSize(),
+        )
+        return
+    }
+
+    if (showStats) {
+        StatsScreen(
+            onBack = { showStats = false },
+            modifier = modifier.fillMaxSize(),
+        )
+        return
+    }
+
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val gridColumns = remember(maxWidth) { posterGridColumnCountForWidth(maxWidth) }
 
@@ -331,19 +354,19 @@ fun LibraryScreen(
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
-                                aniListAuth.avatarUrl?.takeIf { it.isNotBlank() }?.let { avatar ->
-                                    AsyncImage(
-                                        model = avatar,
-                                        contentDescription = aniListAuth.username,
-                                        modifier = Modifier
-                                            .align(Alignment.CenterVertically)
-                                            .size(36.dp)
-                                            .clip(CircleShape),
-                                        contentScale = ContentScale.Crop,
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                }
-                                if (sourceMode == LibraryViewMode.Saved) {
+                                // The view button: in AniList mode it opens the full lists browser;
+                                // in Saved mode it keeps toggling rail/grid layout.
+                                if (sourceMode == LibraryViewMode.Saved &&
+                                    uiState.sourceMode == LibrarySourceMode.ANILIST
+                                ) {
+                                    IconButton(onClick = { showAniListLists = true }) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Rounded.ViewList,
+                                            contentDescription = stringResource(Res.string.anilist_lists_title),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                } else if (sourceMode == LibraryViewMode.Saved) {
                                     val targetLayout = if (displaySettings.layoutMode == LibraryLayoutMode.HORIZONTAL) {
                                         LibraryLayoutMode.VERTICAL
                                     } else {
@@ -373,6 +396,31 @@ fun LibraryScreen(
                                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                             )
                                         }
+                                    }
+                                }
+                                // Profile pfp opens the stats screen. Falls back to an icon button so
+                                // stats stay reachable even without a connected AniList avatar.
+                                Spacer(modifier = Modifier.width(8.dp))
+                                val avatar = aniListAuth.avatarUrl?.takeIf { it.isNotBlank() }
+                                if (avatar != null) {
+                                    AsyncImage(
+                                        model = avatar,
+                                        contentDescription = aniListAuth.username
+                                            ?: stringResource(Res.string.stats_open),
+                                        modifier = Modifier
+                                            .align(Alignment.CenterVertically)
+                                            .size(36.dp)
+                                            .clip(CircleShape)
+                                            .clickable { showStats = true },
+                                        contentScale = ContentScale.Crop,
+                                    )
+                                } else {
+                                    IconButton(onClick = { showStats = true }) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.AccountCircle,
+                                            contentDescription = stringResource(Res.string.stats_open),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
                                     }
                                 }
                             },

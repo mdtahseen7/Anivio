@@ -71,15 +71,22 @@ internal actual object EpisodeReleaseNotificationPlatform {
         val scheduledIds = mutableListOf<String>()
 
         requests.forEach { request ->
-            val dateComponents = buildDateComponents(request.releaseDateIso) ?: return@forEach
-            val scheduledDate = NSCalendar.currentCalendar.dateFromComponents(dateComponents) ?: return@forEach
-            if (scheduledDate.timeIntervalSince1970 <= NSDate().timeIntervalSince1970) return@forEach
-
+            val nowEpochSec = NSDate().timeIntervalSince1970
             val content = buildNotificationContent(request)
-            val trigger = UNCalendarNotificationTrigger.triggerWithDateMatchingComponents(
-                dateComponents = dateComponents,
-                repeats = false,
-            )
+
+            val trigger = if (request.airingAtEpochMs != null) {
+                val intervalSec = (request.airingAtEpochMs / 1000.0) - nowEpochSec
+                if (intervalSec <= 0.0) return@forEach
+                UNTimeIntervalNotificationTrigger.triggerWithTimeInterval(intervalSec, repeats = false)
+            } else {
+                val dateComponents = buildDateComponents(request.releaseDateIso) ?: return@forEach
+                val scheduledDate = NSCalendar.currentCalendar.dateFromComponents(dateComponents) ?: return@forEach
+                if (scheduledDate.timeIntervalSince1970 <= nowEpochSec) return@forEach
+                UNCalendarNotificationTrigger.triggerWithDateMatchingComponents(
+                    dateComponents = dateComponents,
+                    repeats = false,
+                )
+            }
             val notificationRequest = UNNotificationRequest.requestWithIdentifier(
                 identifier = request.requestId,
                 content = content,

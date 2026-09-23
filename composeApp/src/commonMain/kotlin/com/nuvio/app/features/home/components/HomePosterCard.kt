@@ -31,6 +31,7 @@ fun HomePosterCard(
         bottomLeftLogoUrl = if (isLandscapeMode) item.logo else null,
         bottomLeftText = if (isLandscapeMode && item.logo.isNullOrBlank() && !posterCardStyle.hideLabelsEnabled) item.name else null,
         isWatched = isWatched,
+        airingStatus = item.airingStatus,
         onClick = onClick,
         onLongClick = onLongClick,
     )

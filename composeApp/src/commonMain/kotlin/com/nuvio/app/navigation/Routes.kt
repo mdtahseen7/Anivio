@@ -130,6 +130,9 @@ data class FolderDetailRoute(
 ) : AppRoute
 
 @Serializable
+data class AniListNotificationsRoute(override val title: String = "") : AppRoute
+
+@Serializable
 data class StreamRoute(
     val launchId: Long,
     override val title: String = "",

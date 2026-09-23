@@ -136,7 +136,6 @@ actual object PlayerSettingsStorage {
         skipIntroEnabledKey,
         animeSkipEnabledKey,
         animeSkipClientIdKey,
-        seekForwardSecondsKey,
         streamAutoPlayNextEpisodeEnabledKey,
         streamAutoPlayNextEpisodeFallbackEnabledKey,
         streamAutoPlayPreferBingeGroupKey,

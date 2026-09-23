@@ -154,6 +154,7 @@ object DownloadsRepository {
             sourceUrl = sourceUrl,
             nowEpochMs = now,
         )
+        val effectiveHeaders = mergeDownloadHeaders(stream.behaviorHints.proxyHeaders?.request)
 
         val item = DownloadItem(
             id = downloadId,
@@ -174,7 +175,7 @@ object DownloadsRepository {
             providerName = stream.addonName,
             providerAddonId = stream.addonId,
             sourceUrl = sourceUrl,
-            sourceHeaders = sanitizeRequestHeaders(stream.behaviorHints.proxyHeaders?.request),
+            sourceHeaders = sanitizeRequestHeaders(effectiveHeaders),
             sourceResponseHeaders = sanitizeResponseHeaders(stream.behaviorHints.proxyHeaders?.response),
             localFileUri = null,
             fileName = fileName,
@@ -514,12 +515,13 @@ private fun buildFileName(
     }
 
     val extension = sourceUrl.fileExtensionFromUrl()
+    val effectiveExtension = if (extension == "m3u8") "mp4" else extension
     return buildString {
         append(baseTitle.sanitizeFileName().ifBlank { "download" }.take(92))
         append('_')
         append(nowEpochMs.toString(36))
         append('.')
-        append(extension)
+        append(effectiveExtension)
     }
 }
 
@@ -542,7 +544,6 @@ private fun String.fileExtensionFromUrl(): String {
 private fun String.isSupportedDownloadUrl(): Boolean {
     val normalized = trim().lowercase()
     if (normalized.startsWith("magnet:")) return false
-    if (normalized.endsWith(".m3u8") || normalized.contains(".m3u8?")) return false
     if (normalized.endsWith(".mpd") || normalized.contains(".mpd?")) return false
     if (normalized.endsWith(".torrent") || normalized.contains(".torrent?")) return false
     return normalized.startsWith("http://") || normalized.startsWith("https://")

@@ -13,6 +13,46 @@ var ANIKOTO_BASE = 'https://anikototv.to';
 var ANIZIP_ENDPOINT = 'https://api.ani.zip/mappings';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
+function getProxyUrl(targetUrl, referer) {
+    if (!targetUrl) return '';
+    var base = (typeof SCRAPER_SETTINGS !== 'undefined' && SCRAPER_SETTINGS && SCRAPER_SETTINGS.backend_url)
+        ? String(SCRAPER_SETTINGS.backend_url).replace(/\/+$/, '')
+        : 'https://api.luna-stream.me';
+    return base + '/proxy?url=' + encodeURIComponent(targetUrl) + (referer ? ('&referer=' + encodeURIComponent(referer)) : '');
+}
+
+var MEGAPLAY_KEY_STR = 'i?LMTAx0Q6,:}50U';
+var MEGAPLAY_IV_STR  = "W0;27ToaUpl_P%'c";
+
+async function decryptEnc(enc) {
+    if (!enc || typeof crypto === 'undefined' || !crypto.subtle) return null;
+    try {
+        var encoder = new TextEncoder();
+        var keyBytes = new Uint8Array(32);
+        var rawKey = encoder.encode(MEGAPLAY_KEY_STR);
+        keyBytes.set(rawKey);
+        var iv = encoder.encode(MEGAPLAY_IV_STR).slice(0, 16);
+
+        var b64 = enc.replace(/-/g, '+').replace(/_/g, '/');
+        while (b64.length % 4) b64 += '=';
+        var binStr = typeof atob === 'function' ? atob(b64) : '';
+        var ciphertext = new Uint8Array(binStr.length);
+        for (var i = 0; i < binStr.length; i++) {
+            ciphertext[i] = binStr.charCodeAt(i);
+        }
+
+        var cryptoKey = await crypto.subtle.importKey(
+            'raw', keyBytes, { name: 'AES-CBC' }, false, ['decrypt']
+        );
+        var decrypted = await crypto.subtle.decrypt(
+            { name: 'AES-CBC', iv: iv }, cryptoKey, ciphertext
+        );
+        return new TextDecoder().decode(decrypted);
+    } catch (e) {
+        return null;
+    }
+}
+
 function classifyId(rawId) {
     var value = String(rawId == null ? '' : rawId).trim();
     if (!value) return { kind: 'unknown', id: '' };
@@ -271,8 +311,19 @@ async function getStreams(tmdbId, mediaType, season, episode) {
                     });
                     if (!srcRes.ok) continue;
                     var srcData = await srcRes.json();
-                    var m3u8 = srcData && srcData.sources && srcData.sources.file ? srcData.sources.file : null;
-                    if (!m3u8 && Array.isArray(srcData && srcData.sources) && srcData.sources[0]) {
+                    var m3u8 = null;
+                    if (srcData && srcData.enc) {
+                        try {
+                            var dec = await decryptEnc(srcData.enc);
+                            if (dec) {
+                                var parsed = JSON.parse(dec);
+                                m3u8 = parsed.file || parsed.url || null;
+                            }
+                        } catch (e) {}
+                    }
+                    if (!m3u8 && srcData && srcData.sources && srcData.sources.file) {
+                        m3u8 = srcData.sources.file;
+                    } else if (!m3u8 && Array.isArray(srcData && srcData.sources) && srcData.sources[0]) {
                         m3u8 = srcData.sources[0].file || srcData.sources[0].url || null;
                     }
                     if (!m3u8 || seenUrls.has(m3u8)) continue;
@@ -297,7 +348,7 @@ async function getStreams(tmdbId, mediaType, season, episode) {
                             else if (cleanLabel.indexOf('arabic') !== -1 || cleanLabel.indexOf('ara') !== -1) langCode = 'ar';
 
                             subtitles.push({
-                                url: tr.file,
+                                url: getProxyUrl(tr.file, 'https://megaplay.buzz/'),
                                 language: langCode,
                                 name: langLabel,
                                 headers: {

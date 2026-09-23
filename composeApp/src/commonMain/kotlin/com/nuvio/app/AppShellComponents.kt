@@ -87,6 +87,7 @@ internal data class AppTabRequests(
 
 internal data class AppTabActions(
     val onCatalogClick: ((HomeCatalogSection) -> Unit)? = null,
+    val onNotificationsClick: (() -> Unit)? = null,
     val onPosterClick: ((MetaPreview) -> Unit)? = null,
     val onPosterLongClick: ((MetaPreview) -> Unit)? = null,
     val onLibraryPosterClick: ((LibraryItem) -> Unit)? = null,
@@ -135,6 +136,7 @@ internal fun AppTabHost(
                             modifier = Modifier.fillMaxSize(),
                             animateCollectionGifs = state.animateHomeCollectionGifs,
                             scrollToTopRequests = requests.homeScrollToTopRequests,
+                            onNotificationsClick = actions.onNotificationsClick,
                             onCatalogClick = actions.onCatalogClick,
                             onPosterClick = actions.onPosterClick,
                             onPosterLongClick = actions.onPosterLongClick,

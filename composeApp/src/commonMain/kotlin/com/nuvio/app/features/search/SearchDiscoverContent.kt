@@ -144,7 +144,7 @@ private fun DiscoverSectionHeader(modifier: Modifier = Modifier) {
     Text(
         text = stringResource(Res.string.compose_search_discover_title),
         modifier = modifier,
-        style = MaterialTheme.typography.displaySmall,
+        style = MaterialTheme.typography.headlineMedium,
         color = MaterialTheme.colorScheme.onBackground,
     )
 }

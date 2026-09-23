@@ -105,6 +105,7 @@ import nuvio.composeapp.generated.resources.settings_poster_card_width
 import nuvio.composeapp.generated.resources.settings_poster_custom
 import nuvio.composeapp.generated.resources.settings_poster_description
 import nuvio.composeapp.generated.resources.settings_poster_hide_labels
+import nuvio.composeapp.generated.resources.settings_poster_airing_status_dots
 import nuvio.composeapp.generated.resources.settings_poster_landscape_mode
 import nuvio.composeapp.generated.resources.settings_poster_live_preview
 import nuvio.composeapp.generated.resources.settings_poster_option_with_value
@@ -146,10 +147,12 @@ internal fun LazyListScope.posterCustomizationSettingsContent(
                     cornerRadiusDp = uiState.cornerRadiusDp,
                     catalogLandscapeModeEnabled = uiState.catalogLandscapeModeEnabled,
                     hideLabelsEnabled = uiState.hideLabelsEnabled,
+                    showAiringStatusDots = uiState.showAiringStatusDots,
                     onWidthSelected = PosterCardStyleRepository::setWidthDp,
                     onCornerRadiusSelected = PosterCardStyleRepository::setCornerRadiusDp,
                     onCatalogLandscapeModeChange = PosterCardStyleRepository::setCatalogLandscapeModeEnabled,
                     onHideLabelsChange = PosterCardStyleRepository::setHideLabelsEnabled,
+                    onShowAiringStatusDotsChange = PosterCardStyleRepository::setShowAiringStatusDots,
                 )
             }
         }
@@ -610,10 +613,12 @@ private fun PosterCardStyleControls(
     cornerRadiusDp: Int,
     catalogLandscapeModeEnabled: Boolean,
     hideLabelsEnabled: Boolean,
+    showAiringStatusDots: Boolean,
     onWidthSelected: (Int) -> Unit,
     onCornerRadiusSelected: (Int) -> Unit,
     onCatalogLandscapeModeChange: (Boolean) -> Unit,
     onHideLabelsChange: (Boolean) -> Unit,
+    onShowAiringStatusDotsChange: (Boolean) -> Unit,
 ) {
     val widthOptions = listOf(
         PresetOption(stringResource(Res.string.settings_poster_width_compact), 104),
@@ -666,6 +671,11 @@ private fun PosterCardStyleControls(
             title = stringResource(Res.string.settings_poster_hide_labels),
             checked = hideLabelsEnabled,
             onCheckedChange = onHideLabelsChange,
+        )
+        PosterToggleRow(
+            title = stringResource(Res.string.settings_poster_airing_status_dots),
+            checked = showAiringStatusDots,
+            onCheckedChange = onShowAiringStatusDotsChange,
         )
     }
 }

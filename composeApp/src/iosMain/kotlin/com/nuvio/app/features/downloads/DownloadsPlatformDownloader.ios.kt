@@ -2,6 +2,8 @@ package com.nuvio.app.features.downloads
 
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.CPointer
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.usePinned
 import kotlinx.cinterop.convert
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -40,11 +42,17 @@ import platform.Foundation.setValue
 import platform.UIKit.UIApplication
 import platform.Foundation.timeIntervalSince1970
 import platform.darwin.NSObject
+import platform.darwin.dispatch_semaphore_create
+import platform.darwin.dispatch_semaphore_signal
+import platform.darwin.dispatch_semaphore_wait
+import platform.darwin.DISPATCH_TIME_FOREVER
+import platform.Foundation.NSURLSession
 import platform.posix.FILE
 import platform.posix.fclose
 import platform.posix.fflush
 import platform.posix.fopen
 import platform.posix.fwrite
+import platform.posix.memcpy
 
 private const val DOWNLOAD_REQUEST_TIMEOUT_SECONDS = 60.0
 private const val DOWNLOAD_RESOURCE_TIMEOUT_SECONDS = 24.0 * 60.0 * 60.0
@@ -80,13 +88,53 @@ internal actual object DownloadsPlatformDownloader {
             val downloadsDirectory = downloadsDirectoryPath()
             val destinationPath = "$downloadsDirectory/${request.destinationFileName}"
             val tempPath = "$downloadsDirectory/${request.destinationFileName}.part"
+            val effectiveHeaders = request.sourceHeaders.withDefaultDownloadHeaders()
 
             try {
+                // HLS playlists are downloaded by segment and concatenated into a playable file.
+                if (request.sourceUrl.isHlsPlaylistUrl()) {
+                    try {
+                        removePathIfExists(tempPath)
+                        DownloadsHlsPipeline.run(
+                            playlistUrl = request.sourceUrl,
+                            headers = effectiveHeaders,
+                            onProgress = onProgress,
+                            appendChunk = { chunk ->
+                                fopen(tempPath, "ab")?.let { file ->
+                                    fwrite(chunk.refTo(0), 1u, chunk.size.toULong(), file)
+                                    fclose(file)
+                                } ?: error(runBlocking { getString(Res.string.downloads_error_write_partial_file_failed) })
+                            },
+                            isCancelled = { !job.isActive },
+                        )
+                        if ((fileSizeOrNull(tempPath) ?: 0L) <= 0L) {
+                            error(runBlocking { getString(Res.string.network_empty_response_body) })
+                        }
+                        removePathIfExists(destinationPath)
+                        val moved = NSFileManager.defaultManager.moveItemAtPath(
+                            srcPath = tempPath,
+                            toPath = destinationPath,
+                            error = null,
+                        )
+                        if (!moved) {
+                            error(runBlocking { getString(Res.string.downloads_error_finalize_file_failed) })
+                        }
+                        val localFileUri = NSURL.fileURLWithPath(destinationPath).absoluteString ?: "file://$destinationPath"
+                        onSuccess(localFileUri, fileSizeOrNull(destinationPath))
+                    } catch (error: Throwable) {
+                        if (error is CancellationException) throw error
+                        removePathIfExists(tempPath)
+                        onFailure(error.message ?: runBlocking { getString(Res.string.download_failed) })
+                    }
+                    return@launch
+                }
+
                 var resumeFromBytes = fileSizeOrNull(tempPath)?.coerceAtLeast(0L) ?: 0L
 
                 var attemptedRangeRequest = resumeFromBytes > 0L
                 var result = performDownloadRequest(
                     request = request,
+                    requestHeaders = effectiveHeaders,
                     rangeStart = if (attemptedRangeRequest) resumeFromBytes else null,
                     resumeFromBytes = resumeFromBytes,
                     tempPath = tempPath,
@@ -100,6 +148,23 @@ internal actual object DownloadsPlatformDownloader {
                     attemptedRangeRequest = false
                     result = performDownloadRequest(
                         request = request,
+                        requestHeaders = effectiveHeaders,
+                        rangeStart = null,
+                        resumeFromBytes = 0L,
+                        tempPath = tempPath,
+                        handle = handle,
+                        onProgress = onProgress,
+                    )
+                }
+
+                if (attemptedRangeRequest && result.statusCode == 403) {
+                    // Some CDNs reject Range requests outright; retry the full body without it.
+                    removePathIfExists(tempPath)
+                    resumeFromBytes = 0L
+                    attemptedRangeRequest = false
+                    result = performDownloadRequest(
+                        request = request,
+                        requestHeaders = effectiveHeaders,
                         rangeStart = null,
                         resumeFromBytes = 0L,
                         tempPath = tempPath,
@@ -405,6 +470,7 @@ private fun removePathIfExists(path: String): Boolean {
 @OptIn(ExperimentalForeignApi::class)
 private suspend fun performDownloadRequest(
     request: DownloadPlatformRequest,
+    requestHeaders: Map<String, String>,
     rangeStart: Long?,
     resumeFromBytes: Long,
     tempPath: String,
@@ -421,7 +487,7 @@ private suspend fun performDownloadRequest(
     nativeRequest.setAllowsCellularAccess(true)
     nativeRequest.setAllowsExpensiveNetworkAccess(true)
     nativeRequest.setAllowsConstrainedNetworkAccess(true)
-    request.sourceHeaders.forEach { (key, value) ->
+    requestHeaders.forEach { (key, value) ->
         nativeRequest.setValue(value, forHTTPHeaderField = key)
     }
     if (rangeStart != null && rangeStart > 0L) {
@@ -504,4 +570,56 @@ private fun parseContentRangeTotal(headerValue: String?): Long? {
     val totalPart = value.substring(slashIndex + 1).trim()
     if (totalPart == "*") return null
     return totalPart.toLongOrNull()?.takeIf { it > 0L }
+}
+
+actual suspend fun httpDownloadText(
+    url: String,
+    headers: Map<String, String>,
+    maxBytes: Long,
+): String = decodeUtf8(httpDownloadBytes(url, headers), maxBytes)
+
+actual suspend fun httpDownloadBytes(
+    url: String,
+    headers: Map<String, String>,
+): ByteArray {
+    val nsUrl = NSURL(string = url) ?: error("Invalid download URL")
+    val nativeRequest = NSMutableURLRequest(
+        uRL = nsUrl,
+        cachePolicy = NSURLRequestReloadIgnoringLocalCacheData,
+        timeoutInterval = DOWNLOAD_REQUEST_TIMEOUT_SECONDS,
+    )
+    nativeRequest.setHTTPMethod("GET")
+    headers.forEach { (key, value) ->
+        nativeRequest.setValue(value, forHTTPHeaderField = key)
+    }
+
+    val session = NSURLSession.sharedSession
+    val semaphore = dispatch_semaphore_create(0)
+    var responseData: NSData? = null
+    var responseError: NSError? = null
+
+    session.dataTaskWithRequest(nativeRequest) { data, _, error ->
+        responseData = data
+        responseError = error
+        dispatch_semaphore_signal(semaphore)
+    }.resume()
+
+    dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER)
+
+    responseError?.let { error ->
+        error(error.localizedDescription)
+    }
+    val data = responseData ?: error("Empty download response")
+    return ByteArray(data.length.toInt()).apply {
+        usePinned { pinned ->
+            memcpy(pinned.addressOf(0), data.bytes, data.length)
+        }
+    }
+}
+
+private fun decodeUtf8(bytes: ByteArray, maxBytes: Long): String {
+    if (bytes.size > maxBytes) {
+        error("Downloaded playlist exceeds the size limit")
+    }
+    return bytes.decodeToString()
 }

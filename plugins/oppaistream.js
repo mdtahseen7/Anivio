@@ -14,6 +14,14 @@ var ANIZIP_ENDPOINT = 'https://api.ani.zip/mappings';
 var ANILIST_GRAPHQL = 'https://graphql.anilist.co';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
+function getProxyUrl(targetUrl, referer) {
+    if (!targetUrl) return '';
+    var base = (typeof SCRAPER_SETTINGS !== 'undefined' && SCRAPER_SETTINGS && SCRAPER_SETTINGS.backend_url)
+        ? String(SCRAPER_SETTINGS.backend_url).replace(/\/+$/, '')
+        : 'https://api.luna-stream.me';
+    return base + '/proxy?url=' + encodeURIComponent(targetUrl) + (referer ? ('&referer=' + encodeURIComponent(referer)) : '');
+}
+
 function classifyId(rawId) {
     var value = String(rawId == null ? '' : rawId).trim();
     if (!value) return { kind: 'unknown', id: '' };
@@ -220,6 +228,19 @@ async function getStreams(tmdbId, mediaType, season, episode) {
                 if (vText && vText.indexOf('Wait a moment') === -1) {
                     pageHtml = vText;
                     var cheerioObj = (typeof cheerio !== 'undefined' ? cheerio : require('cheerio')).load(pageHtml);
+                    cheerioObj('track[kind="subtitles"]').each(function (_, el) {
+                        var $el = cheerioObj(el);
+                        var src = $el.attr('src');
+                        var label = $el.attr('label') || 'English';
+                        if (src) {
+                            subtitles.push({
+                                url: src.indexOf('http') === 0 ? src : (BASE_URL + src),
+                                language: label.toLowerCase().slice(0, 2),
+                                name: label,
+                                headers: { 'User-Agent': UA, 'Referer': BASE_URL + '/' }
+                            });
+                        }
+                    });
                     var primarySrc = cheerioObj('video source').attr('src') || cheerioObj('source').attr('src');
                     if (primarySrc) {
                         streams.push({
@@ -232,7 +253,7 @@ async function getStreams(tmdbId, mediaType, season, episode) {
                                 'User-Agent': UA,
                                 'Referer': BASE_URL + '/'
                             },
-                            subtitles: []
+                            subtitles: subtitles
                         });
                     }
 
@@ -253,7 +274,7 @@ async function getStreams(tmdbId, mediaType, season, episode) {
                                     'User-Agent': UA,
                                     'Referer': BASE_URL + '/'
                                 },
-                                subtitles: []
+                                subtitles: subtitles
                             });
                         }
                     }
@@ -291,7 +312,7 @@ async function getStreams(tmdbId, mediaType, season, episode) {
                         if (src) {
                             var subUrl = src.indexOf('http') === 0 ? src : (BASE_URL + src);
                             subtitles.push({
-                                url: subUrl,
+                                url: getProxyUrl(subUrl, BASE_URL + '/'),
                                 language: label.toLowerCase().slice(0, 2),
                                 name: label,
                                 headers: {
@@ -330,7 +351,7 @@ async function getStreams(tmdbId, mediaType, season, episode) {
         // Fallback: If Cloudflare blocks direct watch page, query Luna Backend
         if (streams.length === 0) {
             var backendUrl = (typeof SCRAPER_SETTINGS !== 'undefined' && SCRAPER_SETTINGS && SCRAPER_SETTINGS.backend_url)
-                || 'https://luna-backend.mdtahseen7378.workers.dev';
+                || 'https://api.luna-stream.me';
             if (backendUrl) {
                 try {
                     var bRes = await fetch(backendUrl + '/hentai/oppaistream/sources?episodeId=' + encodeURIComponent(candidate.slug), {
@@ -338,6 +359,24 @@ async function getStreams(tmdbId, mediaType, season, episode) {
                     });
                     if (bRes.ok) {
                         var bData = await bRes.json();
+                        var fallbackSubtitles = [];
+                        if (bData && bData.data && Array.isArray(bData.data.subtitles)) {
+                            for (var s = 0; s < bData.data.subtitles.length; s++) {
+                                var fSub = bData.data.subtitles[s];
+                                if (fSub && fSub.url) {
+                                    var fSubUrl = fSub.url.indexOf('http') === 0 ? fSub.url : (BASE_URL + fSub.url);
+                                    fallbackSubtitles.push({
+                                        language: (fSub.language || 'en').toLowerCase().slice(0, 2),
+                                        name: fSub.name || fSub.language || 'English',
+                                        url: getProxyUrl(fSubUrl, BASE_URL + '/'),
+                                        headers: {
+                                            'User-Agent': UA,
+                                            'Referer': BASE_URL + '/'
+                                        }
+                                    });
+                                }
+                            }
+                        }
                         if (bData && bData.data && Array.isArray(bData.data.sources)) {
                             for (var b = 0; b < bData.data.sources.length; b++) {
                                 var sObj = bData.data.sources[b];
@@ -352,7 +391,7 @@ async function getStreams(tmdbId, mediaType, season, episode) {
                                             'User-Agent': UA,
                                             'Referer': BASE_URL + '/'
                                         },
-                                        subtitles: subtitles
+                                        subtitles: fallbackSubtitles.length > 0 ? fallbackSubtitles : subtitles
                                     });
                                 }
                             }

@@ -28,4 +28,17 @@ internal actual object SentrySettingsStorage {
             ?.putBoolean(enabledKey, enabled)
             ?.apply()
     }
+
+    actual fun loadPayload(): String? =
+        preferences?.let { prefs ->
+            if (prefs.contains(enabledKey)) prefs.getBoolean(enabledKey, true).toString() else null
+        }
+
+    actual fun savePayload(payload: String) {
+        val enabled = payload.trim().equals("true", ignoreCase = true)
+        preferences
+            ?.edit()
+            ?.putBoolean(enabledKey, enabled)
+            ?.apply()
+    }
 }

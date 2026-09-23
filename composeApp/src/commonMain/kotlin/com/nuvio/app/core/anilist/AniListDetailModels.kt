@@ -35,7 +35,42 @@ data class AniListMediaDetail(
     val staff: AniListStaffConnection? = null,
     val externalLinks: List<AniListExternalLink> = emptyList(),
     val recommendations: AniListRecommendationConnection? = null,
+    val relations: AniListRelationConnection? = null,
+    val reviews: AniListReviewConnection? = null,
     val airingSchedule: AniListAiringScheduleConnection? = null,
+)
+
+@Serializable
+data class AniListReviewConnection(val nodes: List<AniListReviewNode> = emptyList())
+
+@Serializable
+data class AniListReviewNode(
+    val id: Int? = null,
+    /** One-line teaser the reviewer wrote. */
+    val summary: String? = null,
+    /** Full review text (markdown). */
+    val body: String? = null,
+    /** Reviewer's own score, 0–100. */
+    val score: Int? = null,
+    /** Users who marked the review helpful. */
+    val rating: Int? = null,
+    val user: AniListReviewUser? = null,
+)
+
+@Serializable
+data class AniListReviewUser(
+    val name: String? = null,
+    val avatar: AniListImage? = null,
+)
+
+@Serializable
+data class AniListRelationConnection(val edges: List<AniListRelationEdge> = emptyList())
+
+@Serializable
+data class AniListRelationEdge(
+    /** PREQUEL, SEQUEL, SIDE_STORY, PARENT, ADAPTATION, … */
+    val relationType: String? = null,
+    val node: AniListMedia? = null,
 )
 
 @Serializable
@@ -183,6 +218,22 @@ const val ANILIST_MEDIA_DETAIL_FIELDS: String = """
         nodes {
             rating
             mediaRecommendation { $ANILIST_MEDIA_FIELDS }
+        }
+    }
+    relations {
+        edges {
+            relationType
+            node { $ANILIST_MEDIA_FIELDS }
+        }
+    }
+    reviews(sort: RATING_DESC, perPage: 10) {
+        nodes {
+            id
+            summary
+            body(asHtml: false)
+            score
+            rating
+            user { name avatar { large medium } }
         }
     }
     airingSchedule(notYetAired: true, perPage: 50) {

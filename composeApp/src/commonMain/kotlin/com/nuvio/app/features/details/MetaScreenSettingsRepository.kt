@@ -22,6 +22,7 @@ enum class MetaScreenSectionKey {
     TRAILERS,
     EPISODES,
     DETAILS,
+    RELATED,
     COLLECTION,
     MORE_LIKE_THIS,
     ;
@@ -175,6 +176,11 @@ object MetaScreenSettingsRepository {
             key = MetaScreenSectionKey.DETAILS,
             titleRes = Res.string.meta_section_details_title,
             descriptionRes = Res.string.meta_section_details_description,
+        ),
+        MetaScreenSectionDefinition(
+            key = MetaScreenSectionKey.RELATED,
+            titleRes = Res.string.meta_section_related_title,
+            descriptionRes = Res.string.meta_section_related_description,
         ),
         MetaScreenSectionDefinition(
             key = MetaScreenSectionKey.COLLECTION,

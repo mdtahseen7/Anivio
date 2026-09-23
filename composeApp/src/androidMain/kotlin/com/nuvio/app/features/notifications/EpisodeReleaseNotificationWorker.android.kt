@@ -14,6 +14,8 @@ class EpisodeReleaseNotificationWorker(
 ) : CoroutineWorker(appContext, workerParameters) {
 
     override suspend fun doWork(): Result {
+        EpisodeReleaseNotificationPlatform.initialize(applicationContext)
+
         if (!EpisodeReleaseNotificationPlatform.notificationsAuthorized()) {
             return Result.success()
         }

@@ -212,6 +212,14 @@ async function fetchPlayerData(playerUrl) {
             return 'https://' + clean;
         }
 
+        function getProxyUrl(targetUrl, referer) {
+            if (!targetUrl) return '';
+            var base = (typeof SCRAPER_SETTINGS !== 'undefined' && SCRAPER_SETTINGS && SCRAPER_SETTINGS.backend_url)
+                ? String(SCRAPER_SETTINGS.backend_url).replace(/\/+$/, '')
+                : 'https://api.luna-stream.me';
+            return base + '/proxy?url=' + encodeURIComponent(targetUrl) + (referer ? ('&referer=' + encodeURIComponent(referer)) : '');
+        }
+
         var manifest = normalizeCdnUrl(props.manifest);
         var type = props.type || null;
         var subtitles = [];
@@ -225,7 +233,7 @@ async function fetchPlayerData(playerUrl) {
                         subtitles.push({
                             language: (sub.language || 'en').toLowerCase().slice(0, 2),
                             name: sub.name || sub.language || 'English',
-                            url: subSrc,
+                            url: getProxyUrl(subSrc, 'https://krussdomi.com/'),
                             headers: { 'Referer': 'https://krussdomi.com/' }
                         });
                     }

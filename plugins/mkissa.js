@@ -102,6 +102,20 @@ async function fetchAudioStreams(apiBase, anilistId, targetEp, audio) {
             return [];
         }
 
+        var subtitles = [];
+        if (Array.isArray(data.subtitles)) {
+            for (var s = 0; s < data.subtitles.length; s++) {
+                var sub = data.subtitles[s];
+                if (sub && sub.url) {
+                    subtitles.push({
+                        url: sub.url,
+                        language: sub.lang || sub.language || 'en',
+                        name: sub.label || sub.lang || 'English'
+                    });
+                }
+            }
+        }
+
         var results = [];
         for (var i = 0; i < data.sources.length; i++) {
             var src = data.sources[i];
@@ -126,7 +140,7 @@ async function fetchAudioStreams(apiBase, anilistId, targetEp, audio) {
                 quality: 'auto',
                 type: mediaType,
                 headers: headers,
-                subtitles: []
+                subtitles: subtitles
             });
         }
 

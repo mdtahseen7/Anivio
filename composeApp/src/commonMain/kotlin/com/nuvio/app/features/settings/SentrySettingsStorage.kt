@@ -7,4 +7,6 @@ internal expect object SentrySettingsPlatform {
 internal expect object SentrySettingsStorage {
     fun loadEnabled(): Boolean?
     fun saveEnabled(enabled: Boolean)
+    fun loadPayload(): String?
+    fun savePayload(payload: String)
 }

@@ -92,6 +92,46 @@ async function resolveAnilistId(rawId) {
     return null;
 }
 
+var MEGAPLAY_KEY_STR = 'i?LMTAx0Q6,:}50U';
+var MEGAPLAY_IV_STR  = "W0;27ToaUpl_P%'c";
+
+async function decryptEnc(enc) {
+    if (!enc || typeof crypto === 'undefined' || !crypto.subtle) return null;
+    try {
+        var encoder = new TextEncoder();
+        var keyBytes = new Uint8Array(32);
+        var rawKey = encoder.encode(MEGAPLAY_KEY_STR);
+        keyBytes.set(rawKey);
+        var iv = encoder.encode(MEGAPLAY_IV_STR).slice(0, 16);
+
+        var b64 = enc.replace(/-/g, '+').replace(/_/g, '/');
+        while (b64.length % 4) b64 += '=';
+        var binStr = typeof atob === 'function' ? atob(b64) : '';
+        var ciphertext = new Uint8Array(binStr.length);
+        for (var i = 0; i < binStr.length; i++) {
+            ciphertext[i] = binStr.charCodeAt(i);
+        }
+
+        var cryptoKey = await crypto.subtle.importKey(
+            'raw', keyBytes, { name: 'AES-CBC' }, false, ['decrypt']
+        );
+        var decrypted = await crypto.subtle.decrypt(
+            { name: 'AES-CBC', iv: iv }, cryptoKey, ciphertext
+        );
+        return new TextDecoder().decode(decrypted);
+    } catch (e) {
+        return null;
+    }
+}
+
+function getProxyUrl(targetUrl, referer) {
+    if (!targetUrl) return '';
+    var base = (typeof SCRAPER_SETTINGS !== 'undefined' && SCRAPER_SETTINGS && SCRAPER_SETTINGS.backend_url)
+        ? String(SCRAPER_SETTINGS.backend_url).replace(/\/+$/, '')
+        : 'https://api.luna-stream.me';
+    return base + '/proxy?url=' + encodeURIComponent(targetUrl) + (referer ? ('&referer=' + encodeURIComponent(referer)) : '');
+}
+
 async function fetchSourceForType(anilistId, targetEp, type) {
     var embedUrl = MEGAPLAY_BASE + '/stream/ani/' + encodeURIComponent(anilistId) + '/' + encodeURIComponent(targetEp) + '/' + type;
     try {
@@ -151,9 +191,18 @@ async function fetchSourceForType(anilistId, targetEp, type) {
         if (!srcData) return null;
 
         var m3u8Url = '';
-        if (Array.isArray(srcData.sources) && srcData.sources[0]) {
+        if (srcData.enc) {
+            try {
+                var dec = await decryptEnc(srcData.enc);
+                if (dec) {
+                    var parsed = JSON.parse(dec);
+                    m3u8Url = parsed.file || parsed.url || '';
+                }
+            } catch (e) {}
+        }
+        if (!m3u8Url && Array.isArray(srcData.sources) && srcData.sources[0]) {
             m3u8Url = srcData.sources[0].file || srcData.sources[0].url || '';
-        } else if (srcData.sources && typeof srcData.sources === 'object') {
+        } else if (!m3u8Url && srcData.sources && typeof srcData.sources === 'object') {
             m3u8Url = srcData.sources.file || srcData.sources.url || '';
         }
 
@@ -179,7 +228,7 @@ async function fetchSourceForType(anilistId, targetEp, type) {
                 else if (cleanLabel.indexOf('arabic') !== -1 || cleanLabel.indexOf('ara') !== -1) langCode = 'ar';
 
                 subtitles.push({
-                    url: tr.file,
+                    url: getProxyUrl(tr.file, MEGAPLAY_BASE + '/'),
                     language: langCode,
                     name: langLabel,
                     headers: {

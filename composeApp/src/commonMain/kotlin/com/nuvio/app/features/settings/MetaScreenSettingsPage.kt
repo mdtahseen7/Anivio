@@ -61,6 +61,8 @@ import com.nuvio.app.supportsPosterNavigationMotion
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.action_reorder
 import nuvio.composeapp.generated.resources.action_reset
+import nuvio.composeapp.generated.resources.meta_section_related_description
+import nuvio.composeapp.generated.resources.meta_section_related_title
 import nuvio.composeapp.generated.resources.settings_homescreen_hidden
 import nuvio.composeapp.generated.resources.settings_homescreen_visible
 import nuvio.composeapp.generated.resources.settings_meta_actions
@@ -611,6 +613,7 @@ private val MetaScreenSectionKey.titleRes: StringResource
         MetaScreenSectionKey.TRAILERS -> Res.string.settings_meta_trailers
         MetaScreenSectionKey.EPISODES -> Res.string.settings_meta_episodes
         MetaScreenSectionKey.DETAILS -> Res.string.settings_meta_details
+        MetaScreenSectionKey.RELATED -> Res.string.meta_section_related_title
         MetaScreenSectionKey.COLLECTION -> Res.string.settings_meta_collection
         MetaScreenSectionKey.MORE_LIKE_THIS -> Res.string.settings_meta_more_like_this
     }
@@ -625,6 +628,7 @@ private val MetaScreenSectionKey.descriptionRes: StringResource
         MetaScreenSectionKey.TRAILERS -> Res.string.settings_meta_trailers_description
         MetaScreenSectionKey.EPISODES -> Res.string.settings_meta_episodes_description
         MetaScreenSectionKey.DETAILS -> Res.string.settings_meta_details_description
+        MetaScreenSectionKey.RELATED -> Res.string.meta_section_related_description
         MetaScreenSectionKey.COLLECTION -> Res.string.settings_meta_collection_description
         MetaScreenSectionKey.MORE_LIKE_THIS -> Res.string.settings_meta_more_like_this_description
     }

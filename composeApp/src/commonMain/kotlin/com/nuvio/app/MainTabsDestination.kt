@@ -213,7 +213,10 @@ internal fun MainTabsDestination(
 
                 // Search left the bottom bar, so it lives here as a floating pill-styled button in
                 // the top-right corner, above whatever tab is showing.
-                if (!isTabletLayout && selectedTab != AppScreenTab.Search) {
+                if (!isTabletLayout &&
+                    selectedTab != AppScreenTab.Search &&
+                    selectedTab != AppScreenTab.Library
+                ) {
                     NuvioCircularGlassButton(
                         onClick = { onTabSelected(AppScreenTab.Search) },
                         hazeState = if (navBarStyleSetting != NavBarStyle.CLASSIC) navBarHazeState else null,

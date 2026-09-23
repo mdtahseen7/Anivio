@@ -56,13 +56,47 @@ internal actual object DownloadsPlatformDownloader {
             val downloadsDir = File(context.filesDir, "downloads").apply { mkdirs() }
             val destination = File(downloadsDir, request.destinationFileName)
             val tempFile = File(downloadsDir, "${request.destinationFileName}.part")
+            val effectiveHeaders = request.sourceHeaders.withDefaultDownloadHeaders()
 
             try {
+                // HLS playlists are downloaded by segment and re-muxed into a playable file.
+                if (request.sourceUrl.isHlsPlaylistUrl()) {
+                    try {
+                        DownloadsHlsPipeline.run(
+                            playlistUrl = request.sourceUrl,
+                            headers = effectiveHeaders,
+                            onProgress = onProgress,
+                            appendChunk = { chunk ->
+                                FileOutputStream(tempFile, true).use { output ->
+                                    output.write(chunk)
+                                    output.flush()
+                                }
+                            },
+                            isCancelled = { !job.isActive },
+                        )
+                        if (tempFile.length() <= 0L) {
+                            error(runBlocking { getString(Res.string.downloads_error_empty_body) })
+                        }
+                        if (destination.exists()) destination.delete()
+                        if (!tempFile.renameTo(destination)) {
+                            tempFile.copyTo(destination, overwrite = true)
+                            tempFile.delete()
+                        }
+                        val finalSize = destination.length()
+                        onSuccess(destination.toURI().toString(), finalSize)
+                    } catch (error: Throwable) {
+                        if (error is CancellationException) throw error
+                        tempFile.delete()
+                        onFailure(error.message ?: runBlocking { getString(Res.string.download_failed) })
+                    }
+                    return@launch
+                }
+
                 var resumeFromBytes = tempFile.takeIf { it.exists() }?.length()?.coerceAtLeast(0L) ?: 0L
 
                 fun buildRequest(rangeStart: Long?): Request {
                     val requestBuilder = Request.Builder().url(request.sourceUrl)
-                    request.sourceHeaders.forEach { (key, value) ->
+                    effectiveHeaders.forEach { (key, value) ->
                         requestBuilder.header(key, value)
                     }
                     if (rangeStart != null && rangeStart > 0L) {
@@ -79,6 +113,19 @@ internal actual object DownloadsPlatformDownloader {
                 )
 
                 if (attemptedRangeRequest && response.code == 416) {
+                    response.close()
+                    tempFile.delete()
+                    resumeFromBytes = 0L
+                    attemptedRangeRequest = false
+                    httpRequest = buildRequest(null)
+                    call = downloadHttpClient.newCall(httpRequest)
+                    response = call?.execute() ?: error(
+                        runBlocking { getString(Res.string.downloads_error_request_failed) },
+                    )
+                }
+
+                if (attemptedRangeRequest && response.code == 403) {
+                    // Some CDNs reject Range requests outright; retry the full body without it.
                     response.close()
                     tempFile.delete()
                     resumeFromBytes = 0L
@@ -267,4 +314,35 @@ private fun parseContentRangeTotal(headerValue: String?): Long? {
     val totalPart = value.substring(slashIndex + 1).trim()
     if (totalPart == "*") return null
     return totalPart.toLongOrNull()?.takeIf { it > 0L }
+}
+
+actual suspend fun httpDownloadText(
+    url: String,
+    headers: Map<String, String>,
+    maxBytes: Long,
+): String {
+    val bytes = httpDownloadBytes(url, headers)
+    if (bytes.size > maxBytes) {
+        error("Downloaded playlist exceeds the size limit")
+    }
+    return bytes.decodeToString()
+}
+
+actual suspend fun httpDownloadBytes(
+    url: String,
+    headers: Map<String, String>,
+): ByteArray {
+    val requestBuilder = Request.Builder().url(url)
+    headers.forEach { (key, value) ->
+        requestBuilder.header(key, value)
+    }
+    val request = requestBuilder.get().build()
+
+    downloadHttpClient.newCall(request).execute().use { response ->
+        if (!response.isSuccessful) {
+            error("HTTP ${response.code} while downloading")
+        }
+        val body = response.body ?: error("Empty download response")
+        return body.bytes()
+    }
 }

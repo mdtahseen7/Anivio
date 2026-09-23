@@ -67,6 +67,8 @@ internal fun TabletStreamsLayout(
     resumeProgressFraction: Float?,
     onStreamSelected: (stream: StreamItem, resumePositionMs: Long?, resumeProgressFraction: Float?) -> Unit,
     onStreamLongPress: (StreamItem) -> Unit,
+    onDownloadStream: (StreamItem) -> Unit,
+    downloadedVideoIds: Set<String>,
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -211,6 +213,8 @@ internal fun TabletStreamsLayout(
                             appendInstantServiceToDefaultName = appendInstantServiceToDefaultName,
                             onStreamSelected = onStreamSelected,
                             onStreamLongPress = onStreamLongPress,
+                            onDownloadStream = onDownloadStream,
+                            downloadedVideoIds = downloadedVideoIds,
                             resumePositionMs = resumePositionMs,
                             resumeProgressFraction = resumeProgressFraction,
                             modifier = Modifier.weight(1f),

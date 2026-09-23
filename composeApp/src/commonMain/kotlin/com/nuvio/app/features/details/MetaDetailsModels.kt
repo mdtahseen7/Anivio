@@ -33,6 +33,10 @@ data class MetaDetails(
     val defaultVideoId: String? = null,
     val moreLikeThis: List<MetaPreview> = emptyList(),
     val moreLikeThisSource: MoreLikeThisSource? = null,
+    /** Prequels/sequels (and other story relations) for anime, from AniList. */
+    val relatedTitles: List<MetaPreview> = emptyList(),
+    /** User reviews for anime, from AniList. */
+    val animeReviews: List<AnimeReview> = emptyList(),
     val collectionName: String? = null,
     val collectionItems: List<MetaPreview> = emptyList(),
     val trailers: List<MetaTrailer> = emptyList(),
@@ -44,6 +48,17 @@ enum class MoreLikeThisSource {
     TMDB,
     ANILIST,
 }
+
+/** A single AniList user review shown in the Comments section. */
+data class AnimeReview(
+    val id: String,
+    val author: String,
+    val avatar: String? = null,
+    /** Reviewer's score out of 100, when given. */
+    val score: Int? = null,
+    val summary: String,
+    val body: String,
+)
 
 data class MetaExternalRating(
     val source: String,

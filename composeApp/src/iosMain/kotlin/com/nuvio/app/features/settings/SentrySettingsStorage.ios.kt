@@ -21,4 +21,18 @@ internal actual object SentrySettingsStorage {
     actual fun saveEnabled(enabled: Boolean) {
         NSUserDefaults.standardUserDefaults.setBool(enabled, forKey = enabledKey)
     }
+
+    actual fun loadPayload(): String? {
+        val defaults = NSUserDefaults.standardUserDefaults
+        return if (defaults.objectForKey(enabledKey) != null) {
+            defaults.boolForKey(enabledKey).toString()
+        } else {
+            null
+        }
+    }
+
+    actual fun savePayload(payload: String) {
+        val enabled = payload.trim().equals("true", ignoreCase = true)
+        NSUserDefaults.standardUserDefaults.setBool(enabled, forKey = enabledKey)
+    }
 }

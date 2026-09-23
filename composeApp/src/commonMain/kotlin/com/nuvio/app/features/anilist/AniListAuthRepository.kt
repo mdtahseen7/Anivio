@@ -200,6 +200,7 @@ object AniListAuthRepository : TrackingAuthProvider {
         storedState = AniListStoredAuthState()
         persistMetadata()
         publish(error = null)
+        AniListStatisticsRepository.clearLocalState()
         scope.launch {
             AniListClient.clearCache()
             // Nobody is signed in any more, so the cached lists must not survive to the next launch.

@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
@@ -29,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
@@ -122,6 +124,7 @@ fun NuvioPosterCard(
     bottomLeftLogoUrl: String? = null,
     bottomLeftText: String? = null,
     isWatched: Boolean = false,
+    airingStatus: String? = null,
     onClick: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
 ) {
@@ -207,13 +210,28 @@ fun NuvioPosterCard(
             NuvioPosterWatchedOverlay(isWatched = isWatched)
         }
         if (shouldShowTitleBelow) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyMedium,
-                color = tokens.colors.textPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                if (posterCardStyle.showAiringStatusDots) {
+                    val dotColor = airingStatusDotColor(airingStatus)
+                    if (dotColor != null) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .background(dotColor, CircleShape),
+                        )
+                    }
+                }
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = tokens.colors.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             if (!detailLine.isNullOrBlank()) {
                 Text(
                     text = detailLine,
@@ -340,3 +358,12 @@ private fun NuvioPosterShape.cardWidth(basePosterWidthDp: Int): Dp =
         NuvioPosterShape.Square -> basePosterWidthDp.dp
         NuvioPosterShape.Landscape -> landscapePosterWidth(basePosterWidthDp)
     }
+
+private val AiringGreen = Color(0xFF4CAF50)
+private val UnreleasedRed = Color(0xFFF44336)
+
+fun airingStatusDotColor(status: String?): Color? = when (status?.uppercase()) {
+    "RELEASING", "HIATUS" -> AiringGreen
+    "NOT_YET_RELEASED" -> UnreleasedRed
+    else -> null
+}

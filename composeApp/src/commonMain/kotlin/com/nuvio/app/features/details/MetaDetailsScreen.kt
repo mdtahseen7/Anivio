@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CheckCircleOutline
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsNone
@@ -94,6 +95,7 @@ import com.nuvio.app.features.details.components.DetailActionButtons
 import com.nuvio.app.features.details.components.DetailSecondaryAction
 import com.nuvio.app.features.details.components.DetailAdditionalInfoSection
 import com.nuvio.app.features.details.components.DetailCastSection
+import com.nuvio.app.features.details.components.DetailCommentsSection
 import com.nuvio.app.features.details.components.DetailFloatingHeader
 import com.nuvio.app.features.details.components.DetailHero
 import com.nuvio.app.features.details.components.DetailMetaInfo
@@ -101,6 +103,7 @@ import com.nuvio.app.features.details.components.DetailPosterRailSection
 import com.nuvio.app.features.details.components.DetailProductionSection
 import com.nuvio.app.features.details.components.DetailSeriesContent
 import com.nuvio.app.features.details.components.DetailTrailersSection
+import com.nuvio.app.features.details.components.EpisodeDownloadSheet
 import com.nuvio.app.features.details.components.EpisodeWatchedActionSheet
 import com.nuvio.app.features.details.components.SeasonWatchedActionSheet
 import com.nuvio.app.features.details.components.TrailerPlayerPopup
@@ -218,6 +221,7 @@ fun MetaDetailsScreen(
     val trackingListsUpdateFailedMessage = stringResource(Res.string.tracking_lists_update_failed)
     var episodeImdbRatings by remember(type, id) { mutableStateOf<Map<Pair<Int, Int>, Double>>(emptyMap()) }
     var deferredMetaWorkAllowed by remember(type, id) { mutableStateOf(false) }
+    var showDownloadPicker by remember(type, id) { mutableStateOf(false) }
 
     LaunchedEffect(
         displayedMeta?.id,
@@ -1043,6 +1047,7 @@ fun MetaDetailsScreen(
                                     onSaveLongClick = openLibraryListPicker,
                                     onWatchedClick = toggleWatched,
                                     onNotifyClick = toggleEpisodeNotifications,
+                                    onDownloadClick = { showDownloadPicker = true },
                                     showManualPlayOption = showManualPlayOption,
                                     preferredEpisodeSeasonNumber = seriesAction?.seasonNumber,
                                     preferredEpisodeNumber = seriesAction?.episodeNumber,
@@ -1332,6 +1337,15 @@ fun MetaDetailsScreen(
                             pending = pendingTrackingRemoval,
                             onPendingChange = { pendingTrackingRemoval = it },
                         )
+
+                        displayedMeta?.let { downloadMeta ->
+                            if (showDownloadPicker) {
+                                EpisodeDownloadSheet(
+                                    meta = downloadMeta,
+                                    onDismiss = { showDownloadPicker = false },
+                                )
+                            }
+                        }
 
                     }
                 }
@@ -1645,6 +1659,7 @@ private fun LazyListScope.configuredMetaSectionItems(
     onWatchedClick: () -> Unit,
     /** Null hides the entry â€” nothing to notify about for a film or a finished-and-dated show. */
     onNotifyClick: (() -> Unit)?,
+    onDownloadClick: (() -> Unit)?,
     showManualPlayOption: Boolean,
     preferredEpisodeSeasonNumber: Int?,
     preferredEpisodeNumber: Int?,
@@ -1709,6 +1724,7 @@ private fun LazyListScope.configuredMetaSectionItems(
                     onSaveLongClick = onSaveLongClick,
                     onWatchedClick = onWatchedClick,
                     onNotifyClick = onNotifyClick,
+                    onDownloadClick = onDownloadClick,
                     showManualPlayOption = showManualPlayOption,
                     preferredEpisodeSeasonNumber = preferredEpisodeSeasonNumber,
                     preferredEpisodeNumber = preferredEpisodeNumber,
@@ -1821,10 +1837,11 @@ private fun metaSectionHasContent(
         MetaScreenSectionKey.OVERVIEW -> true
         MetaScreenSectionKey.PRODUCTION -> hasProductionSection
         MetaScreenSectionKey.CAST -> meta.cast.isNotEmpty()
-        MetaScreenSectionKey.COMMENTS -> false
+        MetaScreenSectionKey.COMMENTS -> meta.animeReviews.isNotEmpty()
         MetaScreenSectionKey.TRAILERS -> hasTrailersSection
         MetaScreenSectionKey.EPISODES -> hasEpisodes
         MetaScreenSectionKey.DETAILS -> hasAdditionalInfoSection
+        MetaScreenSectionKey.RELATED -> meta.relatedTitles.isNotEmpty()
         MetaScreenSectionKey.COLLECTION -> !hasEpisodes && hasCollectionSection
         MetaScreenSectionKey.MORE_LIKE_THIS -> hasMoreLikeThisSection
     }
@@ -1846,6 +1863,7 @@ private fun ConfiguredMetaSections(
     onSaveLongClick: (() -> Unit)?,
     onWatchedClick: () -> Unit,
     onNotifyClick: (() -> Unit)?,
+    onDownloadClick: (() -> Unit)?,
     showManualPlayOption: Boolean,
     preferredEpisodeSeasonNumber: Int?,
     preferredEpisodeNumber: Int?,
@@ -1878,10 +1896,11 @@ private fun ConfiguredMetaSections(
             MetaScreenSectionKey.OVERVIEW -> true
             MetaScreenSectionKey.PRODUCTION -> hasProductionSection
             MetaScreenSectionKey.CAST -> meta.cast.isNotEmpty()
-            MetaScreenSectionKey.COMMENTS -> false
+            MetaScreenSectionKey.COMMENTS -> meta.animeReviews.isNotEmpty()
             MetaScreenSectionKey.TRAILERS -> hasTrailersSection
             MetaScreenSectionKey.EPISODES -> hasEpisodes
             MetaScreenSectionKey.DETAILS -> hasAdditionalInfoSection
+            MetaScreenSectionKey.RELATED -> meta.relatedTitles.isNotEmpty()
             MetaScreenSectionKey.COLLECTION -> !hasEpisodes && hasCollectionSection
             MetaScreenSectionKey.MORE_LIKE_THIS -> hasMoreLikeThisSection
         }
@@ -1900,6 +1919,11 @@ private fun ConfiguredMetaSections(
                             } else {
                                 stringResource(Res.string.hero_mark_watched)
                             },
+                            shortLabel = if (isWatched) {
+                                stringResource(Res.string.hero_short_watched)
+                            } else {
+                                stringResource(Res.string.hero_short_unwatched)
+                            },
                             icon = if (isWatched) {
                                 Icons.Default.CheckCircle
                             } else {
@@ -1914,6 +1938,7 @@ private fun ConfiguredMetaSections(
                             } else {
                                 stringResource(Res.string.hero_add_to_library)
                             },
+                            shortLabel = stringResource(Res.string.hero_short_library),
                             icon = if (isSaved) {
                                 Icons.Default.Check
                             } else {
@@ -1930,6 +1955,7 @@ private fun ConfiguredMetaSections(
                                 } else {
                                     stringResource(Res.string.details_notify_new_episodes)
                                 },
+                                shortLabel = stringResource(Res.string.hero_short_notify),
                                 icon = if (isNotifySubscribed) {
                                     Icons.Default.NotificationsActive
                                 } else {
@@ -1937,6 +1963,14 @@ private fun ConfiguredMetaSections(
                                 },
                                 isActive = isNotifySubscribed,
                                 onClick = onNotifyClick,
+                            ))
+                        }
+                        if (hasEpisodes && onDownloadClick != null) {
+                            add(DetailSecondaryAction(
+                                label = stringResource(Res.string.hero_download_episodes),
+                                shortLabel = stringResource(Res.string.hero_short_download),
+                                icon = Icons.Default.Download,
+                                onClick = onDownloadClick,
                             ))
                         }
                     },
@@ -1966,7 +2000,15 @@ private fun ConfiguredMetaSections(
                     animatedVisibilityScope = animatedVisibilityScope,
                 )
             }
-            MetaScreenSectionKey.COMMENTS -> Unit
+            MetaScreenSectionKey.COMMENTS -> {
+                if (meta.animeReviews.isNotEmpty()) {
+                    DetailCommentsSection(
+                        reviews = meta.animeReviews,
+                        showHeader = showHeader,
+                        horizontalScrollPadding = horizontalScrollPadding,
+                    )
+                }
+            }
             MetaScreenSectionKey.TRAILERS -> {
                 if (hasTrailersSection) {
                     DetailTrailersSection(
@@ -1999,6 +2041,18 @@ private fun ConfiguredMetaSections(
             MetaScreenSectionKey.DETAILS -> {
                 if (hasAdditionalInfoSection) {
                     DetailAdditionalInfoSection(meta = meta, showHeader = showHeader)
+                }
+            }
+            MetaScreenSectionKey.RELATED -> {
+                if (meta.relatedTitles.isNotEmpty()) {
+                    DetailPosterRailSection(
+                        title = stringResource(Res.string.meta_section_related_title),
+                        items = meta.relatedTitles,
+                        watchedKeys = watchedKeys,
+                        showHeader = showHeader,
+                        horizontalScrollPadding = horizontalScrollPadding,
+                        onPosterClick = onOpenMeta,
+                    )
                 }
             }
             MetaScreenSectionKey.COLLECTION -> {

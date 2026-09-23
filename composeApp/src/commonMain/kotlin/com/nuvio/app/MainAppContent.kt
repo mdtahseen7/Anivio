@@ -1299,6 +1299,9 @@ internal fun MainAppContent(
                         actions = { isTabletLayout ->
                             AppTabActions(
                                 onCatalogClick = onCatalogClick,
+                                onNotificationsClick = {
+                                    navController.navigate(AniListNotificationsRoute(title = "Notifications"))
+                                },
                                 onPosterClick = { meta ->
                                     navController.navigate(
                                         DetailRoute(type = meta.type, id = meta.id, title = meta.name),
@@ -1444,6 +1447,16 @@ internal fun MainAppContent(
                             SyncManager.pullAllForProfile(profile.profileIndex)
                         },
                         onAddProfileRequested = onSwitchProfile,
+                    )
+                }
+                entry<AniListNotificationsRoute> { _ ->
+                    AniListNotificationsDestination(
+                        navController = navController,
+                        onPosterClick = { meta ->
+                            navController.navigate(
+                                DetailRoute(type = meta.type, id = meta.id, title = meta.name),
+                            )
+                        },
                     )
                 }
                 entry<DetailRoute> { route ->
