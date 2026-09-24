@@ -67,6 +67,9 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
     @get:Input
     abstract val updateUserAgent: Property<String>
 
+    @get:Input
+    abstract val updateGitHubToken: Property<String>
+
     @TaskAction
     fun generate() {
         val props = Properties()
@@ -114,6 +117,12 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
                 |
                 |    /** Sent as User-Agent on release-feed requests; GitHub rejects requests without one. */
                 |    const val USER_AGENT = "${updateUserAgent.get()}"
+                |
+                |    /**
+                |     * Read-only token letting the updater poll a private release repository.
+                |     * Blank keeps requests anonymous, which is all a public repository needs.
+                |     */
+                |    const val GITHUB_TOKEN = "${updateGitHubToken.get()}"
                 |
                 |    val isConfigured: Boolean
                 |        get() = GITHUB_OWNER.isNotBlank() && GITHUB_REPO.isNotBlank()
@@ -457,6 +466,7 @@ val generateRuntimeConfigs = tasks.register<GenerateRuntimeConfigsTask>("generat
     updateGitHubRepo.set(runtimeConfigValue("ANIVIO_UPDATE_GITHUB_REPO"))
     updateChannel.set(runtimeConfigValue("ANIVIO_UPDATE_CHANNEL"))
     updateUserAgent.set(runtimeConfigValue("ANIVIO_UPDATE_USER_AGENT", fallback = "Anivio"))
+    updateGitHubToken.set(runtimeConfigValue("ANIVIO_UPDATE_GITHUB_TOKEN"))
     sentryEnvironment.set(
         when {
             requestedGradleTasks.any { "benchmark" in it } -> "benchmark"
