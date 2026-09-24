@@ -203,6 +203,23 @@ internal fun PlayerControlsShell(
                             .align(Alignment.TopEnd)
                             .windowInsetsPadding(WindowInsets.safeContent.only(WindowInsetsSides.Top))
                             .padding(horizontal = metrics.horizontalPadding, vertical = metrics.verticalPadding / 4),
+                        titleContent = if (titleAtTop && !hideDetails && !showParentalGuide) {
+                            {
+                                PlayerTimelineDetails(
+                                    title = title,
+                                    seasonNumber = seasonNumber,
+                                    episodeNumber = episodeNumber,
+                                    episodeTitle = episodeTitle,
+                                    releaseInfo = releaseInfo,
+                                    streamTitle = streamTitle,
+                                    providerName = providerName,
+                                    isPlaying = playbackSnapshot.isPlaying,
+                                    metrics = metrics,
+                                )
+                            }
+                        } else {
+                            null
+                        },
                     )
                 }
                 ParentalGuideOverlay(
@@ -212,28 +229,6 @@ internal fun PlayerControlsShell(
                     contentPadding = PaddingValues(horizontal = metrics.horizontalPadding, vertical = metrics.verticalPadding),
                     modifier = Modifier.align(Alignment.TopStart),
                 )
-                if (showPlaybackControls && titleAtTop && !hideDetails && !showParentalGuide) {
-                    Column(
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .fillMaxWidth()
-                            .windowInsetsPadding(WindowInsets.safeContent.only(WindowInsetsSides.Top))
-                            .padding(horizontal = metrics.horizontalPadding)
-                            .padding(top = 56.dp, end = 96.dp),
-                    ) {
-                        PlayerTimelineDetails(
-                            title = title,
-                            seasonNumber = seasonNumber,
-                            episodeNumber = episodeNumber,
-                            episodeTitle = episodeTitle,
-                            releaseInfo = releaseInfo,
-                            streamTitle = streamTitle,
-                            providerName = providerName,
-                            isPlaying = playbackSnapshot.isPlaying,
-                            metrics = metrics,
-                        )
-                    }
-                }
             }
 
             if (showPlaybackControls) {

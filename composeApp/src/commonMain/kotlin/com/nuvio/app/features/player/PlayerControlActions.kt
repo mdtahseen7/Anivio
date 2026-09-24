@@ -58,9 +58,12 @@ internal fun PlayerToolbar(
     onLockToggle: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    titleContent: (@Composable () -> Unit)? = null,
 ) {
     Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Spacer(Modifier.weight(1f))
+        Box(Modifier.weight(1f)) {
+            titleContent?.invoke()
+        }
         PlayerAction(
             description = stringResource(
                 if (isLocked) Res.string.compose_player_unlock_controls else Res.string.compose_player_lock_controls,
