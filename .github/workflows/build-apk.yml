@@ -25,6 +25,11 @@ on:
         options:
           - release
           - debug
+      prerelease:
+        description: 'Mark the GitHub release as a pre-release (pre-releases are ignored by the in-app updater)'
+        required: true
+        default: true
+        type: boolean
 
 jobs:
   build:
@@ -132,8 +137,12 @@ jobs:
           APK_DIR="androidApp/build/outputs/apk/full/${{ inputs.build_type }}"
           ls "$APK_DIR"/*.apk
           TAG="ci-${{ inputs.arch }}-${{ github.run_id }}"
+          PRERELEASE_FLAG=""
+          if [ "${{ inputs.prerelease }}" = "true" ]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
           gh release create "$TAG" \
-            --prerelease \
+            $PRERELEASE_FLAG \
             --title "CI ${{ inputs.build_type }} build · ${{ inputs.arch }} · ${GITHUB_SHA:0:7}" \
             --notes "Automated CI build of \`${{ inputs.ref }}\` (${GITHUB_SHA}). Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
             "$APK_DIR"/*.apk
