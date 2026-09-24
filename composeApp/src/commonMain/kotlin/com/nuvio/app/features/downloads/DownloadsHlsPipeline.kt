@@ -1,6 +1,11 @@
 package com.nuvio.app.features.downloads
 
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Default request headers used when the stream does not provide its own. Many providers
@@ -47,6 +52,12 @@ internal object DownloadsHlsPipeline {
     private const val MAX_PLAYLIST_BYTES = 4L * 1024L * 1024L
     private const val MAX_SEGMENTS = 20_000
 
+    /** How many segments to fetch concurrently. Bounded so memory stays modest while hiding latency. */
+    private const val SEGMENT_CONCURRENCY = 6
+
+    /** Per-segment fetch attempts before giving up, so a single dropped connection doesn't fail the job. */
+    private const val SEGMENT_RETRY_ATTEMPTS = 3
+
     suspend fun run(
         playlistUrl: String,
         headers: Map<String, String>,
@@ -76,7 +87,7 @@ internal object DownloadsHlsPipeline {
         playlist.initializationUri?.let { initUri ->
             if (isCancelled()) return
             val uri = resolveSegmentUri(mediaPlaylistUrl, initUri)
-            val chunk = httpDownloadBytes(url = uri, headers = headers)
+            val chunk = downloadSegmentWithRetry(uri, headers)
             appendChunk(chunk)
             initializedSegmentUris += initUri
             downloadedBytes += chunk.size
@@ -94,17 +105,45 @@ internal object DownloadsHlsPipeline {
         // Estimate the total size once the first segment reveals the average segment size.
         var estimatedTotalBytes: Long? = null
 
-        segments.forEachIndexed { index, segmentUri ->
+        // Fetch segments in bounded-concurrency windows, then append them strictly in playlist order.
+        segments.chunked(SEGMENT_CONCURRENCY).forEach { window ->
             if (isCancelled()) return
-            val uri = resolveSegmentUri(mediaPlaylistUrl, segmentUri)
-            val chunk = httpDownloadBytes(url = uri, headers = headers)
-            appendChunk(chunk)
-            downloadedBytes += chunk.size
-            if (index == 0 && segments.size > 1) {
-                estimatedTotalBytes = chunk.size.toLong() * segments.size
+            val chunks = coroutineScope {
+                window.map { segmentUri ->
+                    async {
+                        val uri = resolveSegmentUri(mediaPlaylistUrl, segmentUri)
+                        downloadSegmentWithRetry(uri, headers)
+                    }
+                }.awaitAll()
             }
-            onProgress(downloadedBytes, estimatedTotalBytes)
+            if (isCancelled()) return
+            chunks.forEach { chunk ->
+                appendChunk(chunk)
+                downloadedBytes += chunk.size
+                if (estimatedTotalBytes == null && segments.size > 1) {
+                    estimatedTotalBytes = chunk.size.toLong() * segments.size
+                }
+                onProgress(downloadedBytes, estimatedTotalBytes)
+            }
         }
+    }
+
+    private suspend fun downloadSegmentWithRetry(
+        url: String,
+        headers: Map<String, String>,
+    ): ByteArray {
+        var lastError: Throwable? = null
+        repeat(SEGMENT_RETRY_ATTEMPTS) { attempt ->
+            try {
+                return httpDownloadBytes(url = url, headers = headers)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Throwable) {
+                lastError = error
+                delay(300L * (attempt + 1))
+            }
+        }
+        throw lastError ?: IllegalStateException("Segment download failed: $url")
     }
 
     private suspend fun resolveToMediaPlaylist(

@@ -316,18 +316,24 @@ object DownloadsRepository {
             onSuccess = { localFileUri, totalBytes ->
                 activeHandles.remove(item.id)
                 mutateItem(item.id) { current ->
-                    current.copy(
-                        status = DownloadStatus.Completed,
-                        localFileUri = localFileUri,
-                        downloadedBytes = if (totalBytes != null && totalBytes > 0L) {
-                            totalBytes
-                        } else {
-                            current.downloadedBytes
-                        },
-                        totalBytes = totalBytes?.takeIf { it > 0L } ?: current.totalBytes,
-                        errorMessage = null,
-                        updatedAtEpochMs = DownloadsClock.nowEpochMs(),
-                    )
+                    // A late success callback must never resurrect a paused/cancelled download as
+                    // Completed — pausing an HLS download used to finalize the partial file this way.
+                    if (current.status != DownloadStatus.Downloading) {
+                        current
+                    } else {
+                        current.copy(
+                            status = DownloadStatus.Completed,
+                            localFileUri = localFileUri,
+                            downloadedBytes = if (totalBytes != null && totalBytes > 0L) {
+                                totalBytes
+                            } else {
+                                current.downloadedBytes
+                            },
+                            totalBytes = totalBytes?.takeIf { it > 0L } ?: current.totalBytes,
+                            errorMessage = null,
+                            updatedAtEpochMs = DownloadsClock.nowEpochMs(),
+                        )
+                    }
                 }
             },
             onFailure = { message ->

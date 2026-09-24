@@ -22,9 +22,11 @@ import java.net.URI
 import java.util.concurrent.TimeUnit
 
 private val downloadHttpClient = OkHttpClient.Builder()
-    .connectTimeout(60, TimeUnit.SECONDS)
+    .connectTimeout(30, TimeUnit.SECONDS)
     .readTimeout(60, TimeUnit.SECONDS)
     .writeTimeout(60, TimeUnit.SECONDS)
+    // Transparently retry when a pooled connection drops mid-download instead of failing the task.
+    .retryOnConnectionFailure(true)
     .followRedirects(true)
     .followSslRedirects(true)
     .build()
@@ -62,6 +64,9 @@ internal actual object DownloadsPlatformDownloader {
                 // HLS playlists are downloaded by segment and re-muxed into a playable file.
                 if (request.sourceUrl.isHlsPlaylistUrl()) {
                     try {
+                        // HLS is re-downloaded from scratch each run (no per-segment resume), so start
+                        // from a clean temp file to avoid appending duplicate segments on resume.
+                        if (tempFile.exists()) tempFile.delete()
                         DownloadsHlsPipeline.run(
                             playlistUrl = request.sourceUrl,
                             headers = effectiveHeaders,
@@ -74,6 +79,9 @@ internal actual object DownloadsPlatformDownloader {
                             },
                             isCancelled = { !job.isActive },
                         )
+                        // If paused/cancelled, do NOT finalize — otherwise a partial download would be
+                        // renamed into place and reported as a successful (complete) file.
+                        ensureActive()
                         if (tempFile.length() <= 0L) {
                             error(runBlocking { getString(Res.string.downloads_error_empty_body) })
                         }
@@ -168,7 +176,7 @@ internal actual object DownloadsPlatformDownloader {
 
                     body.byteStream().use { input ->
                         FileOutputStream(tempFile, appendToTemp).use { output ->
-                            val buffer = ByteArray(16 * 1024)
+                            val buffer = ByteArray(64 * 1024)
                             while (true) {
                                 ensureActive()
                                 val read = input.read(buffer)
@@ -192,6 +200,10 @@ internal actual object DownloadsPlatformDownloader {
                     val finalSize = destination.length()
                     onSuccess(destination.toURI().toString(), totalBytes ?: finalSize)
                 }
+            } catch (error: CancellationException) {
+                // Paused/cancelled: leave the .part file in place and report nothing (the repository
+                // keeps the item Paused). Never fall through to onFailure/onSuccess.
+                throw error
             } catch (error: Throwable) {
                 onFailure(error.message ?: runBlocking { getString(Res.string.download_failed) })
             }
