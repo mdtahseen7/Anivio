@@ -69,9 +69,14 @@ object AndroidAppUpdaterPlatform {
                 destination.delete()
             }
 
-            val request = Request.Builder()
+            val requestBuilder = Request.Builder()
                 .url(assetUrl)
-                .build()
+            // Release assets on a private repository need the same read-only token.
+            val gitHubToken = UpdateChannelConfig.GITHUB_TOKEN
+            if (gitHubToken.isNotBlank()) {
+                requestBuilder.header("Authorization", "Bearer $gitHubToken")
+            }
+            val request = requestBuilder.build()
 
             httpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
