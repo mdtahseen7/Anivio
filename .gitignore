@@ -35,3 +35,8 @@ PERFORMANCE_FINDINGS.md
 .mpvkit-build.sparseimage
 # CI-decoded release keystore (never commit)
 ci-release.jks
+
+# Generated skill/tool output (never commit)
+brag-output/
+graphify-out/
+app_logo_wordmark_original_backup.png
