@@ -118,13 +118,20 @@ private object AppUpdaterRepository {
     suspend fun getLatestChannelUpdate(): Result<AppUpdate> = runCatching {
         val owner = UpdateChannelConfig.GITHUB_OWNER
         val repo = UpdateChannelConfig.GITHUB_REPO
+        val headers = mutableMapOf(
+            "Accept" to "application/vnd.github+json",
+            "User-Agent" to UpdateChannelConfig.USER_AGENT,
+        )
+        // A private release repository answers 404 to anonymous calls, so attach the
+        // read-only token when one was baked in at build time.
+        val gitHubToken = UpdateChannelConfig.GITHUB_TOKEN
+        if (gitHubToken.isNotBlank()) {
+            headers["Authorization"] = "Bearer $gitHubToken"
+        }
         val response = httpRequestRaw(
             method = "GET",
             url = "$gitHubApiBase/repos/$owner/$repo/releases?per_page=20",
-            headers = mapOf(
-                "Accept" to "application/vnd.github+json",
-                "User-Agent" to UpdateChannelConfig.USER_AGENT,
-            ),
+            headers = headers,
             body = "",
         )
         if (response.status !in 200..299) {
