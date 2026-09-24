@@ -81,6 +81,9 @@ fun DownloadsScreen(
 
     val downloadSettings by remember {
         DownloadSettingsRepository.ensureLoaded()
+        // The server picker lists installed plugins; make sure they are loaded even if the addons
+        // screen has not been opened this session.
+        AddonRepository.initialize()
         DownloadSettingsRepository.uiState
     }.collectAsStateWithLifecycle()
 
@@ -186,8 +189,9 @@ private fun DefaultDownloadServerSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     val tokens = MaterialTheme.nuvio
-    val addonNames = remember {
-        AddonRepository.uiState.value.addons.enabledAddons().map { it.displayTitle }.distinct()
+    val addonsState by AddonRepository.uiState.collectAsStateWithLifecycle()
+    val addonNames = remember(addonsState) {
+        addonsState.addons.enabledAddons().map { it.displayTitle }.distinct()
     }
 
     fun choose(name: String?) {

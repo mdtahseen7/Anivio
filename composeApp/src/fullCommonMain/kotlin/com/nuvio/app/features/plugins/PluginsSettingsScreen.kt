@@ -122,6 +122,10 @@ fun PluginsSettingsPageContent(
             ),
         )
     }
+    // One group per repository, preserving the repo-then-name sort order above.
+    val scrapersByRepo = remember(sortedScrapers) {
+        sortedScrapers.groupBy { it.repositoryUrl }
+    }
 
     val repoFallbackLabel = stringResource(Res.string.plugins_repo_fallback_label)
     val testFailedDefault = stringResource(Res.string.plugins_test_failed)
@@ -365,58 +369,48 @@ fun PluginsSettingsPageContent(
                 )
             }
         } else {
-            sortedScrapers.forEach { scraper ->
-                val scraperResults = testResults[scraper.id]
-                val isTestingThisScraper = testingScraperId == scraper.id
-                val repositoryName = repositoryNameByUrl[scraper.repositoryUrl]
-                    ?: scraper.repositoryUrl.fallbackRepositoryLabel(repoFallbackLabel)
-
+            scrapersByRepo.forEach { (repoUrl, scrapers) ->
+                val repositoryName = repositoryNameByUrl[repoUrl]
+                    ?: repoUrl.fallbackRepositoryLabel(repoFallbackLabel)
                 NuvioSurfaceCard {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Top,
-                    ) {
-                        Row(
-                            modifier = Modifier.weight(1f),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Extension,
-                                contentDescription = null,
-                                tint = if (scraper.enabled) Color(0xFF68B76A) else MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = repositoryName,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = scraper.name,
-                                    style = MaterialTheme.typography.titleLarge,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Text(
-                                    text = scraper.description.ifBlank {
-                                        stringResource(Res.string.plugins_provider_no_description)
-                                    },
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
+                    Text(
+                        text = repositoryName,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    scrapers.forEachIndexed { index, scraper ->
+                        if (index > 0) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                         }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (scraper.hasSettings) {
-                                IconButton(onClick = {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        ProviderRow(
+                            scraper = scraper,
+                            results = testResults[scraper.id],
+                            isTesting = testingScraperId == scraper.id,
+                            testEnabled = hasTmdbApiKey,
+                            onTest = {
+                                testingScraperId = scraper.id
+                                coroutineScope.launch {
+                                    PluginRepository.testScraper(scraper.id)
+                                        .onSuccess { testResults[scraper.id] = it }
+                                        .onFailure { error ->
+                                            testResults[scraper.id] = listOf(
+                                                PluginRuntimeResult(
+                                                    title = testErrorTitle,
+                                                    name = error.message ?: testFailedDefault,
+                                                    url = "about:error",
+                                                ),
+                                            )
+                                        }
+                                    testingScraperId = null
+                                }
+                            },
+                            onToggle = { PluginRepository.toggleScraper(scraper.id, it) },
+                            onConfigure = if (scraper.hasSettings) {
+                                {
                                     coroutineScope.launch {
                                         val layout = PluginRuntime.getPluginSettingsLayout(scraper.code, scraper.id)
                                         if (layout != null) {
@@ -424,103 +418,9 @@ fun PluginsSettingsPageContent(
                                             configuringLayout = layout
                                         }
                                     }
-                                }) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Settings,
-                                        contentDescription = "Provider settings",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                    )
                                 }
-                            }
-                            Switch(
-                                checked = scraper.enabled,
-                                onCheckedChange = { PluginRepository.toggleScraper(scraper.id, it) },
-                                enabled = scraper.manifestEnabled,
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        NuvioInfoBadge(text = scraper.supportedTypes.joinToString(" | "))
-                        NuvioInfoBadge(text = stringResource(Res.string.plugins_provider_version, scraper.version))
-                        if (!scraper.manifestEnabled) {
-                            NuvioInfoBadge(text = stringResource(Res.string.plugins_provider_disabled_by_repo))
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-                    NuvioPrimaryButton(
-                        text = if (isTestingThisScraper) {
-                            stringResource(Res.string.plugins_button_testing)
-                        } else {
-                            stringResource(Res.string.plugins_button_test_provider)
-                        },
-                        enabled = hasTmdbApiKey && !isTestingThisScraper,
-                        onClick = {
-                            testingScraperId = scraper.id
-                            coroutineScope.launch {
-                                PluginRepository.testScraper(scraper.id)
-                                    .onSuccess { results ->
-                                        testResults[scraper.id] = results
-                                    }
-                                    .onFailure { error ->
-                                        testResults[scraper.id] = listOf(
-                                            PluginRuntimeResult(
-                                                title = testErrorTitle,
-                                                name = error.message ?: testFailedDefault,
-                                                url = "about:error",
-                                            ),
-                                        )
-                                    }
-                                testingScraperId = null
-                            }
-                        },
-                    )
-
-                    if (!scraperResults.isNullOrEmpty()) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outline)
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = stringResource(Res.string.plugins_test_results_count, scraperResults.size),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
+                            } else null,
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        scraperResults.take(8).forEach { result ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.Top,
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Bolt,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = result.title,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                    Text(
-                                        text = result.url,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(6.dp))
-                        }
                     }
                 }
             }
@@ -537,6 +437,136 @@ fun PluginsSettingsPageContent(
                 configuringLayout = null
             }
         )
+    }
+}
+
+@Composable
+private fun ProviderRow(
+    scraper: PluginScraper,
+    results: List<PluginRuntimeResult>?,
+    isTesting: Boolean,
+    testEnabled: Boolean,
+    onTest: () -> Unit,
+    onToggle: (Boolean) -> Unit,
+    onConfigure: (() -> Unit)?,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Extension,
+                    contentDescription = null,
+                    tint = if (scraper.enabled) Color(0xFF68B76A) else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = scraper.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = scraper.description.ifBlank {
+                            stringResource(Res.string.plugins_provider_no_description)
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (onConfigure != null) {
+                    IconButton(onClick = onConfigure) {
+                        Icon(
+                            imageVector = Icons.Rounded.Settings,
+                            contentDescription = "Provider settings",
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+                IconButton(
+                    onClick = onTest,
+                    enabled = testEnabled && !isTesting,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Bolt,
+                        contentDescription = stringResource(Res.string.plugins_button_test_provider),
+                        tint = if (testEnabled && !isTesting) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
+                Switch(
+                    checked = scraper.enabled,
+                    onCheckedChange = onToggle,
+                    enabled = scraper.manifestEnabled,
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            NuvioInfoBadge(text = scraper.supportedTypes.joinToString(" | "))
+            NuvioInfoBadge(text = stringResource(Res.string.plugins_provider_version, scraper.version))
+            if (!scraper.manifestEnabled) {
+                NuvioInfoBadge(text = stringResource(Res.string.plugins_provider_disabled_by_repo))
+            }
+        }
+
+        if (!results.isNullOrEmpty()) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = stringResource(Res.string.plugins_test_results_count, results.size),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            results.take(8).forEach { result ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Bolt,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = result.title,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = result.url,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+            }
+        }
     }
 }
 

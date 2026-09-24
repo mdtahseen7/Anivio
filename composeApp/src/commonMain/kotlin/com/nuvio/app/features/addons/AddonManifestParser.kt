@@ -31,7 +31,11 @@ internal object AddonManifestParser {
             name = root.requiredString("name"),
             description = root.optionalString("description").orEmpty(),
             version = root.requiredString("version"),
-            logoUrl = root.optionalString("logo")?.resolveAgainstManifest(manifestUrl),
+            // Stremio manifests carry branding under `logo` and/or `icon`; a lot of addons set only
+            // one. Prefer the logo, fall back to the icon, so the plugins list shows real art instead
+            // of the generic puzzle placeholder.
+            logoUrl = (root.optionalString("logo") ?: root.optionalString("icon"))
+                ?.resolveAgainstManifest(manifestUrl),
             resources = root.resources(defaultTypes, defaultPrefixes),
             types = defaultTypes,
             idPrefixes = defaultPrefixes,
