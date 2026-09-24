@@ -21,6 +21,7 @@ actual object PlayerSettingsStorage {
     private const val preferencesName = "nuvio_player_settings"
     private const val showLoadingOverlayKey = "show_loading_overlay"
     private const val useLegacyPlayerLayoutKey = "use_legacy_player_layout"
+    private const val playerTitleAtTopKey = "player_title_at_top"
     private const val showParentalGuideKey = "show_parental_guide"
     private const val resizeModeKey = "resize_mode"
     private const val holdToSpeedEnabledKey = "hold_to_speed_enabled"
@@ -200,6 +201,23 @@ actual object PlayerSettingsStorage {
         preferences
             ?.edit()
             ?.putBoolean(ProfileScopedKey.of(useLegacyPlayerLayoutKey), enabled)
+            ?.apply()
+    }
+
+    actual fun loadPlayerTitleAtTop(): Boolean? =
+        preferences?.let { sharedPreferences ->
+            val key = ProfileScopedKey.of(playerTitleAtTopKey)
+            if (sharedPreferences.contains(key)) {
+                sharedPreferences.getBoolean(key, false)
+            } else {
+                null
+            }
+        }
+
+    actual fun savePlayerTitleAtTop(enabled: Boolean) {
+        preferences
+            ?.edit()
+            ?.putBoolean(ProfileScopedKey.of(playerTitleAtTopKey), enabled)
             ?.apply()
     }
 

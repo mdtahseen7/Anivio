@@ -360,6 +360,15 @@ private fun PlaybackSettingsSection(
                 )
                 SettingsGroupDivider(isTablet = isTablet)
                 SettingsSwitchRow(
+                    title = stringResource(Res.string.settings_playback_title_at_top),
+                    description = stringResource(Res.string.settings_playback_title_at_top_description),
+                    checked = autoPlayPlayerSettings.playerTitleAtTop,
+                    isTablet = isTablet,
+                    enabled = !autoPlayPlayerSettings.useLegacyPlayerLayout,
+                    onCheckedChange = PlayerSettingsRepository::setPlayerTitleAtTop,
+                )
+                SettingsGroupDivider(isTablet = isTablet)
+                SettingsSwitchRow(
                     title = stringResource(Res.string.settings_playback_show_loading_overlay),
                     description = stringResource(Res.string.settings_playback_show_loading_overlay_description),
                     checked = showLoadingOverlay,

@@ -440,6 +440,8 @@
     <string name="compose_player_speed">Playback speed</string>
     <string name="settings_playback_legacy_layout">Legacy layout</string>
     <string name="settings_playback_legacy_layout_description">Use the original player controls.</string>
+    <string name="settings_playback_title_at_top">Title at top</string>
+    <string name="settings_playback_title_at_top_description">Show the title and episode at the top instead of the bottom. New layout only.</string>
     <string name="player_seek_position">Playback position</string>
     <string name="compose_player_loading_lines">Loading subtitle lines...</string>
     <string name="compose_player_languages">Languages</string>

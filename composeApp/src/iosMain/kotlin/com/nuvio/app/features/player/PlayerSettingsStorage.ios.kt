@@ -19,6 +19,7 @@ import platform.Foundation.NSUserDefaults
 actual object PlayerSettingsStorage {
     private const val showLoadingOverlayKey = "show_loading_overlay"
     private const val useLegacyPlayerLayoutKey = "use_legacy_player_layout"
+    private const val playerTitleAtTopKey = "player_title_at_top"
     private const val showParentalGuideKey = "show_parental_guide"
     private const val resizeModeKey = "resize_mode"
     private const val holdToSpeedEnabledKey = "hold_to_speed_enabled"
@@ -207,6 +208,20 @@ actual object PlayerSettingsStorage {
 
     actual fun saveUseLegacyPlayerLayout(enabled: Boolean) {
         NSUserDefaults.standardUserDefaults.setBool(enabled, forKey = ProfileScopedKey.of(useLegacyPlayerLayoutKey))
+    }
+
+    actual fun loadPlayerTitleAtTop(): Boolean? {
+        val defaults = NSUserDefaults.standardUserDefaults
+        val key = ProfileScopedKey.of(playerTitleAtTopKey)
+        return if (defaults.objectForKey(key) != null) {
+            defaults.boolForKey(key)
+        } else {
+            null
+        }
+    }
+
+    actual fun savePlayerTitleAtTop(enabled: Boolean) {
+        NSUserDefaults.standardUserDefaults.setBool(enabled, forKey = ProfileScopedKey.of(playerTitleAtTopKey))
     }
 
     actual fun loadShowParentalGuide(): Boolean? {

@@ -7,6 +7,8 @@ internal expect object PlayerSettingsStorage {
     fun saveShowLoadingOverlay(enabled: Boolean)
     fun loadUseLegacyPlayerLayout(): Boolean?
     fun saveUseLegacyPlayerLayout(enabled: Boolean)
+    fun loadPlayerTitleAtTop(): Boolean?
+    fun savePlayerTitleAtTop(enabled: Boolean)
     fun loadShowParentalGuide(): Boolean?
     fun saveShowParentalGuide(enabled: Boolean)
     fun loadResizeMode(): String?

@@ -89,6 +89,7 @@ internal fun PlayerControlsShell(
     resizeMode: PlayerResizeMode,
     isLocked: Boolean,
     useLegacyLayout: Boolean = false,
+    titleAtTop: Boolean = false,
     showRemainingTime: Boolean = false,
     onRuntimeClick: () -> Unit = {},
     releaseInfo: String? = null,
@@ -211,6 +212,28 @@ internal fun PlayerControlsShell(
                     contentPadding = PaddingValues(horizontal = metrics.horizontalPadding, vertical = metrics.verticalPadding),
                     modifier = Modifier.align(Alignment.TopStart),
                 )
+                if (showPlaybackControls && titleAtTop && !hideDetails && !showParentalGuide) {
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .fillMaxWidth()
+                            .windowInsetsPadding(WindowInsets.safeContent.only(WindowInsetsSides.Top))
+                            .padding(horizontal = metrics.horizontalPadding)
+                            .padding(top = 56.dp, end = 96.dp),
+                    ) {
+                        PlayerTimelineDetails(
+                            title = title,
+                            seasonNumber = seasonNumber,
+                            episodeNumber = episodeNumber,
+                            episodeTitle = episodeTitle,
+                            releaseInfo = releaseInfo,
+                            streamTitle = streamTitle,
+                            providerName = providerName,
+                            isPlaying = playbackSnapshot.isPlaying,
+                            metrics = metrics,
+                        )
+                    }
+                }
             }
 
             if (showPlaybackControls) {
@@ -271,7 +294,7 @@ internal fun PlayerControlsShell(
                         .windowInsetsPadding(playerTimelineBottomInsets(metrics))
                         .padding(horizontal = metrics.horizontalPadding),
                 ) {
-                    if (!hideDetails) {
+                    if (!hideDetails && !titleAtTop) {
                         PlayerTimelineDetails(
                             title = title,
                             seasonNumber = seasonNumber,

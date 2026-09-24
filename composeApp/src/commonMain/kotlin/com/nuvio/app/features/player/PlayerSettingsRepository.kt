@@ -34,6 +34,7 @@ fun snapToAllowedTimeout(value: Int): Int {
 data class PlayerSettingsUiState(
     val showLoadingOverlay: Boolean = true,
     val useLegacyPlayerLayout: Boolean = false,
+    val playerTitleAtTop: Boolean = false,
     val showParentalGuide: Boolean = true,
     val resizeMode: PlayerResizeMode = PlayerResizeMode.Fit,
     val holdToSpeedEnabled: Boolean = true,
@@ -103,6 +104,7 @@ object PlayerSettingsRepository {
     private var hasLoaded = false
     private var showLoadingOverlay = true
     private var useLegacyPlayerLayout = false
+    private var playerTitleAtTop = false
     private var showParentalGuide = true
     private var resizeMode = PlayerResizeMode.Fit
     private var holdToSpeedEnabled = true
@@ -177,6 +179,7 @@ object PlayerSettingsRepository {
         hasLoaded = false
         showLoadingOverlay = true
         useLegacyPlayerLayout = false
+        playerTitleAtTop = false
         showParentalGuide = true
         resizeMode = PlayerResizeMode.Fit
         holdToSpeedEnabled = true
@@ -244,6 +247,7 @@ object PlayerSettingsRepository {
         hasLoaded = true
         showLoadingOverlay = PlayerSettingsStorage.loadShowLoadingOverlay() ?: true
         useLegacyPlayerLayout = PlayerSettingsStorage.loadUseLegacyPlayerLayout() ?: false
+        playerTitleAtTop = PlayerSettingsStorage.loadPlayerTitleAtTop() ?: false
         showParentalGuide = PlayerSettingsStorage.loadShowParentalGuide() ?: true
         resizeMode = PlayerSettingsStorage.loadResizeMode()
             ?.let { runCatching { PlayerResizeMode.valueOf(it) }.getOrNull() }
@@ -394,6 +398,14 @@ object PlayerSettingsRepository {
         useLegacyPlayerLayout = enabled
         publish()
         PlayerSettingsStorage.saveUseLegacyPlayerLayout(enabled)
+    }
+
+    fun setPlayerTitleAtTop(enabled: Boolean) {
+        ensureLoaded()
+        if (playerTitleAtTop == enabled) return
+        playerTitleAtTop = enabled
+        publish()
+        PlayerSettingsStorage.savePlayerTitleAtTop(enabled)
     }
 
     fun setShowParentalGuide(enabled: Boolean) {
@@ -954,6 +966,7 @@ object PlayerSettingsRepository {
         _uiState.value = PlayerSettingsUiState(
             showLoadingOverlay = showLoadingOverlay,
             useLegacyPlayerLayout = useLegacyPlayerLayout,
+            playerTitleAtTop = playerTitleAtTop,
             showParentalGuide = showParentalGuide,
             resizeMode = resizeMode,
             holdToSpeedEnabled = holdToSpeedEnabled,
