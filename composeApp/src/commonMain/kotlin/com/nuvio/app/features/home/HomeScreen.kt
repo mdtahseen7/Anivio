@@ -961,8 +961,10 @@ fun HomeScreen(
 
         // Notification bell floats top-left, mirroring the search glass button top-right. Only
         // rendered when there is an AniList account to read a badge/feed from.
-        val showNotificationsBell = onNotificationsClick != null &&
-            AniListAuthRepository.isAuthenticated.value
+        // Observe auth as state (not a one-shot .value read) so the bell appears as soon as the
+        // AniList session is restored, even if Home composed before that finished.
+        val isAniListAuthenticated by AniListAuthRepository.isAuthenticated.collectAsStateWithLifecycle()
+        val showNotificationsBell = onNotificationsClick != null && isAniListAuthenticated
         if (showNotificationsBell) {
             val bellNotificationsUiState by AniListNotificationsRepository.uiState
                 .collectAsStateWithLifecycle()
