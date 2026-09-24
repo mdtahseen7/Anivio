@@ -96,6 +96,10 @@ internal class PlayerScreenRuntime(
 
     var controlsVisible by mutableStateOf(false)
     var playerControlsLocked by mutableStateOf(false)
+    /** New player layout: show remaining time (−mm:ss) instead of elapsed/duration on the runtime clock. */
+    var showRemainingTime by mutableStateOf(false)
+    /** Bumped on any control interaction so the auto-hide timer can reset for the new scrollable control row. */
+    var controlsActivityTick by mutableStateOf(0)
     var activeSourceUrl by mutableStateOf(sourceUrl)
     var activeSourceAudioUrl by mutableStateOf(sourceAudioUrl)
     var activeSourceHeaders by mutableStateOf(sanitizePlaybackHeaders(sourceHeaders))

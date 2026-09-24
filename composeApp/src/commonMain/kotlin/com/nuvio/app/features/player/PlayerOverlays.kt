@@ -91,6 +91,7 @@ internal data class GestureFeedbackState(
     val messageRes: StringResource? = null,
     val messageArgs: List<Any> = emptyList(),
     val icon: GestureFeedbackIcon = GestureFeedbackIcon.Speed,
+    val level: Float? = null,
     val isDanger: Boolean = false,
     val secondaryMessage: String? = null,
     val secondaryMessageRes: StringResource? = null,

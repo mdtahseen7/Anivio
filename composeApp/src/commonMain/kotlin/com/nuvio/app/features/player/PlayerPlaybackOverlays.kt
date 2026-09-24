@@ -27,6 +27,7 @@ import com.nuvio.app.features.player.skip.SkipInterval
 @Composable
 internal fun BoxScope.PlayerPlaybackOverlays(
     playerControlsLocked: Boolean,
+    useLegacyLayout: Boolean,
     lockedOverlayVisible: Boolean,
     playbackSnapshot: PlayerPlaybackSnapshot,
     displayedPositionMs: Long,
@@ -109,26 +110,13 @@ internal fun BoxScope.PlayerPlaybackOverlays(
             .padding(top = 58.dp),
     )
 
-    AnimatedVisibility(
-        visible = currentGestureFeedback != null,
-        enter = fadeIn(),
-        exit = fadeOut(),
-    ) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            renderedGestureFeedback?.let { feedback ->
-                GestureFeedbackPill(
-                    feedback = feedback,
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .windowInsetsPadding(WindowInsets.safeContent.only(WindowInsetsSides.Top))
-                        .padding(horizontal = horizontalSafePadding)
-                        .padding(top = 40.dp),
-                )
-            }
-        }
-    }
+    PlayerGestureOverlay(
+        currentFeedback = currentGestureFeedback,
+        renderedFeedback = renderedGestureFeedback,
+        useLegacyLayout = useLegacyLayout,
+        horizontalSafePadding = horizontalSafePadding,
+        horizontalPadding = metrics.horizontalPadding,
+    )
 
     if (!playerControlsLocked) {
         SkipIntroButton(

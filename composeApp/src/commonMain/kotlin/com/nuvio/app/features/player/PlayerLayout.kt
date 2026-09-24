@@ -1,14 +1,19 @@
 package com.nuvio.app.features.player
 
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.add
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeContent
+import androidx.compose.foundation.layout.union
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nuvio.app.isIos
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.compose_player_resize_fill
 import nuvio.composeapp.generated.resources.compose_player_resize_fit
@@ -151,4 +156,19 @@ internal fun formatPlaybackTime(positionMs: Long): String {
 internal fun formatPlaybackSpeedLabel(speed: Float): String {
     val normalized = speed.toString().trimEnd('0').trimEnd('.')
     return "${normalized}x"
+}
+
+internal fun formatPlaybackRuntime(positionMs: Long, durationMs: Long, showRemainingTime: Boolean): String =
+    if (showRemainingTime) {
+        val remainingMs = (durationMs.coerceAtLeast(0L) - positionMs.coerceAtLeast(0L)).coerceAtLeast(0L)
+        "−${formatPlaybackTime(remainingMs)}"
+    } else {
+        "${formatPlaybackTime(positionMs)} / ${formatPlaybackTime(durationMs)}"
+    }
+
+@Composable
+internal fun playerTimelineBottomInsets(metrics: PlayerLayoutMetrics): WindowInsets {
+    val safeInsets = WindowInsets.safeContent.only(WindowInsetsSides.Bottom)
+    val contentInsets = WindowInsets(bottom = metrics.sliderBottomOffset / 2)
+    return if (isIos) safeInsets.union(contentInsets) else safeInsets.add(contentInsets)
 }
