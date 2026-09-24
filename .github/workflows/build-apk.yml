@@ -93,6 +93,7 @@ jobs:
           ANIVIO_UPDATE_CHANNEL=
           ANIVIO_UPDATE_USER_AGENT=
           ANIVIO_UPDATE_GITHUB_TOKEN=${{ secrets.UPDATER_GITHUB_TOKEN }}
+          ANIVIO_RELEASE_TAG=ci-${{ inputs.arch }}-${{ github.run_id }}
           ANILIST_CLIENT_ID=${{ secrets.ANILIST_CLIENT_ID }}
           ANILIST_REDIRECT_URI=${{ secrets.ANILIST_REDIRECT_URI }}
           TRAKT_CLIENT_ID=${{ secrets.TRAKT_CLIENT_ID }}
