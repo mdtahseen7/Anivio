@@ -70,6 +70,9 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
     @get:Input
     abstract val updateGitHubToken: Property<String>
 
+    @get:Input
+    abstract val updateReleaseTag: Property<String>
+
     @TaskAction
     fun generate() {
         val props = Properties()
@@ -123,6 +126,13 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
                 |     * Blank keeps requests anonymous, which is all a public repository needs.
                 |     */
                 |    const val GITHUB_TOKEN = "${updateGitHubToken.get()}"
+                |
+                |    /**
+                |     * Tag this build was (or will be) published under, e.g. ci-arm64-v8a-36044651140.
+                |     * Lets the updater recognise its own release instead of comparing the CI tag
+                |     * against the static version name forever. Blank on non-CI builds.
+                |     */
+                |    const val RELEASE_TAG = "${updateReleaseTag.get()}"
                 |
                 |    val isConfigured: Boolean
                 |        get() = GITHUB_OWNER.isNotBlank() && GITHUB_REPO.isNotBlank()
@@ -467,6 +477,7 @@ val generateRuntimeConfigs = tasks.register<GenerateRuntimeConfigsTask>("generat
     updateChannel.set(runtimeConfigValue("ANIVIO_UPDATE_CHANNEL"))
     updateUserAgent.set(runtimeConfigValue("ANIVIO_UPDATE_USER_AGENT", fallback = "Anivio"))
     updateGitHubToken.set(runtimeConfigValue("ANIVIO_UPDATE_GITHUB_TOKEN"))
+    updateReleaseTag.set(runtimeConfigValue("ANIVIO_RELEASE_TAG"))
     sentryEnvironment.set(
         when {
             requestedGradleTasks.any { "benchmark" in it } -> "benchmark"
