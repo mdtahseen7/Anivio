@@ -324,8 +324,10 @@ private suspend fun downloadEpisodes(
         .enabledAddons()
         .map { it.displayTitle }
         .toSet()
-    val defaultServer = DownloadSettingsRepository.uiState.value.defaultServerAddonName
-    val selectedAddons = defaultServer?.takeIf { it.isNotBlank() }?.let { setOf(it) } ?: emptySet()
+    // Default download server is a plugin (scraper) name. When set, downloads are fetched ONLY from
+    // that plugin; when unset, fall back to picking from all sources.
+    val defaultPlugin = DownloadSettingsRepository.uiState.value.defaultServerAddonName
+    val selectedPlugins = defaultPlugin?.takeIf { it.isNotBlank() }?.let { setOf(it) } ?: emptySet()
 
     for (video in episodes) {
         val season = video.season
@@ -350,10 +352,14 @@ private suspend fun downloadEpisodes(
             streams = allStreams,
             mode = StreamAutoPlayMode.FIRST_STREAM,
             regexPattern = "",
-            source = StreamAutoPlaySource.ALL_SOURCES,
+            source = if (selectedPlugins.isEmpty()) {
+                StreamAutoPlaySource.ALL_SOURCES
+            } else {
+                StreamAutoPlaySource.ENABLED_PLUGINS_ONLY
+            },
             installedAddonNames = installedAddonNames,
-            selectedAddons = selectedAddons,
-            selectedPlugins = emptySet(),
+            selectedAddons = emptySet(),
+            selectedPlugins = selectedPlugins,
             debridEnabled = debrid.canResolvePlayableLinks,
             activeResolverProviderId = debrid.activeResolverProviderId,
         )

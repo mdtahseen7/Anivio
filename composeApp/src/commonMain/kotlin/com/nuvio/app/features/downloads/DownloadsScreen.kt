@@ -55,8 +55,7 @@ import com.nuvio.app.core.ui.NuvioStatusModal
 import com.nuvio.app.core.ui.NuvioToastController
 import com.nuvio.app.core.ui.dismissNuvioBottomSheet
 import com.nuvio.app.core.ui.nuvio
-import com.nuvio.app.features.addons.AddonRepository
-import com.nuvio.app.features.addons.enabledAddons
+import com.nuvio.app.features.plugins.PluginRepository
 import kotlinx.coroutines.launch
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
@@ -81,9 +80,9 @@ fun DownloadsScreen(
 
     val downloadSettings by remember {
         DownloadSettingsRepository.ensureLoaded()
-        // The server picker lists installed plugins; make sure they are loaded even if the addons
+        // The server picker lists installed plugins; make sure they are loaded even if the plugins
         // screen has not been opened this session.
-        AddonRepository.initialize()
+        PluginRepository.initialize()
         DownloadSettingsRepository.uiState
     }.collectAsStateWithLifecycle()
 
@@ -189,9 +188,11 @@ private fun DefaultDownloadServerSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     val tokens = MaterialTheme.nuvio
-    val addonsState by AddonRepository.uiState.collectAsStateWithLifecycle()
-    val addonNames = remember(addonsState) {
-        addonsState.addons.enabledAddons().map { it.displayTitle }.distinct()
+    // The default download server is a locally-installed plugin (scraper): downloads are fetched
+    // from this plugin only. List enabled scrapers by name (the name is what stream matching keys on).
+    val pluginsState by PluginRepository.uiState.collectAsStateWithLifecycle()
+    val serverNames = remember(pluginsState) {
+        pluginsState.scrapers.filter { it.enabled }.map { it.name }.distinct()
     }
 
     fun choose(name: String?) {
@@ -222,7 +223,7 @@ private fun DefaultDownloadServerSheet(
                     { Icon(Icons.Rounded.Check, contentDescription = null, tint = tokens.colors.accent) }
                 } else null,
             )
-            addonNames.forEach { name ->
+            serverNames.forEach { name ->
                 NuvioBottomSheetActionRow(
                     title = name,
                     onClick = { choose(name) },
