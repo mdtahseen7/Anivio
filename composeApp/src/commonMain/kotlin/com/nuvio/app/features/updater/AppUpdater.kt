@@ -238,7 +238,14 @@ class AppUpdaterController internal constructor(
             val result = AppUpdaterRepository.getLatestChannelUpdate()
 
             result.onSuccess { update ->
-                val remoteNewer = VersionUtils.isRemoteNewer(update.tag, AppVersionConfig.VERSION_NAME)
+                // A CI build bakes in the tag it was published under. When the newest
+                // release carries that same tag, this exact build is already installed,
+                // so it must not be reported as an update (the CI tag always "beats"
+                // the static version name in a naive comparison).
+                val isOwnCiRelease = UpdateChannelConfig.RELEASE_TAG.isNotBlank() &&
+                    UpdateChannelConfig.RELEASE_TAG == update.tag
+                val remoteNewer = !isOwnCiRelease &&
+                    VersionUtils.isRemoteNewer(update.tag, AppVersionConfig.VERSION_NAME)
                 val ignored = ignoredTag != null && ignoredTag == update.tag
                 val shouldShowDialog = force || (remoteNewer && !ignored)
 
