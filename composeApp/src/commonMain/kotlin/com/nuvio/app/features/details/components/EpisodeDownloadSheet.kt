@@ -62,10 +62,13 @@ import com.nuvio.app.features.downloads.DownloadSettingsRepository
 import com.nuvio.app.features.downloads.DownloadsRepository
 import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.player.PlayerStreamsRepository
+import com.nuvio.app.features.plugins.PluginRepository
+import com.nuvio.app.features.plugins.pluginContentId
 import com.nuvio.app.features.streams.StreamAutoPlayMode
 import com.nuvio.app.features.streams.StreamAutoPlaySelector
 import com.nuvio.app.features.streams.StreamAutoPlaySource
 import com.nuvio.app.features.streams.StreamItem
+import com.nuvio.app.features.streams.toStreamItem
 import com.nuvio.app.features.watchprogress.buildPlaybackVideoId
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -324,10 +327,13 @@ private suspend fun downloadEpisodes(
         .enabledAddons()
         .map { it.displayTitle }
         .toSet()
-    // Default download server is a plugin (scraper) name. When set, downloads are fetched ONLY from
-    // that plugin; when unset, fall back to picking from all sources.
-    val defaultPlugin = DownloadSettingsRepository.uiState.value.defaultServerAddonName
-    val selectedPlugins = defaultPlugin?.takeIf { it.isNotBlank() }?.let { setOf(it) } ?: emptySet()
+    // Default download server is a locally-installed plugin (scraper). When one is selected, episodes
+    // are fetched by running ONLY that plugin (never other plugins/addons). When unset, fall back to
+    // loading from all sources and picking the first.
+    val defaultPluginKey = DownloadSettingsRepository.uiState.value.defaultServerAddonName?.takeIf { it.isNotBlank() }
+    val defaultScraper = defaultPluginKey?.let { key ->
+        PluginRepository.uiState.value.scrapers.firstOrNull { it.enabled && (it.name == key || it.id == key) }
+    }
 
     for (video in episodes) {
         val season = video.season
@@ -335,31 +341,50 @@ private suspend fun downloadEpisodes(
         onProgress(getString(Res.string.download_picker_fetching_streams))
 
         val videoId = buildPlaybackVideoId(meta.id, season, episode, video.id)
-        PlayerStreamsRepository.loadEpisodeStreams(
-            type = meta.type,
-            videoId = videoId,
-            season = season,
-            episode = episode,
-        )
-        val finalState = withTimeoutOrNull(STREAM_FETCH_TIMEOUT_MS) {
-            PlayerStreamsRepository.episodeStreamsState.first { state ->
-                !state.isAnyLoading && (state.groups.any { it.streams.isNotEmpty() } || state.emptyStateReason != null)
+        val allStreams: List<StreamItem> = if (defaultScraper != null) {
+            PluginRepository.executeScraper(
+                scraper = defaultScraper,
+                tmdbId = pluginContentId(videoId = videoId, season = season, episode = episode),
+                mediaType = meta.type,
+                season = season,
+                episode = episode,
+            ).fold(
+                onSuccess = { results ->
+                    results.map { result ->
+                        result.toStreamItem(
+                            scraper = defaultScraper,
+                            addonName = defaultScraper.name,
+                            addonId = "plugin:${defaultScraper.id}",
+                            includeScraperNameInSubtitle = false,
+                        )
+                    }
+                },
+                onFailure = { emptyList() },
+            )
+        } else {
+            PlayerStreamsRepository.loadEpisodeStreams(
+                type = meta.type,
+                videoId = videoId,
+                season = season,
+                episode = episode,
+            )
+            val finalState = withTimeoutOrNull(STREAM_FETCH_TIMEOUT_MS) {
+                PlayerStreamsRepository.episodeStreamsState.first { state ->
+                    !state.isAnyLoading && (state.groups.any { it.streams.isNotEmpty() } || state.emptyStateReason != null)
+                }
             }
+            finalState?.groups?.flatMap { it.streams }.orEmpty()
         }
-        val allStreams = finalState?.groups?.flatMap { it.streams }.orEmpty()
 
         val picked: StreamItem? = StreamAutoPlaySelector.selectAutoPlayStream(
             streams = allStreams,
             mode = StreamAutoPlayMode.FIRST_STREAM,
             regexPattern = "",
-            source = if (selectedPlugins.isEmpty()) {
-                StreamAutoPlaySource.ALL_SOURCES
-            } else {
-                StreamAutoPlaySource.ENABLED_PLUGINS_ONLY
-            },
+            // Streams are already scoped to the chosen plugin (or all sources), so no extra filtering.
+            source = StreamAutoPlaySource.ALL_SOURCES,
             installedAddonNames = installedAddonNames,
             selectedAddons = emptySet(),
-            selectedPlugins = selectedPlugins,
+            selectedPlugins = emptySet(),
             debridEnabled = debrid.canResolvePlayableLinks,
             activeResolverProviderId = debrid.activeResolverProviderId,
         )
