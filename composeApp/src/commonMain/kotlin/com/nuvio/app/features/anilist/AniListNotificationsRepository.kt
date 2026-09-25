@@ -114,14 +114,17 @@ object AniListNotificationsRepository {
     suspend fun markAllRead(nowEpochSec: Long) {
         val token = AniListAuthRepository.accessTokenOrNull() ?: return
         try {
-            val data = AniListClient.query(
+            AniListClient.query(
                 query = "query { Viewer { id unreadNotificationCount(resetNotificationCount: true) } }",
                 forceRefresh = true,
                 accessToken = token,
             )
-            val unread = data["Viewer"]?.jsonObject
-                ?.get("unreadNotificationCount")?.jsonPrimitive?.intOrNull ?: 0
-            _uiState.value = _uiState.value.copy(unreadCount = unread, lastClearedAtEpochSec = nowEpochSec)
+            _uiState.value = _uiState.value.copy(unreadCount = 0, lastClearedAtEpochSec = nowEpochSec)
+            // The feed query (PAGE_QUERY) also carries the unread count and is cached for the normal
+            // TTL, so without a forced refetch the badge would reappear from that stale cache on the
+            // next open. Re-pull page 1 fresh so cache and state both reflect the reset.
+            page = 1
+            loadPage(token, targetPage = 1, forceRefresh = true)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
@@ -129,7 +132,7 @@ object AniListNotificationsRepository {
         }
     }
 
-    private suspend fun loadPage(token: String, targetPage: Int) {
+    private suspend fun loadPage(token: String, targetPage: Int, forceRefresh: Boolean = false) {
         loadMutex.withLock {
             try {
                 val data = AniListClient.query(
@@ -139,6 +142,7 @@ object AniListNotificationsRepository {
                         put("perPage", PAGE_SIZE)
                     },
                     accessToken = token,
+                    forceRefresh = forceRefresh,
                 )
                 val unread = data["Viewer"]?.jsonObject
                     ?.get("unreadNotificationCount")?.jsonPrimitive?.intOrNull ?: 0

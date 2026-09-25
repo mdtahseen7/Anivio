@@ -5,28 +5,36 @@
     </style>
 
     <style name="Theme.Nuvio.Splash" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">@color/nuvio_background</item>
+        <!-- Match the backdrop each splash artwork was drawn on; using the generic app background
+             (#0D0D0D) instead leaves a visible dark box/ring where the artwork's edge meets the
+             lighter splash background. Same sampled colours the adaptive-icon backdrops use. -->
+        <item name="windowSplashScreenBackground">@color/app_icon_background</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_logo</item>
         <item name="postSplashScreenTheme">@style/Theme.Nuvio</item>
     </style>
 
     <style name="Theme.Nuvio.Splash.ArcticBlue" parent="@style/Theme.Nuvio.Splash">
+        <item name="windowSplashScreenBackground">@color/app_icon_background_arctic_blue</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_logo_arctic_blue</item>
     </style>
 
     <style name="Theme.Nuvio.Splash.Emerald" parent="@style/Theme.Nuvio.Splash">
+        <item name="windowSplashScreenBackground">@color/app_icon_background_emerald</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_logo_emerald</item>
     </style>
 
     <style name="Theme.Nuvio.Splash.RoseGold" parent="@style/Theme.Nuvio.Splash">
+        <item name="windowSplashScreenBackground">@color/app_icon_background_rose_gold</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_logo_rose_gold</item>
     </style>
 
     <style name="Theme.Nuvio.Splash.Copper" parent="@style/Theme.Nuvio.Splash">
+        <item name="windowSplashScreenBackground">@color/app_icon_background_copper</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_logo_copper</item>
     </style>
 
     <style name="Theme.Nuvio.Splash.Graphite" parent="@style/Theme.Nuvio.Splash">
+        <item name="windowSplashScreenBackground">@color/app_icon_background_graphite</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_logo_graphite</item>
     </style>
 </resources>

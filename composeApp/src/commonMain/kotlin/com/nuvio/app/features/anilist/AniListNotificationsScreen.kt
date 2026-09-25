@@ -2,6 +2,7 @@ package com.nuvio.app.features.anilist
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -25,10 +27,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -43,7 +47,6 @@ import coil3.compose.AsyncImage
 import com.nuvio.app.core.ui.NuvioLoadingIndicator
 import com.nuvio.app.core.ui.NuvioScreen
 import com.nuvio.app.core.ui.NuvioScreenHeader
-import com.nuvio.app.core.ui.NuvioSectionLabel
 import com.nuvio.app.core.ui.nuvio
 import com.nuvio.app.core.time.EpisodeReleaseDatePlatform
 import kotlinx.coroutines.launch
@@ -63,22 +66,12 @@ fun AniListNotificationsScreen(
     val tokens = MaterialTheme.nuvio
     val scope = rememberCoroutineScope()
     val uiState by AniListNotificationsRepository.uiState.collectAsStateWithLifecycle()
+    var selectedTabIndex by rememberSaveable { mutableStateOf(0) }
+    val selectedCategory = NotificationCategory.entries[selectedTabIndex]
 
     LaunchedEffect(Unit) {
         AniListAuthRepository.ensureLoaded()
         AniListNotificationsRepository.refresh()
-    }
-
-    val shouldLoadMore by remember(uiState.items.size, uiState.hasReachedEnd) {
-        derivedStateOf {
-            val lastVisible = listState.layoutInfo.visibleItemsInfo.maxOfOrNull { it.index } ?: 0
-            lastVisible >= uiState.items.size - 4
-        }
-    }
-    LaunchedEffect(shouldLoadMore, uiState.hasReachedEnd) {
-        if (shouldLoadMore && !uiState.hasReachedEnd && uiState.items.isNotEmpty()) {
-            AniListNotificationsRepository.loadMore()
-        }
     }
 
     val signInHint = "Connect AniList in Settings → Tracking to see your notifications here."
@@ -114,6 +107,16 @@ fun AniListNotificationsScreen(
             )
         }
 
+        if (uiState.isAuthenticated && uiState.items.isNotEmpty()) {
+            item(key = "notif-tabs") {
+                NotificationTabs(
+                    selectedIndex = selectedTabIndex,
+                    onSelect = { selectedTabIndex = it },
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
+            }
+        }
+
         when {
             !uiState.isAuthenticated -> item {
                 EmptyState(text = signInHint)
@@ -134,24 +137,12 @@ fun AniListNotificationsScreen(
             }
 
             else -> {
-                // AniList returns one flat feed; split it into its own sections so aired episodes,
-                // social activity, forum replies and media edits don't all pile up together.
-                val grouped = NotificationCategory.entries.mapNotNull { category ->
-                    val rows = uiState.items.filter { categoryOf(it.type) == category }
-                    rows.takeIf { it.isNotEmpty() }?.let { category to it }
-                }
-                grouped.forEach { (category, rows) ->
-                    item(key = "header:${category.name}") {
-                        NuvioSectionLabel(
-                            text = category.title,
-                            modifier = Modifier.padding(
-                                start = tokens.spacing.screenHorizontal,
-                                end = tokens.spacing.screenHorizontal,
-                                top = 20.dp,
-                                bottom = 4.dp,
-                            ),
-                        )
+                val rows = uiState.items.filter { categoryOf(it.type) == selectedCategory }
+                if (rows.isEmpty()) {
+                    item(key = "empty-tab") {
+                        EmptyState(text = "No ${selectedCategory.title.lowercase()} notifications yet.")
                     }
+                } else {
                     items(rows, key = { it.id }) { notification ->
                         val isNew = uiState.isNew(notification)
                         NotificationRow(
@@ -166,13 +157,11 @@ fun AniListNotificationsScreen(
                     }
                 }
                 if (!uiState.hasReachedEnd) {
-                    item {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            NuvioLoadingIndicator()
-                        }
+                    item(key = "load-more") {
+                        LoadMoreButton(
+                            isLoading = uiState.isLoadingMore,
+                            onClick = { scope.launch { AniListNotificationsRepository.loadMore() } },
+                        )
                     }
                 }
             }
@@ -280,6 +269,74 @@ private fun NotificationRow(
                 softWrap = false,
                 modifier = Modifier.alpha(0.8f),
             )
+        }
+    }
+}
+
+@Composable
+private fun NotificationTabs(
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val tokens = MaterialTheme.nuvio
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = tokens.spacing.screenHorizontal),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        NotificationCategory.entries.forEachIndexed { index, category ->
+            val selected = index == selectedIndex
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(
+                        if (selected) tokens.colors.accent.copy(alpha = 0.18f) else Color.Transparent,
+                    )
+                    .clickable { onSelect(index) }
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+            ) {
+                Text(
+                    text = category.title,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                    color = if (selected) tokens.colors.accent else tokens.colors.textSecondary,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LoadMoreButton(
+    isLoading: Boolean,
+    onClick: () -> Unit,
+) {
+    val tokens = MaterialTheme.nuvio
+    Box(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (isLoading) {
+            NuvioLoadingIndicator()
+        } else {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(tokens.colors.surface)
+                    .clickable(onClick = onClick)
+                    .padding(horizontal = 24.dp, vertical = 12.dp),
+            ) {
+                Text(
+                    text = "Load more",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = tokens.colors.textPrimary,
+                )
+            }
         }
     }
 }
