@@ -17,6 +17,14 @@ enum class DownloadStatus {
     Failed,
 }
 
+/** A subtitle track downloaded alongside a video and stored locally for offline playback. */
+@Serializable
+data class DownloadedSubtitle(
+    val localFileUri: String,
+    val language: String,
+    val name: String? = null,
+)
+
 @Serializable
 data class DownloadItem(
     val id: String,
@@ -34,6 +42,7 @@ data class DownloadItem(
     val episodeThumbnail: String? = null,
     val streamTitle: String,
     val streamSubtitle: String? = null,
+    val subtitles: List<DownloadedSubtitle> = emptyList(),
     val providerName: String,
     val providerAddonId: String? = null,
     val sourceUrl: String,

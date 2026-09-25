@@ -978,7 +978,13 @@ internal fun MainAppContent(
                         sourceUrl = localSourceUrl,
                         sourceHeaders = emptyMap(),
                         sourceResponseHeaders = emptyMap(),
-                        externalSubtitles = emptyList(),
+                        externalSubtitles = downloadedItem?.subtitles.orEmpty().map {
+                            com.nuvio.app.features.streams.StreamSubtitle(
+                                url = it.localFileUri,
+                                language = it.language,
+                                name = it.name,
+                            )
+                        },
                         logo = logo,
                         poster = poster,
                         background = background,

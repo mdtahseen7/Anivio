@@ -114,6 +114,7 @@ object DownloadsRepository {
         episodeTitle: String?,
         episodeThumbnail: String?,
         stream: StreamItem,
+        subtitles: List<DownloadedSubtitle> = emptyList(),
     ): DownloadEnqueueResult {
         ensureLoaded()
 
@@ -172,6 +173,7 @@ object DownloadsRepository {
             episodeThumbnail = episodeThumbnail,
             streamTitle = stream.streamLabel,
             streamSubtitle = stream.streamSubtitle,
+            subtitles = subtitles,
             providerName = stream.addonName,
             providerAddonId = stream.addonId,
             sourceUrl = sourceUrl,

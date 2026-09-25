@@ -230,6 +230,16 @@ internal actual object DownloadsPlatformDownloader {
         return runCatching { tempFile.delete() }.getOrDefault(false)
     }
 
+    actual fun saveAuxiliaryFile(destinationFileName: String, bytes: ByteArray): String? {
+        val context = appContext ?: return null
+        val downloadsDir = File(context.filesDir, "downloads").apply { mkdirs() }
+        val file = File(downloadsDir, destinationFileName)
+        return runCatching {
+            file.writeBytes(bytes)
+            file.toURI().toString()
+        }.getOrNull()
+    }
+
     actual fun resolveLocalFileUri(localFileUri: String?, destinationFileName: String): String? {
         localFileUri
             ?.toLocalFileOrNull()

@@ -22,6 +22,9 @@ internal expect object DownloadsPlatformDownloader {
 
     fun removePartialFile(destinationFileName: String): Boolean
 
+    /** Write raw bytes (e.g. a downloaded subtitle) into the downloads directory; returns its file URI. */
+    fun saveAuxiliaryFile(destinationFileName: String, bytes: ByteArray): String?
+
     fun resolveLocalFileUri(localFileUri: String?, destinationFileName: String): String?
 
     fun openDownloadsDirectory(): Boolean

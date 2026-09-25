@@ -225,6 +225,12 @@ internal actual object DownloadsPlatformDownloader {
         return removePathIfExists(tempPath)
     }
 
+    actual fun saveAuxiliaryFile(destinationFileName: String, bytes: ByteArray): String? {
+        // ponytail: iOS offline-subtitle saving not wired (Android-focused). Return null so callers
+        // simply skip attaching downloaded subtitles here; implement with NSData.writeToFile if iOS needs it.
+        return null
+    }
+
     actual fun resolveLocalFileUri(localFileUri: String?, destinationFileName: String): String? {
         localFileUri?.toLocalPath()
             ?.takeIf { NSFileManager.defaultManager.fileExistsAtPath(it) }
