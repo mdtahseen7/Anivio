@@ -9,13 +9,15 @@ internal data class ScheduleDayGroup(
 )
 
 /**
- * Buckets entries by local calendar day and orders the groups: today first, then the upcoming days
- * in ascending order, then the past few days (closest first).
+ * Buckets entries by local calendar day, drops anything before today, and orders the groups today
+ * first then upcoming days ascending. Past days are never shown — a schedule that flips to backward
+ * dates after the upcoming week reads as a bug.
  */
 internal fun buildScheduleGroups(entries: List<ScheduleEntry>, nowEpochMs: Long): List<ScheduleDayGroup> {
     val todayStartSec = ScheduleTime.startOfDayEpochSec(nowEpochMs / 1000)
     return entries
         .groupBy { entry -> ScheduleTime.startOfDayEpochSec(entry.airingAtEpochSec) }
+        .filterKeys { startSec -> startSec >= todayStartSec }
         .map { (startSec, groupEntries) ->
             ScheduleDayGroup(
                 startEpochSec = startSec,
@@ -24,13 +26,7 @@ internal fun buildScheduleGroups(entries: List<ScheduleEntry>, nowEpochMs: Long)
                 entries = groupEntries.sortedBy(ScheduleEntry::airingAtEpochSec),
             )
         }
-        .sortedWith(
-            compareByDescending<ScheduleDayGroup> { it.isToday }
-                .thenByDescending { it.startEpochSec >= todayStartSec }
-                .thenBy { group ->
-                    if (group.startEpochSec >= todayStartSec) group.startEpochSec else -group.startEpochSec
-                },
-        )
+        .sortedBy(ScheduleDayGroup::startEpochSec)
 }
 
 internal fun formatScheduleTime(airingAtEpochSec: Long): String = ScheduleTime.timeLabel(airingAtEpochSec)

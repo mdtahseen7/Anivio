@@ -242,6 +242,21 @@ internal fun PlayerScreenRuntime.tryShowParentalGuide() {
     }
 }
 
+internal suspend fun PlayerScreenRuntime.resolveParentalWarnings(): List<ParentalWarning> {
+    val candidates = listOf(parentMetaId, activeVideoId)
+
+    // AniList content tags first: anime-native and present for essentially every title here.
+    candidates.firstNotNullOfOrNull { it?.let(::parseAniListMediaId) }?.let { anilistId ->
+        val warnings = ParentalGuideRepository.getAniListContentWarnings(anilistId, parentalGuideLabels)
+        if (warnings.isNotEmpty()) return warnings
+    }
+
+    // IMDb parents guide as a fallback for the rare title AniList has no content tags for.
+    val imdbId = resolveParentalGuideImdbId() ?: return emptyList()
+    val guide = ParentalGuideRepository.getParentalGuide(imdbId) ?: return emptyList()
+    return buildParentalWarnings(guide, parentalGuideLabels)
+}
+
 internal suspend fun PlayerScreenRuntime.resolveParentalGuideImdbId(): String? {
     val candidates = listOf(parentMetaId, activeVideoId)
     candidates.firstNotNullOfOrNull(::extractParentalGuideImdbId)?.let { return it }

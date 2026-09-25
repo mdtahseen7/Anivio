@@ -17,6 +17,10 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.DoneAll
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,6 +28,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -38,8 +43,10 @@ import coil3.compose.AsyncImage
 import com.nuvio.app.core.ui.NuvioLoadingIndicator
 import com.nuvio.app.core.ui.NuvioScreen
 import com.nuvio.app.core.ui.NuvioScreenHeader
+import com.nuvio.app.core.ui.NuvioSectionLabel
 import com.nuvio.app.core.ui.nuvio
 import com.nuvio.app.core.time.EpisodeReleaseDatePlatform
+import kotlinx.coroutines.launch
 
 /**
  * The signed-in AniList account's notification feed. Rows are grouped visually by "new" state
@@ -54,18 +61,12 @@ fun AniListNotificationsScreen(
     onPosterClick: ((mediaId: Int, title: String?) -> Unit)? = null,
 ) {
     val tokens = MaterialTheme.nuvio
+    val scope = rememberCoroutineScope()
     val uiState by AniListNotificationsRepository.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         AniListAuthRepository.ensureLoaded()
         AniListNotificationsRepository.refresh()
-    }
-    LaunchedEffect(uiState.items.isNotEmpty(), uiState.isAuthenticated) {
-        if (uiState.isAuthenticated && uiState.items.isNotEmpty() && uiState.unreadCount > 0) {
-            AniListNotificationsRepository.markAllRead(
-                nowEpochSec = EpisodeReleaseDatePlatform.nowEpochMs() / 1000L,
-            )
-        }
     }
 
     val shouldLoadMore by remember(uiState.items.size, uiState.hasReachedEnd) {
@@ -91,6 +92,25 @@ fun AniListNotificationsScreen(
             NuvioScreenHeader(
                 title = "Notifications",
                 onBack = onBack,
+                actions = {
+                    if (uiState.isAuthenticated && uiState.unreadCount > 0) {
+                        IconButton(
+                            onClick = {
+                                scope.launch {
+                                    AniListNotificationsRepository.markAllRead(
+                                        nowEpochSec = EpisodeReleaseDatePlatform.nowEpochMs() / 1000L,
+                                    )
+                                }
+                            },
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.DoneAll,
+                                contentDescription = "Mark all as read",
+                                tint = tokens.colors.accent,
+                            )
+                        }
+                    }
+                },
             )
         }
 
@@ -114,17 +134,36 @@ fun AniListNotificationsScreen(
             }
 
             else -> {
-                items(uiState.items, key = { it.id }) { notification ->
-                    val isNew = uiState.isNew(notification)
-                    NotificationRow(
-                        notification = notification,
-                        isNew = isNew,
-                        onClick = notification.mediaId?.let { mediaId ->
-                            {
-                                onPosterClick?.invoke(mediaId, notification.mediaTitle)
-                            }
-                        },
-                    )
+                // AniList returns one flat feed; split it into its own sections so aired episodes,
+                // social activity, forum replies and media edits don't all pile up together.
+                val grouped = NotificationCategory.entries.mapNotNull { category ->
+                    val rows = uiState.items.filter { categoryOf(it.type) == category }
+                    rows.takeIf { it.isNotEmpty() }?.let { category to it }
+                }
+                grouped.forEach { (category, rows) ->
+                    item(key = "header:${category.name}") {
+                        NuvioSectionLabel(
+                            text = category.title,
+                            modifier = Modifier.padding(
+                                start = tokens.spacing.screenHorizontal,
+                                end = tokens.spacing.screenHorizontal,
+                                top = 20.dp,
+                                bottom = 4.dp,
+                            ),
+                        )
+                    }
+                    items(rows, key = { it.id }) { notification ->
+                        val isNew = uiState.isNew(notification)
+                        NotificationRow(
+                            notification = notification,
+                            isNew = isNew,
+                            onClick = notification.mediaId?.let { mediaId ->
+                                {
+                                    onPosterClick?.invoke(mediaId, notification.mediaTitle)
+                                }
+                            },
+                        )
+                    }
                 }
                 if (!uiState.hasReachedEnd) {
                     item {
@@ -209,6 +248,7 @@ private fun NotificationRow(
                     color = tokens.colors.textPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
                 )
                 if (notification.episode != null) {
                     Spacer(modifier = Modifier.width(6.dp))
@@ -217,6 +257,8 @@ private fun NotificationRow(
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = tokens.colors.accent,
+                        maxLines = 1,
+                        softWrap = false,
                     )
                 }
             }
@@ -234,6 +276,8 @@ private fun NotificationRow(
                 text = relativeTime(created),
                 style = MaterialTheme.typography.labelSmall,
                 color = tokens.colors.textSecondary,
+                maxLines = 1,
+                softWrap = false,
                 modifier = Modifier.alpha(0.8f),
             )
         }
@@ -253,6 +297,22 @@ private fun EmptyState(text: String) {
             color = tokens.colors.textSecondary,
         )
     }
+}
+
+private enum class NotificationCategory(val title: String) {
+    EPISODES("New Episodes"),
+    ACTIVITY("Activity"),
+    FORUM("Forum"),
+    UPDATES("Updates"),
+}
+
+private fun categoryOf(type: String): NotificationCategory = when (type) {
+    "AIRING" -> NotificationCategory.EPISODES
+    "THREAD_COMMENT_MENTION", "THREAD_COMMENT_REPLY", "THREAD_COMMENT_SUBSCRIBED",
+    "THREAD_COMMENT_LIKE", "THREAD_LIKE" -> NotificationCategory.FORUM
+    "MEDIA_DELETION", "MEDIA_DATA_CHANGE", "MEDIA_MERGE" -> NotificationCategory.UPDATES
+    // FOLLOWING and every ACTIVITY_* (plus anything unrecognised) is social activity.
+    else -> NotificationCategory.ACTIVITY
 }
 
 private fun typeGlyph(type: String): String = when (type) {

@@ -433,9 +433,9 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
         parentalGuideHasShown = false
         playbackStartedForParentalGuide = false
 
-        val imdbId = resolveParentalGuideImdbId() ?: return@LaunchedEffect
-        val guide = ParentalGuideRepository.getParentalGuide(imdbId) ?: return@LaunchedEffect
-        parentalWarnings = buildParentalWarnings(guide, parentalGuideLabels)
+        val warnings = resolveParentalWarnings()
+        if (warnings.isEmpty()) return@LaunchedEffect
+        parentalWarnings = warnings
 
         if (playbackSnapshot.isPlaying) {
             tryShowParentalGuide()

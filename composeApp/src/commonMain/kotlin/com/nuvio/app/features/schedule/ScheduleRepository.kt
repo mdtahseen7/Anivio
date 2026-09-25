@@ -67,7 +67,10 @@ object ScheduleRepository {
     private suspend fun fetchWeek(): Result<List<ScheduleEntry>> {
         val nowSec = LibraryScheduleClock.nowEpochMs() / 1000
         val variables = buildJsonObject {
-            put("weekStart", nowSec - WINDOW_MS / 1000)
+            // Start at local midnight today, not a week ago: fetching the past week only dragged
+            // already-aired days into the list, which then rendered as "backward" dates after the
+            // upcoming ones. `airingAt_greater` is exclusive, so episodes earlier today still count.
+            put("weekStart", ScheduleTime.startOfDayEpochSec(nowSec) - 1)
             put("weekEnd", nowSec + WINDOW_MS / 1000)
         }
         return runCatching {

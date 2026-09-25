@@ -65,4 +65,27 @@ class ParentalGuideRepositoryTest {
         assertEquals(12345, extractParentalGuideTmdbId("tmdb:12345"))
         assertEquals(12345, extractParentalGuideTmdbId("series:tmdb:12345"))
     }
+
+    @Test
+    fun `anilist content warnings keep only content tags, rank as severity, spoilers dropped`() {
+        val labels = ParentalGuideLabels(
+            nudity = "", violence = "", profanity = "", alcohol = "", frightening = "",
+            severe = "Severe", moderate = "Moderate", mild = "Mild",
+        )
+        val warnings = buildAniListContentWarnings(
+            tags = listOf(
+                AniListTagNode(name = "Gore", rank = 80),
+                AniListTagNode(name = "Nudity", rank = 40),
+                AniListTagNode(name = "Drugs", rank = 20),
+                AniListTagNode(name = "Time Skip", rank = 90),          // not a content tag
+                AniListTagNode(name = "Male Protagonist", rank = 95),   // not a content tag
+                AniListTagNode(name = "Cannibalism", rank = 8),         // below mild floor
+                AniListTagNode(name = "Cannibalism", rank = 70, isMediaSpoiler = true), // spoiler
+            ),
+            labels = labels,
+        )
+
+        assertEquals(listOf("Gore", "Nudity", "Drugs"), warnings.map { it.label })
+        assertEquals(listOf("Severe", "Moderate", "Mild"), warnings.map { it.severity })
+    }
 }

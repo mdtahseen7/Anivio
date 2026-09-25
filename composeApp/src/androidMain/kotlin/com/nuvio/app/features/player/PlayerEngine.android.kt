@@ -2202,12 +2202,36 @@ private class CueNormalizingTextOutput(
 ) : TextOutput {
     override fun onCues(cueGroup: CueGroup) {
         val processed = cueGroup.cues.mapNotNull(::processCue)
-        delegate.onCues(CueGroup(processed, cueGroup.presentationTimeUs))
+        delegate.onCues(CueGroup(stackOverlappingCues(processed), cueGroup.presentationTimeUs))
     }
 
     @Deprecated("Uses the deprecated Media3 callback for text outputs.")
     override fun onCues(cues: List<Cue>) {
-        delegate.onCues(cues.mapNotNull(::processCue))
+        delegate.onCues(stackOverlappingCues(cues.mapNotNull(::processCue)))
+    }
+
+    /**
+     * SubtitleView only auto-stacks cues whose line is unset. When two lines are on screen at once
+     * (two speakers talking together) some subtitle formats hand both the same explicit line, so
+     * they paint on top of each other. If any text cues collide on the same line, clear the line on
+     * all of them and let SubtitleView lay them out on separate rows instead.
+     */
+    private fun stackOverlappingCues(cues: List<Cue>): List<Cue> {
+        val textCues = cues.filter { it.bitmap == null && it.text != null }
+        if (textCues.size < 2) return cues
+        val lineKey = { cue: Cue -> "${cue.line}:${cue.lineType}:${cue.lineAnchor}" }
+        val collides = textCues.groupBy(lineKey).any { it.value.size > 1 }
+        if (!collides) return cues
+        return cues.map { cue ->
+            if (cue.bitmap == null && cue.text != null && cue.verticalType == Cue.TYPE_UNSET) {
+                cue.buildUpon()
+                    .setLine(Cue.DIMEN_UNSET, Cue.TYPE_UNSET)
+                    .setLineAnchor(Cue.TYPE_UNSET)
+                    .build()
+            } else {
+                cue
+            }
+        }
     }
 
     private fun processCue(cue: Cue): Cue? {

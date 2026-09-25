@@ -1,12 +1,14 @@
 package com.nuvio.app.features.player
 
 import co.touchlab.kermit.Logger
+import com.nuvio.app.core.anilist.AniListClient
 import com.nuvio.app.features.addons.httpRequestRaw
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 
 private const val PARENTAL_GUIDE_BASE_URL = "https://api.tiffara.com"
 private val imdbIdPattern = Regex("tt\\d+")
@@ -72,7 +74,79 @@ internal object ParentalGuideRepository {
         }
         return result
     }
+
+    /**
+     * Content warnings straight from AniList's community tags — the anime-native source. Unlike the
+     * IMDb parents guide these exist for effectively every title in the app and ride AniList's own
+     * cache, so warnings actually show up. The tag name is the label; its 0–100 rank becomes the
+     * severity.
+     */
+    suspend fun getAniListContentWarnings(
+        anilistId: Int,
+        labels: ParentalGuideLabels,
+    ): List<ParentalWarning> = runCatching {
+        val data = AniListClient.query(
+            query = "query { Media(id: $anilistId, type: ANIME) { tags { name rank isMediaSpoiler } } }",
+        )
+        val mediaObject = data["Media"] as? JsonObject ?: return@runCatching emptyList()
+        val media = AniListClient.json.decodeFromJsonElement(AniListTagsMedia.serializer(), mediaObject)
+        buildAniListContentWarnings(media.tags, labels)
+    }.onFailure { error ->
+        log.w(error) { "Failed to fetch AniList content tags for $anilistId" }
+    }.getOrDefault(emptyList())
 }
+
+/**
+ * AniList tags that describe on-screen content worth warning about. Plot-descriptor and
+ * demographic tags are deliberately excluded — only things a viewer would want flagged.
+ */
+internal val ANILIST_CONTENT_WARNING_TAGS = setOf(
+    "nudity",
+    "sexual content",
+    "sexual abuse",
+    "gore",
+    "violence",
+    "drugs",
+    "cannibalism",
+    "torture",
+    "suicide",
+    "body horror",
+)
+
+/** AniList tag rank (0–100, how prevalent the tag is) mapped onto the three severity labels. */
+internal fun aniListTagSeverity(rank: Int, labels: ParentalGuideLabels): String? = when {
+    rank >= 60 -> labels.severe
+    rank >= 30 -> labels.moderate
+    rank >= 15 -> labels.mild
+    else -> null
+}
+
+internal fun buildAniListContentWarnings(
+    tags: List<AniListTagNode>,
+    labels: ParentalGuideLabels,
+): List<ParentalWarning> =
+    tags
+        // Spoiler-flagged tags can reveal plot; a content warning must not itself spoil.
+        .filterNot { it.isMediaSpoiler }
+        .filter { it.name.lowercase() in ANILIST_CONTENT_WARNING_TAGS }
+        .sortedByDescending { it.rank ?: 0 }
+        .mapNotNull { tag ->
+            val severity = aniListTagSeverity(tag.rank ?: 0, labels) ?: return@mapNotNull null
+            ParentalWarning(label = tag.name, severity = severity)
+        }
+        .take(5)
+
+@Serializable
+internal data class AniListTagsMedia(
+    val tags: List<AniListTagNode> = emptyList(),
+)
+
+@Serializable
+internal data class AniListTagNode(
+    val name: String = "",
+    val rank: Int? = null,
+    val isMediaSpoiler: Boolean = false,
+)
 
 internal fun mapParentalGuideCategoriesToResult(
     categories: List<ImdbApiParentsGuideCategory>,

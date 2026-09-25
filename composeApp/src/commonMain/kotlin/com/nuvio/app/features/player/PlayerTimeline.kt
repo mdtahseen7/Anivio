@@ -29,6 +29,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -39,10 +40,44 @@ import androidx.compose.ui.unit.dp
 import com.nuvio.app.core.ui.accentBrush
 import com.nuvio.app.core.ui.themePalette
 import com.nuvio.app.core.ui.nuvioTypeScale
+import com.nuvio.app.features.player.skip.SkipInterval
+import com.nuvio.app.features.player.skip.SkipSegmentKind
+import com.nuvio.app.features.player.skip.segmentKind
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
 
 internal val PlayerTimelineContentInset = 2.dp
+
+/** Colour for an intro/outro/recap band on the seekbar, or null for segments not worth marking. */
+internal fun skipSegmentColor(interval: SkipInterval): Color? = when (interval.segmentKind()) {
+    SkipSegmentKind.OPENING -> Color(0xFF34D399)
+    SkipSegmentKind.ENDING -> Color(0xFFFB923C)
+    SkipSegmentKind.RECAP -> Color(0xFFA78BFA)
+    SkipSegmentKind.OTHER -> null
+}
+
+/** Paints intro/outro/recap bands across a seekbar track at [topY] with height [trackHeight]. */
+internal fun DrawScope.drawSkipSegments(
+    intervals: List<SkipInterval>,
+    durationMs: Long,
+    topY: Float,
+    trackHeight: Float,
+) {
+    if (durationMs <= 0L || intervals.isEmpty()) return
+    val radius = CornerRadius(trackHeight / 2)
+    intervals.forEach { interval ->
+        val color = skipSegmentColor(interval) ?: return@forEach
+        val startFrac = (interval.startTime * 1000.0 / durationMs).coerceIn(0.0, 1.0).toFloat()
+        val endFrac = (interval.endTime * 1000.0 / durationMs).coerceIn(0.0, 1.0).toFloat()
+        if (endFrac <= startFrac) return@forEach
+        drawRoundRect(
+            color = color.copy(alpha = 0.9f),
+            topLeft = Offset(size.width * startFrac, topY),
+            size = Size(size.width * (endFrac - startFrac), trackHeight),
+            cornerRadius = radius,
+        )
+    }
+}
 
 @Composable
 internal fun PlayerTimelineDetails(
@@ -110,6 +145,7 @@ internal fun PlayerTimeline(
     onScrubFinished: (Long) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    skipIntervals: List<SkipInterval> = emptyList(),
 ) {
     val durationMs = snapshot.durationMs.coerceAtLeast(0L)
     val rangeEnd = durationMs.coerceAtLeast(1L).toFloat()
@@ -159,6 +195,9 @@ internal fun PlayerTimeline(
                                 size = Size(size.width, trackHeight),
                                 cornerRadius = radius,
                             )
+                            // Intro/outro/recap bands, drawn over the base track so upcoming
+                            // segments are visible; the progress fill below covers played ones.
+                            drawSkipSegments(skipIntervals, durationMs, trackOrigin.y, trackHeight)
                             drawRoundRect(
                                 color = accent.copy(alpha = 0.35f),
                                 topLeft = trackOrigin,

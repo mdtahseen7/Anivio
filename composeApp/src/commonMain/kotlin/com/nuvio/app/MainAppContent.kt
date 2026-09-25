@@ -1455,9 +1455,10 @@ internal fun MainAppContent(
                         onAddProfileRequested = onSwitchProfile,
                     )
                 }
-                entry<AniListNotificationsRoute> { _ ->
+                entry<AniListNotificationsRoute> { route ->
                     AniListNotificationsDestination(
                         navController = navController,
+                        route = route,
                         onPosterClick = { meta ->
                             navController.navigate(
                                 DetailRoute(type = meta.type, id = meta.id, title = meta.name),

@@ -6,8 +6,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -17,9 +19,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeContent
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.BrightnessHigh
+import androidx.compose.material.icons.rounded.VolumeOff
+import androidx.compose.material.icons.rounded.VolumeUp
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -104,26 +112,45 @@ private fun PlayerGestureFeedback(
                     val level = feedback.level?.coerceIn(0f, 1f) ?: 0f
                     val trackHeight = minOf(maxHeight / 4, 104.dp)
                     val animatedLevel by animateFloatAsState(level, tween(80), label = "playerGestureLevel")
-                    Box(
+                    val icon = when (feedback.icon) {
+                        GestureFeedbackIcon.Brightness -> Icons.Rounded.BrightnessHigh
+                        GestureFeedbackIcon.VolumeMuted -> Icons.Rounded.VolumeOff
+                        else -> Icons.Rounded.VolumeUp
+                    }
+                    Column(
+                        // Draw on the side opposite the swiping finger — brightness is a left-edge
+                        // swipe, volume a right-edge one — so the finger never covers the bar.
                         modifier = Modifier
-                            .align(if (isBrightness) Alignment.CenterStart else Alignment.CenterEnd)
+                            .align(if (isBrightness) Alignment.CenterEnd else Alignment.CenterStart)
                             .padding(horizontal = horizontalSafePadding + 8.dp)
                             .semantics {
                                 contentDescription = description
                                 progressBarRangeInfo = ProgressBarRangeInfo(level, 0f..1f)
-                            }
-                            .width(6.dp)
-                            .height(trackHeight)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(Color.White.copy(alpha = 0.3f)),
+                            },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        Box(
-                            Modifier
-                                .align(Alignment.BottomCenter)
-                                .fillMaxWidth()
-                                .fillMaxHeight(animatedLevel)
-                                .background(MaterialTheme.themePalette.accentBrush()),
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp),
                         )
+                        Box(
+                            modifier = Modifier
+                                .width(6.dp)
+                                .height(trackHeight)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(Color.White.copy(alpha = 0.3f)),
+                        ) {
+                            Box(
+                                Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .fillMaxWidth()
+                                    .fillMaxHeight(animatedLevel)
+                                    .background(MaterialTheme.themePalette.accentBrush()),
+                            )
+                        }
                     }
                 }
                 GestureFeedbackIcon.Speed -> {

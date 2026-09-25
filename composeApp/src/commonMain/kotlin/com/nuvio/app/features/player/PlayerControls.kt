@@ -70,6 +70,8 @@ import com.nuvio.app.core.ui.NuvioBackButton
 import com.nuvio.app.core.ui.themePalette
 import com.nuvio.app.core.ui.accentBrush
 import com.nuvio.app.core.ui.appIconPainter
+import androidx.compose.ui.draw.drawBehind
+import com.nuvio.app.features.player.skip.SkipInterval
 import com.nuvio.app.core.ui.gradientMask
 import com.nuvio.app.core.ui.nuvioTypeScale
 import nuvio.composeapp.generated.resources.*
@@ -118,6 +120,7 @@ internal fun PlayerControlsShell(
     onParentalGuideAnimationComplete: () -> Unit = {},
     onScrubChange: (Long) -> Unit,
     onScrubFinished: (Long) -> Unit,
+    skipIntervals: List<SkipInterval> = emptyList(),
     horizontalSafePadding: androidx.compose.ui.unit.Dp,
     modifier: Modifier = Modifier,
 ) {
@@ -272,6 +275,7 @@ internal fun PlayerControlsShell(
                     onAudioClick = onAudioClick,
                     onSourcesClick = onSourcesClick,
                     onEpisodesClick = onEpisodesClick,
+                    skipIntervals = skipIntervals,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
@@ -310,6 +314,7 @@ internal fun PlayerControlsShell(
                             onInteraction()
                             onScrubFinished(it)
                         },
+                        skipIntervals = skipIntervals,
                     )
                     PlayerControlActions(
                         playbackSnapshot = playbackSnapshot,
@@ -643,6 +648,7 @@ private fun ProgressControls(
     onAudioClick: () -> Unit,
     onSourcesClick: (() -> Unit)? = null,
     onEpisodesClick: (() -> Unit)? = null,
+    skipIntervals: List<SkipInterval> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
     val durationMs = playbackSnapshot.durationMs.coerceAtLeast(1L)
@@ -660,7 +666,7 @@ private fun ProgressControls(
             onValueChange = { value -> onScrubChange(value.toLong()) },
             onValueChangeFinished = { onScrubFinished(displayedPositionMs.coerceIn(0L, durationMs)) },
             valueRange = 0f..durationMs.toFloat(),
-            track = { sliderState -> PlayerProgressTrack(sliderState) },
+            track = { sliderState -> PlayerProgressTrack(sliderState, skipIntervals, durationMs) },
         )
         Row(
             modifier = Modifier
@@ -732,7 +738,11 @@ private fun ProgressControls(
 }
 
 @Composable
-private fun PlayerProgressTrack(sliderState: SliderState) {
+private fun PlayerProgressTrack(
+    sliderState: SliderState,
+    skipIntervals: List<SkipInterval>,
+    durationMs: Long,
+) {
     val palette = MaterialTheme.themePalette
     val inactiveTrackColors = SliderDefaults.colors(
         activeTrackColor = Color.Transparent,
@@ -749,6 +759,14 @@ private fun PlayerProgressTrack(sliderState: SliderState) {
         SliderDefaults.Track(
             sliderState = sliderState,
             colors = inactiveTrackColors,
+        )
+        // Intro/outro/recap bands over the inactive track; the active (played) track draws on top.
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .drawBehind {
+                    drawSkipSegments(skipIntervals, durationMs, topY = 0f, trackHeight = size.height)
+                },
         )
         SliderDefaults.Track(
             sliderState = sliderState,

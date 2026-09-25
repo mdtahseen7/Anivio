@@ -10,6 +10,16 @@ data class SkipInterval(
     val provider: String,
 )
 
+/** Coarse grouping of a [SkipInterval.type] for labelling and seekbar colouring. */
+enum class SkipSegmentKind { OPENING, ENDING, RECAP, OTHER }
+
+fun SkipInterval.segmentKind(): SkipSegmentKind = when (type.lowercase()) {
+    "intro", "op", "mixed-op", "opening" -> SkipSegmentKind.OPENING
+    "outro", "ed", "mixed-ed", "credits", "ending" -> SkipSegmentKind.ENDING
+    "recap" -> SkipSegmentKind.RECAP
+    else -> SkipSegmentKind.OTHER
+}
+
 data class NextEpisodeInfo(
     val videoId: String,
     val season: Int,

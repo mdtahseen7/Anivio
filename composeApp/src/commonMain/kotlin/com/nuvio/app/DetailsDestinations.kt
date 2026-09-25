@@ -74,9 +74,9 @@ private fun rememberOpenMeta(navController: NuvioNavigator): (MetaPreview) -> Un
 @Composable
 internal fun AniListNotificationsDestination(
     navController: NuvioNavigator,
+    route: AniListNotificationsRoute,
     onPosterClick: (MetaPreview) -> Unit,
 ) {
-    val route = AniListNotificationsRoute(title = "")
     val onBack = rememberGuardedPopBackStack(navController, route)
     AniListNotificationsScreen(
         listState = rememberLazyListState(),
