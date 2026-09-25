@@ -3,6 +3,7 @@ package com.nuvio.app.core.auth
 import co.touchlab.kermit.Logger
 import com.nuvio.app.core.network.ServerConfiguration
 import com.nuvio.app.core.network.ServerConfigurationRepository
+import com.nuvio.app.core.network.SupabaseConfig
 import com.nuvio.app.core.network.SupabaseProvider
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.user.UserInfo
@@ -52,7 +53,6 @@ enum class DeviceLinkAuthFailure {
 object DeviceLinkAuthRepository {
     private const val maxConsecutivePollFailures = 3
     private const val maxPollAttempts = 120
-    private const val officialLinkUrl = "https://nuvio.tv/link"
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val log = Logger.withTag("DeviceLinkAuthRepository")
     private val json = Json { ignoreUnknownKeys = true }
@@ -192,8 +192,14 @@ object DeviceLinkAuthRepository {
         }
     }
 
-    private fun ServerConfiguration.deviceLinkUrl(): String =
-        if (isCustom) "${backendUrl.trimEnd('/')}/link" else officialLinkUrl
+    private fun ServerConfiguration.deviceLinkUrl(): String = when {
+        // A user-run server hosts its own approval page at /link.
+        isCustom -> "${backendUrl.trimEnd('/')}/link"
+        // The bundled backend's approval page, set at build time via ANIVIO_DEVICE_LINK_URL.
+        SupabaseConfig.DEVICE_LINK_URL.isNotBlank() -> SupabaseConfig.DEVICE_LINK_URL
+        // Last resort so nothing ever points at the upstream project's domain.
+        else -> "${backendUrl.trimEnd('/')}/link"
+    }
 }
 
 internal fun formatDeviceLinkCode(value: String): String {

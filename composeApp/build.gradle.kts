@@ -34,6 +34,10 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
     @get:Input
     abstract val supabaseFallbackUrl: Property<String>
 
+    /** Web page users open to approve a TV/device sign-in (the device-link "enter code" page). */
+    @get:Input
+    abstract val deviceLinkUrl: Property<String>
+
     @get:Input
     abstract val sentryDsn: Property<String>
 
@@ -89,6 +93,7 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
                 |    const val URL = "${supabaseUrl.get()}"
                 |    const val ANON_KEY = "${supabaseAnonKey.get()}"
                 |    const val FALLBACK_URL = "${supabaseFallbackUrl.get()}"
+                |    const val DEVICE_LINK_URL = "${deviceLinkUrl.get()}"
                 |}
                 """.trimMargin()
             )
@@ -466,6 +471,7 @@ val generateRuntimeConfigs = tasks.register<GenerateRuntimeConfigsTask>("generat
     supabaseFallbackUrl.set(
         runtimeConfigValueOf("ANIVIO_SUPABASE_FALLBACK_URL", "NUVIO_SUPABASE_FALLBACK_URL")
     )
+    deviceLinkUrl.set(runtimeConfigValueOf("ANIVIO_DEVICE_LINK_URL", "NUVIO_DEVICE_LINK_URL"))
     sentryDsn.set(runtimeConfigValue("SENTRY_DSN"))
     fanartApiKey.set(runtimeConfigValue("FANART_API_KEY"))
     tvdbApiKey.set(runtimeConfigValue("TVDB_API_KEY"))

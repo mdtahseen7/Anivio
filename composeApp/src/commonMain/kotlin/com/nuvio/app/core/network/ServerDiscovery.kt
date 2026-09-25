@@ -47,7 +47,6 @@ private data class DiscoveryCapabilities(
 
 internal object ServerDiscoveryPolicy {
     private const val discoveryPath = "/.well-known/nuvio"
-    private const val canonicalOfficialBackend = "https://api.nuvio.tv"
     private val json = Json { ignoreUnknownKeys = true }
 
     fun discoveryUrl(input: String): String {
@@ -99,7 +98,7 @@ internal object ServerDiscoveryPolicy {
 
     fun isOfficial(candidateUrl: String): Boolean =
         matchesBackend(candidateUrl, SupabaseConfig.URL) ||
-            matchesBackend(candidateUrl, canonicalOfficialBackend)
+            (SupabaseConfig.FALLBACK_URL.isNotBlank() && matchesBackend(candidateUrl, SupabaseConfig.FALLBACK_URL))
 
     private fun matchesBackend(candidateUrl: String, backendUrl: String): Boolean {
         val candidate = runCatching { Url(candidateUrl) }.getOrNull() ?: return false
