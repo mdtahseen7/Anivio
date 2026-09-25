@@ -965,40 +965,8 @@ fun HomeScreen(
         // AniList session is restored, even if Home composed before that finished.
         val isAniListAuthenticated by AniListAuthRepository.isAuthenticated.collectAsStateWithLifecycle()
         val showNotificationsBell = onNotificationsClick != null && isAniListAuthenticated
-        if (showNotificationsBell) {
-            val bellNotificationsUiState by AniListNotificationsRepository.uiState
-                .collectAsStateWithLifecycle()
-            LaunchedEffect(Unit) {
-                AniListNotificationsRepository.refresh()
-            }
-            NuvioCircularGlassButton(
-                onClick = onNotificationsClick!!,
-                size = 48.dp,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .statusBarsPadding()
-                    .padding(top = 8.dp, start = 16.dp),
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Rounded.Notifications,
-                        contentDescription = "Notifications",
-                        tint = Color.White,
-                        modifier = Modifier.size(24.dp),
-                    )
-                    if (bellNotificationsUiState.unreadCount > 0) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(top = 1.dp, end = 1.dp)
-                                .size(9.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.nuvio.colors.accent),
-                        )
-                    }
-                }
-            }
-        }
+        // The bell itself is rendered AFTER NuvioScreen (below) so it floats on top of the content
+        // instead of being covered by the scrolling list / hero.
 
         NuvioScreen(
             modifier = Modifier.fillMaxSize().then(heroStretchModifier),
@@ -1147,6 +1115,42 @@ fun HomeScreen(
                                 }
                             }
                         }
+                    }
+                }
+            }
+        }
+
+        // Rendered last so it floats on top of NuvioScreen's content (top-left, home only).
+        if (showNotificationsBell) {
+            val bellNotificationsUiState by AniListNotificationsRepository.uiState
+                .collectAsStateWithLifecycle()
+            LaunchedEffect(Unit) {
+                AniListNotificationsRepository.refresh()
+            }
+            NuvioCircularGlassButton(
+                onClick = onNotificationsClick!!,
+                size = 48.dp,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .statusBarsPadding()
+                    .padding(top = 8.dp, start = 16.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Rounded.Notifications,
+                        contentDescription = "Notifications",
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp),
+                    )
+                    if (bellNotificationsUiState.unreadCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(top = 1.dp, end = 1.dp)
+                                .size(9.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.nuvio.colors.accent),
+                        )
                     }
                 }
             }
