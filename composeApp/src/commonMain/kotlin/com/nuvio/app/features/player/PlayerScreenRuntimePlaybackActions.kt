@@ -1,5 +1,8 @@
 package com.nuvio.app.features.player
 
+import com.nuvio.app.core.anilist.AniZipClient
+import com.nuvio.app.core.anilist.imdbId
+import com.nuvio.app.features.anilist.parseAniListMediaId
 import com.nuvio.app.features.tmdb.TmdbService
 import com.nuvio.app.features.tracking.TrackingMediaReference
 import com.nuvio.app.features.tracking.TrackingScrobbleAction
@@ -242,6 +245,16 @@ internal fun PlayerScreenRuntime.tryShowParentalGuide() {
 internal suspend fun PlayerScreenRuntime.resolveParentalGuideImdbId(): String? {
     val candidates = listOf(parentMetaId, activeVideoId)
     candidates.firstNotNullOfOrNull(::extractParentalGuideImdbId)?.let { return it }
+
+    // Anime plays under `anilist:` ids that carry no IMDb or TMDB id inline, so the lookup below
+    // always no-ops for them. ani.zip maps the AniList id to the IMDb id the parental-guide API
+    // keys on — without this step content warnings never appear on any anime title.
+    candidates.firstNotNullOfOrNull { it?.let(::parseAniListMediaId) }?.let { anilistId ->
+        AniZipClient.mappings(anilistId)?.imdbId()
+            ?.let(::extractParentalGuideImdbId)
+            ?.let { return it }
+    }
+
     val tmdbId = candidates.firstNotNullOfOrNull(::extractParentalGuideTmdbId) ?: return null
     return TmdbService.tmdbToImdb(
         tmdbId = tmdbId,
