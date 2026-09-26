@@ -1,13 +1,11 @@
 // Anivio device-link page configuration.
-// Fill these in with your own Supabase project (same values your app build uses:
-// ANIVIO_SUPABASE_URL / ANIVIO_SUPABASE_ANON_KEY). On Vercel you can hardcode them
-// here (the anon key is public/publishable by design) or generate this file at build.
+// Supabase URL + anon key copied from the app's local.properties (ANIVIO_SUPABASE_*).
+// The anon key is the public/publishable key by design — safe in a static page; your
+// Supabase Row-Level Security is what actually protects data.
 window.ANIVIO_CONFIG = {
-  supabaseUrl: "https://YOUR-PROJECT.supabase.co",
-  supabaseAnonKey: "YOUR-SUPABASE-ANON-KEY",
+  supabaseUrl: 'https://cmfomalhazzwandvptgf.supabase.co',
+  supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNtZm9tYWxoYXp6d2FuZHZwdGdmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg5NDIwNjAsImV4cCI6MjEwNDUxODA2MH0.-Ti8kdGMEG6teY1EalkIfmKIxDYCkj770WqOHcZ6oiM',
   // RPC the page calls to approve a pending TV session for the signed-in user.
-  // Must exist in your Supabase and set the session row's status to 'approved'
-  // plus attach auth.uid(). Rename here if your function name differs.
   approveRpc: "approve_tv_login_session",
   // Query/param key that carries the user code in the link the TV shows.
   codeParam: "code",
