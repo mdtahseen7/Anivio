@@ -63,6 +63,7 @@ import com.nuvio.app.features.downloads.DownloadedSubtitle
 import com.nuvio.app.features.downloads.DownloadsPlatformDownloader
 import com.nuvio.app.features.downloads.DownloadsRepository
 import com.nuvio.app.features.downloads.httpDownloadBytes
+import com.nuvio.app.features.downloads.saveStreamSubtitles
 import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.player.PlayerStreamsRepository
 import com.nuvio.app.features.plugins.PluginRepository
@@ -419,7 +420,7 @@ private suspend fun downloadEpisodes(
         if (resolvedStream == null) continue
 
         // Save any subtitle tracks the stream carries next to the video, for offline playback.
-        val downloadedSubtitles = downloadStreamSubtitles(
+        val downloadedSubtitles = saveStreamSubtitles(
             subtitles = resolvedStream.externalSubtitles,
             baseFileName = buildString {
                 append(meta.id.filter { it.isLetterOrDigit() }.take(40))
@@ -447,33 +448,4 @@ private suspend fun downloadEpisodes(
         NuvioToastController.show(result.toastMessage())
     }
     PlayerStreamsRepository.clearEpisodeStreams()
-}
-
-private suspend fun downloadStreamSubtitles(
-    subtitles: List<StreamSubtitle>,
-    baseFileName: String,
-): List<DownloadedSubtitle> {
-    if (subtitles.isEmpty()) return emptyList()
-    val saved = mutableListOf<DownloadedSubtitle>()
-    subtitles.forEachIndexed { index, sub ->
-        val bytes = runCatching {
-            httpDownloadBytes(url = sub.url, headers = sub.headers.orEmpty())
-        }.getOrNull()
-        if (bytes == null || bytes.isEmpty()) return@forEachIndexed
-        val lang = sub.language.filter { it.isLetterOrDigit() }.ifBlank { "sub" }
-        val fileName = "$baseFileName.$index.$lang.${subtitleExtension(sub.url)}"
-        val uri = DownloadsPlatformDownloader.saveAuxiliaryFile(fileName, bytes) ?: return@forEachIndexed
-        saved += DownloadedSubtitle(localFileUri = uri, language = sub.language, name = sub.name)
-    }
-    return saved
-}
-
-private fun subtitleExtension(url: String): String {
-    val path = url.substringBefore('?').substringBefore('#').lowercase()
-    return when {
-        path.endsWith(".vtt") -> "vtt"
-        path.endsWith(".ass") -> "ass"
-        path.endsWith(".ssa") -> "ssa"
-        else -> "srt"
-    }
 }

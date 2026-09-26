@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#05070f" />
+  <title>Link your TV · Anivio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=JetBrains+Mono:wght@600;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #05070f;
+      --ink: #eef1ff;
+      --muted: #9aa3c7;
+      --accent: #7c9cff;
+      --accent2: #b483ff;
+      --good: #34d399;
+      --bad: #fb7185;
+      --card: rgba(18, 22, 40, 0.55);
+      --stroke: rgba(150, 170, 255, 0.16);
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      font-family: "Sora", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+    /* Aurora + star field */
+    .sky { position: fixed; inset: 0; z-index: 0; overflow: hidden; }
+    .aurora {
+      position: absolute; inset: -30%;
+      background:
+        radial-gradient(40% 55% at 20% 30%, rgba(124,156,255,0.35), transparent 60%),
+        radial-gradient(45% 50% at 80% 20%, rgba(180,131,255,0.30), transparent 60%),
+        radial-gradient(50% 60% at 60% 85%, rgba(52,211,153,0.16), transparent 65%);
+      filter: blur(40px) saturate(120%);
+      animation: drift 18s ease-in-out infinite alternate;
+    }
+    @keyframes drift {
+      0% { transform: translate3d(-4%, -2%, 0) scale(1.05) rotate(0deg); }
+      100% { transform: translate3d(5%, 4%, 0) scale(1.15) rotate(8deg); }
+    }
+    .vignette { position: absolute; inset: 0; background: radial-gradient(120% 90% at 50% 40%, transparent 55%, rgba(0,0,0,0.65)); }
+  </style>
+</head>
+<body>
+  <style>
+    .wrap { position: relative; z-index: 1; min-height: 100%; display: grid; place-items: center; padding: 24px; }
+    .card {
+      width: min(440px, 100%);
+      background: var(--card);
+      border: 1px solid var(--stroke);
+      border-radius: 26px;
+      padding: 30px 26px 26px;
+      backdrop-filter: blur(22px) saturate(140%);
+      -webkit-backdrop-filter: blur(22px) saturate(140%);
+      box-shadow: 0 30px 80px -30px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.06);
+      animation: rise 0.7s cubic-bezier(.2,.8,.2,1) both;
+    }
+    @keyframes rise { from { opacity: 0; transform: translateY(18px) scale(.98); } to { opacity: 1; transform: none; } }
+    .brand { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 6px; }
+    .logo { height: 34px; width: auto; filter: drop-shadow(0 3px 14px rgba(124,156,255,.45)); }
+    .kicker { text-align: center; color: var(--muted); font-size: 12.5px; letter-spacing: .18em; text-transform: uppercase; margin: 14px 0 2px; }
+    h1 { text-align: center; font-size: 23px; font-weight: 700; margin: 2px 0 4px; }
+    .sub { text-align: center; color: var(--muted); font-size: 14px; line-height: 1.5; margin: 0 auto 18px; max-width: 34ch; }
+    /* Code pill */
+    .code { display: flex; justify-content: center; gap: 8px; margin: 10px 0 20px; }
+    .code b {
+      font-family: "JetBrains Mono", monospace; font-weight: 800; font-size: 30px;
+      width: 44px; height: 58px; display: grid; place-items: center;
+      background: rgba(124,156,255,.10); border: 1px solid var(--stroke); border-radius: 14px;
+      animation: pop .4s cubic-bezier(.2,1.4,.4,1) both;
+    }
+    .code .dash { align-self: center; color: var(--muted); font-size: 24px; }
+    @keyframes pop { from { opacity: 0; transform: translateY(8px) scale(.8); } to { opacity: 1; transform: none; } }
+    /* Inputs + buttons */
+    label { display: block; font-size: 12.5px; color: var(--muted); margin: 12px 2px 6px; }
+    input {
+      width: 100%; padding: 14px 15px; border-radius: 14px; border: 1px solid var(--stroke);
+      background: rgba(255,255,255,.04); color: var(--ink); font-size: 15px; font-family: inherit; outline: none;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(124,156,255,.18); }
+    .btn {
+      width: 100%; margin-top: 18px; padding: 15px; border: 0; border-radius: 14px; cursor: pointer;
+      font-family: inherit; font-weight: 700; font-size: 15.5px; color: #0a0d1a;
+      background: linear-gradient(100deg, var(--accent), var(--accent2));
+      box-shadow: 0 14px 30px -12px rgba(124,156,255,.7); transition: transform .12s, filter .2s, opacity .2s;
+    }
+    .btn:hover { filter: brightness(1.06); } .btn:active { transform: translateY(1px) scale(.99); }
+    .btn[disabled] { opacity: .55; cursor: not-allowed; box-shadow: none; }
+    .btn.ghost { background: transparent; color: var(--muted); border: 1px solid var(--stroke); box-shadow: none; font-weight: 600; }
+    .msg { margin-top: 12px; text-align: center; font-size: 13.5px; min-height: 18px; }
+    .msg.bad { color: var(--bad); } .msg.good { color: var(--good); }
+    .device { text-align: center; font-size: 14px; margin: 4px 0 2px; }
+    .device span { color: var(--accent); font-weight: 700; }
+    .hide { display: none !important; }
+    /* Success burst */
+    .check { width: 76px; height: 76px; margin: 4px auto 10px; border-radius: 50%; display: grid; place-items: center;
+      background: radial-gradient(circle, rgba(52,211,153,.25), transparent 70%); }
+    .check svg { width: 44px; height: 44px; }
+    .check path { stroke-dasharray: 48; stroke-dashoffset: 48; animation: draw .5s .1s ease forwards; }
+    @keyframes draw { to { stroke-dashoffset: 0; } }
+    .spin { width: 22px; height: 22px; border: 3px solid rgba(255,255,255,.25); border-top-color: #0a0d1a; border-radius: 50%; display: inline-block; vertical-align: -4px; animation: rot .7s linear infinite; }
+    @keyframes rot { to { transform: rotate(360deg); } }
+    .foot { text-align: center; color: var(--muted); font-size: 11.5px; margin-top: 18px; opacity: .8; }
+  </style>
+
+  <div class="sky">
+    <div class="aurora"></div>
+    <div class="vignette"></div>
+  </div>
+
+  <main class="wrap">
+    <section class="card">
+      <div class="brand">
+        <img class="logo" src="./anivio-logo.png" alt="Anivio" />
+      </div>
+      <div class="kicker">Device sign-in</div>
+
+      <!-- STATE: code entry -->
+      <div id="s-code" class="hide">
+        <h1>Enter the code</h1>
+        <p class="sub">Type the code shown on your TV to link it to your account.</p>
+        <label for="codeInput">Code from your TV</label>
+        <input id="codeInput" inputmode="latin" autocomplete="one-time-code" placeholder="XXX-XXX" maxlength="7" style="text-transform:uppercase;text-align:center;letter-spacing:.3em;font-family:'JetBrains Mono',monospace;font-weight:800;font-size:20px" />
+        <button class="btn" id="codeNext">Continue</button>
+      </div>
+
+      <!-- STATE: sign in -->
+      <div id="s-auth" class="hide">
+        <h1>Sign in to approve</h1>
+        <p class="sub">Signing in here approves the device below.</p>
+        <div class="code" id="authCode"></div>
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="email" placeholder="you@example.com" />
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="current-password" placeholder="••••••••" />
+        <button class="btn" id="signIn">Sign in &amp; approve</button>
+        <div class="msg" id="authMsg"></div>
+      </div>
+
+      <!-- STATE: confirm (already signed in) -->
+      <div id="s-confirm" class="hide">
+        <h1>Approve this device?</h1>
+        <div class="code" id="confirmCode"></div>
+        <p class="device" id="whoami"></p>
+        <button class="btn" id="approve">Approve sign-in</button>
+        <button class="btn ghost" id="switchAcct">Use a different account</button>
+        <div class="msg" id="confirmMsg"></div>
+      </div>
+
+      <!-- STATE: working -->
+      <div id="s-working" class="hide">
+        <h1 style="margin-top:18px">Linking your TV…</h1>
+        <p class="sub"><span class="spin"></span></p>
+      </div>
+
+      <!-- STATE: done -->
+      <div id="s-done" class="hide">
+        <div class="check">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M4 12.5 L10 18.5 L20 6.5" stroke="#34d399" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <h1>You're all set</h1>
+        <p class="sub">Head back to your TV — it'll sign in automatically in a moment.</p>
+      </div>
+
+      <!-- STATE: error -->
+      <div id="s-error" class="hide">
+        <h1>Something went wrong</h1>
+        <p class="sub" id="errText">This code is invalid or has expired. Start again from your TV.</p>
+        <button class="btn ghost" id="retry">Try another code</button>
+      </div>
+
+      <div class="foot">Anivio · secure device linking</div>
+    </section>
+  </main>
+
+  <script src="./config.js"></script>
+  <script type="module">
+    import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+    // ---- Config + client ----
+    const cfg = window.ANIVIO_CONFIG || {};
+    const configured = cfg.supabaseUrl && !cfg.supabaseUrl.includes("YOUR-PROJECT");
+    const supabase = configured ? createClient(cfg.supabaseUrl, cfg.supabaseAnonKey) : null;
+    const APPROVE_RPC = cfg.approveRpc || "approve_tv_login_session";
+    const CODE_PARAM = cfg.codeParam || "code";
+
+    // ---- State machine ----
+    const states = ["s-code", "s-auth", "s-confirm", "s-working", "s-done", "s-error"];
+    const $ = (id) => document.getElementById(id);
+    function show(id) { states.forEach((s) => $(s).classList.toggle("hide", s !== id)); }
+    function setMsg(el, text, kind) { el.textContent = text || ""; el.className = "msg" + (kind ? " " + kind : ""); }
+
+    function normalizeCode(raw) {
+      const c = (raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+      return c.length > 3 ? c.slice(0, 3) + "-" + c.slice(3) : c;
+    }
+    function renderCode(el, code) {
+      el.innerHTML = "";
+      for (const ch of code) {
+        if (ch === "-") { const d = document.createElement("span"); d.className = "dash"; d.textContent = "–"; el.appendChild(d); }
+        else { const b = document.createElement("b"); b.textContent = ch; el.appendChild(b); }
+      }
+    }
+    function codeFromUrl() {
+      const u = new URL(location.href);
+      const q = u.searchParams.get(CODE_PARAM) || new URLSearchParams(u.hash.replace(/^#/, "")).get(CODE_PARAM);
+      return q ? normalizeCode(q) : "";
+    }
+
+    let code = codeFromUrl();
+
+    async function routeAfterCode() {
+      renderCode($("authCode"), code); renderCode($("confirmCode"), code);
+      if (!supabase) { $("errText").textContent = "This page isn't configured yet. Set your Supabase URL and key in config.js."; return show("s-error"); }
+      const { data } = await supabase.auth.getSession();
+      if (data?.session?.user) {
+        $("whoami").innerHTML = "Signed in as <span>" + (data.session.user.email || "your account") + "</span>";
+        show("s-confirm");
+      } else {
+        show("s-auth");
+      }
+    }
+
+    async function approve() {
+      show("s-working");
+      try {
+        const { error } = await supabase.rpc(APPROVE_RPC, { p_user_code: code });
+        if (error) throw error;
+        show("s-done");
+      } catch (e) {
+        $("errText").textContent = (e && e.message) ? e.message : "Couldn't approve this device. The code may have expired.";
+        show("s-error");
+      }
+    }
+
+    // ---- Handlers ----
+    $("codeInput").addEventListener("input", (e) => { e.target.value = normalizeCode(e.target.value); });
+    $("codeNext").addEventListener("click", () => {
+      const c = normalizeCode($("codeInput").value);
+      if (c.replace("-", "").length < 6) { $("codeInput").focus(); return; }
+      code = c; routeAfterCode();
+    });
+
+    $("signIn").addEventListener("click", async () => {
+      const email = $("email").value.trim(), password = $("password").value;
+      if (!email || !password) return setMsg($("authMsg"), "Enter your email and password.", "bad");
+      $("signIn").disabled = true; setMsg($("authMsg"), "Signing in…");
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      $("signIn").disabled = false;
+      if (error) return setMsg($("authMsg"), error.message || "Sign-in failed.", "bad");
+      await approve();
+    });
+
+    $("approve").addEventListener("click", approve);
+    $("switchAcct").addEventListener("click", async () => { await supabase.auth.signOut(); show("s-auth"); });
+    $("retry").addEventListener("click", () => { code = ""; $("codeInput").value = ""; show("s-code"); $("codeInput").focus(); });
+
+    // ---- Init ----
+    if (code) routeAfterCode();
+    else { show("s-code"); $("codeInput").focus(); }
+  </script>
+</body>
+</html>

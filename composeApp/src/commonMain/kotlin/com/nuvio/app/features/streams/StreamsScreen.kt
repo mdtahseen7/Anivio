@@ -79,6 +79,7 @@ import com.nuvio.app.core.ui.NuvioModalBottomSheet
 import com.nuvio.app.core.ui.NuvioToastController
 import com.nuvio.app.core.ui.dismissNuvioBottomSheet
 import com.nuvio.app.features.downloads.DownloadsRepository
+import com.nuvio.app.features.downloads.saveStreamSubtitles
 import com.nuvio.app.features.details.MetaScreenSettingsRepository
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -172,6 +173,12 @@ fun StreamsScreen(
         }
     }
 
+    fun subtitleBaseFileName(): String = buildString {
+        append(parentMetaId.filter { it.isLetterOrDigit() }.take(40))
+        seasonNumber?.let { append("_s").append(it) }
+        episodeNumber?.let { append("_e").append(it) }
+    }
+
     fun handleDownloadStream(stream: StreamItem) {
         if (DirectDebridPlaybackResolver.shouldResolveToPlayableStream(stream)) {
             downloadScope.launch {
@@ -182,6 +189,10 @@ fun StreamsScreen(
                 )
                 when (resolved) {
                     is DirectDebridPlayableResult.Success -> {
+                        val subtitles = saveStreamSubtitles(
+                            subtitles = resolved.stream.externalSubtitles,
+                            baseFileName = subtitleBaseFileName(),
+                        )
                         val result = DownloadsRepository.enqueueFromStream(
                             contentType = type,
                             videoId = videoId,
@@ -196,6 +207,7 @@ fun StreamsScreen(
                             episodeTitle = episodeTitle,
                             episodeThumbnail = episodeThumbnail,
                             stream = resolved.stream,
+                            subtitles = subtitles,
                         )
                         NuvioToastController.show(result.toastMessage())
                     }
@@ -208,22 +220,29 @@ fun StreamsScreen(
                 }
             }
         } else {
-            val result = DownloadsRepository.enqueueFromStream(
-                contentType = type,
-                videoId = videoId,
-                parentMetaId = parentMetaId,
-                parentMetaType = parentMetaType,
-                title = title,
-                logo = logo,
-                poster = poster,
-                background = background,
-                seasonNumber = seasonNumber,
-                episodeNumber = episodeNumber,
-                episodeTitle = episodeTitle,
-                episodeThumbnail = episodeThumbnail,
-                stream = stream,
-            )
-            NuvioToastController.show(result.toastMessage())
+            downloadScope.launch {
+                val subtitles = saveStreamSubtitles(
+                    subtitles = stream.externalSubtitles,
+                    baseFileName = subtitleBaseFileName(),
+                )
+                val result = DownloadsRepository.enqueueFromStream(
+                    contentType = type,
+                    videoId = videoId,
+                    parentMetaId = parentMetaId,
+                    parentMetaType = parentMetaType,
+                    title = title,
+                    logo = logo,
+                    poster = poster,
+                    background = background,
+                    seasonNumber = seasonNumber,
+                    episodeNumber = episodeNumber,
+                    episodeTitle = episodeTitle,
+                    episodeThumbnail = episodeThumbnail,
+                    stream = stream,
+                    subtitles = subtitles,
+                )
+                NuvioToastController.show(result.toastMessage())
+            }
         }
     }
 
