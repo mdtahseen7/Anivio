@@ -339,6 +339,7 @@ object EpisodeReleaseNotificationsRepository {
 
         _uiState.value = _uiState.value.copy(
             permissionGranted = granted,
+            exactAlarmGranted = EpisodeReleaseNotificationPlatform.exactAlarmsAllowed(),
             testTargetTitle = currentTestTarget()?.name,
             errorMessage = when {
                 _uiState.value.isEnabled && !granted -> runBlocking { getString(Res.string.settings_notifications_permission_disabled) }
@@ -426,10 +427,28 @@ object EpisodeReleaseNotificationsRepository {
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
                 permissionGranted = true,
+                exactAlarmGranted = EpisodeReleaseNotificationPlatform.exactAlarmsAllowed(),
                 scheduledCount = requests.size,
                 testTargetTitle = currentTestTarget()?.name,
                 errorMessage = null,
             )
+        }
+    }
+
+    /**
+     * Call when returning from the system "Alarms & reminders" screen: if the grant flipped
+     * on, immediately re-schedule everything as exact alarms instead of waiting for the
+     * next app launch.
+     */
+    fun onReturnedFromSystemSettings() {
+        ensureLoaded()
+        scope.launch {
+            val allowed = EpisodeReleaseNotificationPlatform.exactAlarmsAllowed()
+            val wasAllowed = _uiState.value.exactAlarmGranted
+            _uiState.value = _uiState.value.copy(exactAlarmGranted = allowed)
+            if (allowed && !wasAllowed && _uiState.value.isEnabled) {
+                refreshScheduledNotifications()
+            }
         }
     }
 

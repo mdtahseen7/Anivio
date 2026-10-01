@@ -125,6 +125,13 @@ internal actual object EpisodeReleaseNotificationPlatform {
         UNUserNotificationCenter.currentNotificationCenter().addNotificationRequest(notificationRequest) { _ -> }
     }
 
+    // iOS schedules with UNCalendarNotificationTrigger, which is exact by design —
+    // no special grant needed.
+    actual fun exactAlarmsAllowed(): Boolean = true
+
+    actual fun openExactAlarmSettings() {
+    }
+
     private fun trackedScheduledIds(): List<String> =
         NSUserDefaults.standardUserDefaults
             .stringForKey(ProfileScopedKey.of(scheduledIdsKey))

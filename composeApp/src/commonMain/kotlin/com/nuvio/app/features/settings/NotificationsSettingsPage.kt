@@ -2,24 +2,35 @@ package com.nuvio.app.features.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.nuvio.app.features.notifications.EpisodeReleaseNotificationPlatform
 import com.nuvio.app.features.notifications.EpisodeReleaseNotificationsRepository
 import com.nuvio.app.features.notifications.EpisodeReleaseNotificationsUiState
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.settings_notifications_disabled_in_app
 import nuvio.composeapp.generated.resources.settings_notifications_episode_release_alerts
 import nuvio.composeapp.generated.resources.settings_notifications_episode_release_alerts_description
+import nuvio.composeapp.generated.resources.settings_notifications_exact_alarm_action
+import nuvio.composeapp.generated.resources.settings_notifications_exact_alarm_description
+import nuvio.composeapp.generated.resources.settings_notifications_exact_alarm_title
 import nuvio.composeapp.generated.resources.settings_notifications_permission_disabled
 import nuvio.composeapp.generated.resources.settings_notifications_scheduled_count
 import nuvio.composeapp.generated.resources.settings_notifications_section_alerts
@@ -50,6 +61,11 @@ internal fun LazyListScope.notificationsSettingsContent(
                     isTablet = isTablet,
                     onCheckedChange = EpisodeReleaseNotificationsRepository::setEnabled,
                 )
+                // Android 12+: without "Alarms & reminders" the alerts fall back to inexact
+                // WorkManager and may arrive late. iOS never needs this.
+                if (uiState.isEnabled && !uiState.exactAlarmGranted) {
+                    ExactAlarmRow(isTablet = isTablet)
+                }
             }
         }
     }
@@ -63,6 +79,60 @@ internal fun LazyListScope.notificationsSettingsContent(
                 isTablet = isTablet,
                 uiState = uiState,
             )
+        }
+    }
+}
+
+@Composable
+private fun ExactAlarmRow(isTablet: Boolean) {
+    val horizontalPadding = if (isTablet) 20.dp else 16.dp
+    val verticalPadding = if (isTablet) 14.dp else 12.dp
+
+    // The grant happens in system settings; refresh (and re-schedule as exact alarms)
+    // as soon as the user comes back.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                EpisodeReleaseNotificationsRepository.onReturnedFromSystemSettings()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = horizontalPadding, vertical = verticalPadding),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = stringResource(Res.string.settings_notifications_exact_alarm_title),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                text = stringResource(Res.string.settings_notifications_exact_alarm_description),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Button(
+            onClick = { EpisodeReleaseNotificationPlatform.openExactAlarmSettings() },
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ),
+        ) {
+            Text(stringResource(Res.string.settings_notifications_exact_alarm_action))
         }
     }
 }

@@ -999,6 +999,9 @@
     <string name="settings_notifications_disabled_in_app">Notifications are currently disabled in Anivio.</string>
     <string name="settings_notifications_episode_release_alerts">Episode release alerts</string>
     <string name="settings_notifications_episode_release_alerts_description">Get notified when a new episode airs. Choose which shows from their info page, under the three-dot menu.</string>
+    <string name="settings_notifications_exact_alarm_title">On-time alerts</string>
+    <string name="settings_notifications_exact_alarm_description">Allow "Alarms &amp; reminders" so alerts fire exactly when episodes air, even with battery saver on. Without it, alerts may arrive late.</string>
+    <string name="settings_notifications_exact_alarm_action">Allow</string>
     <string name="settings_notifications_subscribed_count">%1$d shows subscribed.</string>
     <string name="settings_notifications_permission_disabled">System notifications are disabled for Anivio. Enable them to receive alerts and test notifications.</string>
     <string name="settings_notifications_scheduled_count">%1$d release alerts are currently scheduled on this device.</string>

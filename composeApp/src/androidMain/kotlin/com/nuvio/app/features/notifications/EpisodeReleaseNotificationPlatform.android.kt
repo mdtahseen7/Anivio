@@ -1,6 +1,7 @@
 package com.nuvio.app.features.notifications
 
 import android.Manifest
+import android.app.AlarmManager
 import android.app.PendingIntent
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -9,7 +10,9 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
@@ -22,11 +25,16 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.Operation
 import androidx.work.WorkManager
 import com.nuvio.app.core.storage.ProfileScopedKey
+import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.settings.AppIconPlatform
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.getString
 import io.ktor.client.plugins.HttpTimeout
@@ -50,10 +58,29 @@ internal actual object EpisodeReleaseNotificationPlatform {
     internal const val workerBodyKey = "body"
     internal const val workerDeepLinkKey = "deep_link"
     internal const val workerBackdropUrlKey = "backdrop_url"
+    internal const val alarmAction = "com.nuvio.app.features.notifications.EPISODE_RELEASE_ALARM"
+    private const val alarmEntriesKey = "exact_alarm_entries"
 
     private var appContext: Context? = null
     private var currentActivity: ComponentActivity? = null
     private var pendingPermissionContinuation: kotlin.coroutines.Continuation<Boolean>? = null
+    private val alarmJson = Json { ignoreUnknownKeys = true }
+
+    /**
+     * Everything an exact alarm needs to re-arm itself after a reboot, persisted because
+     * AlarmManager alarms don't survive one. Kept deliberately independent of the app's
+     * storage layer so the boot receiver can re-schedule without initializing it.
+     */
+    @Serializable
+    private data class PersistedAlarmEntry(
+        val requestId: String,
+        val profileId: String,
+        val triggerAtEpochMs: Long,
+        val title: String,
+        val body: String,
+        val deepLink: String,
+        val backdropUrl: String? = null,
+    )
     private val httpClient by lazy {
         HttpClient(OkHttp) {
             install(HttpTimeout) {
@@ -138,9 +165,19 @@ internal actual object EpisodeReleaseNotificationPlatform {
         withContext(Dispatchers.IO) {
             val workManager = WorkManager.getInstance(context)
             cancelTrackedWork(workManager)
+            cancelPersistedAlarms(context)
+
+            // WorkManager's setInitialDelay is a *minimum* delay: Doze, app standby and OEM
+            // battery "optimizations" routinely push episode alerts minutes-to-hours late.
+            // Prefer an exact alarm so the notification fires at the broadcast instant;
+            // fall back to WorkManager when the user hasn't granted "Alarms & reminders".
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+            val useExactAlarms = alarmManager != null && exactAlarmsAllowed()
 
             val nowEpochMs = System.currentTimeMillis()
+            val profileId = ProfileRepository.activeProfileId.toString()
             val scheduledIds = mutableListOf<String>()
+            val alarmEntries = mutableListOf<PersistedAlarmEntry>()
 
             requests.forEach { request ->
                 // The published broadcast instant when there is one, otherwise the morning of the
@@ -152,31 +189,45 @@ internal actual object EpisodeReleaseNotificationPlatform {
                 val initialDelayMs = triggerAtEpochMs - nowEpochMs
                 if (initialDelayMs <= 0L) return@forEach
 
-                val inputData = Data.Builder()
-                    .putString(workerRequestIdKey, request.requestId)
-                    .putString(workerTitleKey, request.notificationTitle)
-                    .putString(workerBodyKey, request.notificationBody)
-                    .putString(workerDeepLinkKey, request.deepLinkUrl)
-                    .putString(workerBackdropUrlKey, request.backdropUrl)
-                    .build()
+                var scheduledExact = false
+                if (useExactAlarms && alarmManager != null) {
+                    // Guarded by exactAlarmsAllowed(), but the grant can be revoked between the
+                    // check and the call — fall back to WorkManager instead of crashing.
+                    scheduledExact = runCatching {
+                        alarmManager.setExactAndAllowWhileIdle(
+                            AlarmManager.RTC_WAKEUP,
+                            triggerAtEpochMs,
+                            alarmPendingIntent(
+                                context = context,
+                                requestId = request.requestId,
+                                title = request.notificationTitle,
+                                body = request.notificationBody,
+                                deepLink = request.deepLinkUrl,
+                                backdropUrl = request.backdropUrl,
+                            ),
+                        )
+                        true
+                    }.getOrDefault(false)
+                }
 
-                val workRequest = OneTimeWorkRequestBuilder<EpisodeReleaseNotificationWorker>()
-                    .setInputData(inputData)
-                    .setInitialDelay(initialDelayMs, TimeUnit.MILLISECONDS)
-                    .addTag(workTag)
-                    .build()
-
-                awaitOperation(
-                    workManager.enqueueUniqueWork(
-                        uniqueWorkName(request.requestId),
-                        ExistingWorkPolicy.REPLACE,
-                        workRequest,
-                    ),
-                )
+                if (scheduledExact) {
+                    alarmEntries += PersistedAlarmEntry(
+                        requestId = request.requestId,
+                        profileId = profileId,
+                        triggerAtEpochMs = triggerAtEpochMs,
+                        title = request.notificationTitle,
+                        body = request.notificationBody,
+                        deepLink = request.deepLinkUrl,
+                        backdropUrl = request.backdropUrl,
+                    )
+                } else {
+                    enqueueWorker(workManager, request, initialDelayMs)
+                }
 
                 scheduledIds += request.requestId
             }
 
+            writeAlarmEntries(context, alarmEntries)
             preferences(context)
                 .edit()
                 .putStringSet(scopedScheduledIdsKey(), scheduledIds.toSet())
@@ -189,11 +240,65 @@ internal actual object EpisodeReleaseNotificationPlatform {
         withContext(Dispatchers.IO) {
             val workManager = WorkManager.getInstance(context)
             cancelTrackedWork(workManager)
+            cancelPersistedAlarms(context)
             preferences(context)
                 .edit()
                 .remove(scopedScheduledIdsKey())
                 .apply()
         }
+    }
+
+    /**
+     * Re-arms persisted exact alarms after a reboot. Called from
+     * [EpisodeReleaseNotificationsBootReceiver]; expired entries are dropped.
+     */
+    internal fun reschedulePersistedAlarms() {
+        val context = appContext ?: return
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+            ?: return
+        if (!exactAlarmsAllowed()) return
+
+        val nowEpochMs = System.currentTimeMillis()
+        val kept = mutableListOf<PersistedAlarmEntry>()
+        readAlarmEntries(context).forEach { entry ->
+            if (entry.triggerAtEpochMs <= nowEpochMs) return@forEach
+            val ok = runCatching {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    entry.triggerAtEpochMs,
+                    alarmPendingIntent(
+                        context = context,
+                        requestId = entry.requestId,
+                        title = entry.title,
+                        body = entry.body,
+                        deepLink = entry.deepLink,
+                        backdropUrl = entry.backdropUrl,
+                    ),
+                )
+                true
+            }.getOrDefault(false)
+            if (ok) kept += entry
+        }
+        writeAlarmEntries(context, kept)
+    }
+
+    actual fun exactAlarmsAllowed(): Boolean {
+        val context = appContext ?: return false
+        // Below Android 12 no special grant is needed.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+            ?: return false
+        return alarmManager.canScheduleExactAlarms()
+    }
+
+    actual fun openExactAlarmSettings() {
+        val context = appContext ?: return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+        val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+            data = Uri.parse("package:${context.packageName}")
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        runCatching { context.startActivity(intent) }
     }
 
     actual suspend fun showTestNotification(request: EpisodeReleaseNotificationRequest) {
@@ -272,6 +377,88 @@ internal actual object EpisodeReleaseNotificationPlatform {
             .forEach { requestId ->
                 awaitOperation(workManager.cancelUniqueWork(uniqueWorkName(requestId)))
             }
+    }
+
+    /** Inexact fallback used when exact alarms aren't granted. */
+    private suspend fun enqueueWorker(
+        workManager: WorkManager,
+        request: EpisodeReleaseNotificationRequest,
+        initialDelayMs: Long,
+    ) {
+        val inputData = Data.Builder()
+            .putString(workerRequestIdKey, request.requestId)
+            .putString(workerTitleKey, request.notificationTitle)
+            .putString(workerBodyKey, request.notificationBody)
+            .putString(workerDeepLinkKey, request.deepLinkUrl)
+            .putString(workerBackdropUrlKey, request.backdropUrl)
+            .build()
+
+        val workRequest = OneTimeWorkRequestBuilder<EpisodeReleaseNotificationWorker>()
+            .setInputData(inputData)
+            .setInitialDelay(initialDelayMs, TimeUnit.MILLISECONDS)
+            .addTag(workTag)
+            .build()
+
+        awaitOperation(
+            workManager.enqueueUniqueWork(
+                uniqueWorkName(request.requestId),
+                ExistingWorkPolicy.REPLACE,
+                workRequest,
+            ),
+        )
+    }
+
+    private fun alarmPendingIntent(
+        context: Context,
+        requestId: String,
+        title: String,
+        body: String,
+        deepLink: String,
+        backdropUrl: String?,
+    ): PendingIntent {
+        val intent = Intent(context, EpisodeReleaseNotificationAlarmReceiver::class.java).apply {
+            action = alarmAction
+            putExtra(workerRequestIdKey, requestId)
+            putExtra(workerTitleKey, title)
+            putExtra(workerBodyKey, body)
+            putExtra(workerDeepLinkKey, deepLink)
+            putExtra(workerBackdropUrlKey, backdropUrl)
+        }
+        return PendingIntent.getBroadcast(
+            context,
+            kotlin.math.abs(requestId.hashCode()),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    private fun cancelPersistedAlarms(context: Context) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+        readAlarmEntries(context).forEach { entry ->
+            val pendingIntent = alarmPendingIntent(
+                context = context,
+                requestId = entry.requestId,
+                title = entry.title,
+                body = entry.body,
+                deepLink = entry.deepLink,
+                backdropUrl = entry.backdropUrl,
+            )
+            alarmManager?.cancel(pendingIntent)
+            pendingIntent.cancel()
+        }
+        writeAlarmEntries(context, emptyList())
+    }
+
+    private fun readAlarmEntries(context: Context): List<PersistedAlarmEntry> =
+        preferences(context).getString(alarmEntriesKey, null)
+            ?.let { raw -> runCatching { alarmJson.decodeFromString<List<PersistedAlarmEntry>>(raw) }.getOrNull() }
+            .orEmpty()
+
+    private fun writeAlarmEntries(context: Context, entries: List<PersistedAlarmEntry>) {
+        preferences(context)
+            .edit()
+            .putString(alarmEntriesKey, alarmJson.encodeToString(entries))
+            .apply()
     }
 
     private fun awaitOperation(operation: Operation) {

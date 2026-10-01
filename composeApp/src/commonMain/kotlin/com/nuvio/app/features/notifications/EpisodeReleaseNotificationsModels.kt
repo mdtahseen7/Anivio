@@ -17,6 +17,12 @@ data class EpisodeReleaseNotificationsUiState(
     val isEnabled: Boolean = false,
     val isLoading: Boolean = false,
     val permissionGranted: Boolean = false,
+    /**
+     * Android 12+: whether "Alarms & reminders" is granted, so alerts fire at the exact
+     * broadcast instant instead of whenever WorkManager gets around to them. Always true
+     * on iOS and older Android.
+     */
+    val exactAlarmGranted: Boolean = false,
     val scheduledCount: Int = 0,
     val testTargetTitle: String? = null,
     val isSendingTest: Boolean = false,

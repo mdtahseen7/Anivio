@@ -5,6 +5,11 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Exact alarms for on-time episode release notifications; falls back to
+         WorkManager when the user hasn't granted "Alarms & reminders". -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- Re-arm exact alarms after a reboot (they don't survive one). -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
@@ -183,6 +188,20 @@
         <receiver
             android:name="com.nuvio.app.features.downloads.DownloadsNotificationActionReceiver"
             android:exported="false" />
+
+        <!-- Fires episode-release notifications scheduled via AlarmManager.setExactAndAllowWhileIdle. -->
+        <receiver
+            android:name="com.nuvio.app.features.notifications.EpisodeReleaseNotificationAlarmReceiver"
+            android:exported="false" />
+
+        <!-- Exact alarms don't survive a reboot; re-arm them from the persisted schedule. -->
+        <receiver
+            android:name="com.nuvio.app.features.notifications.EpisodeReleaseNotificationsBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
 
         <provider
             android:name="androidx.core.content.FileProvider"
