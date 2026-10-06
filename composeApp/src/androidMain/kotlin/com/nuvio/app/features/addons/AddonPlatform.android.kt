@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.nuvio.app.core.diagnostics.SentryNetworkBreadcrumbInterceptor
 import com.nuvio.app.core.network.IPv4FirstDns
+import com.nuvio.app.features.cloudflare.CfClearanceRepository
+import com.nuvio.app.features.cloudflare.isCloudflareChallenge
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -182,6 +184,17 @@ private fun readResponseBody(body: ResponseBody?): String {
     }
 }
 
+/**
+ * Merges a stored Cloudflare clearance (cookie + its matching User-Agent) into [headers] when the
+ * setting is on and a fresh token exists for [url]'s host. The clearance values override any
+ * Cookie/User-Agent the caller supplied, since cf_clearance is bound to that exact UA.
+ */
+private fun applyCfClearance(url: String, headers: Map<String, String>): Map<String, String> {
+    val cf = CfClearanceRepository.freshClearanceHeadersFor(url) ?: return headers
+    val base = headers.filterKeys { !it.equals("User-Agent", true) && !it.equals("Cookie", true) }
+    return base + mapOf("User-Agent" to cf.userAgent, "Cookie" to cf.cookie)
+}
+
 private suspend fun executeTextRequest(
     method: String,
     url: String,
@@ -189,7 +202,7 @@ private suspend fun executeTextRequest(
     body: String = "",
 ): String = withContext(Dispatchers.IO) {
     val normalizedMethod = method.uppercase()
-    val sanitizedHeaders = headers.withoutAcceptEncoding()
+    val sanitizedHeaders = applyCfClearance(url, headers.withoutAcceptEncoding())
     val builder = Request.Builder().url(url)
     sanitizedHeaders.forEach { (key, value) ->
         builder.header(key, value)
@@ -208,6 +221,9 @@ private suspend fun executeTextRequest(
     AddonHttpClientProvider.get().newCall(request).execute().use { response ->
         val payload = readResponseBody(response.body)
         if (!response.isSuccessful) {
+            if (isCloudflareChallenge(response.code, payload)) {
+                CfClearanceRepository.noteChallengeHost(url)
+            }
             error(runBlocking { getString(Res.string.network_request_failed_http, response.code) })
         }
         if (payload.isBlank()) {
@@ -270,7 +286,7 @@ actual suspend fun httpRequestRaw(
 ): RawHttpResponse =
     withContext(Dispatchers.IO) {
         val normalizedMethod = method.uppercase()
-        val sanitizedHeaders = headers.withoutAcceptEncoding()
+        val sanitizedHeaders = applyCfClearance(url, headers.withoutAcceptEncoding())
         val builder = Request.Builder().url(url)
         sanitizedHeaders.forEach { (key, value) ->
             builder.header(key, value)
@@ -295,11 +311,15 @@ actual suspend fun httpRequestRaw(
         }
 
         client.newCall(request).execute().use { response ->
+            val responseBody = readResponseBodyLimited(response.body, maxResponseBodyBytes)
+            if (isCloudflareChallenge(response.code, responseBody)) {
+                CfClearanceRepository.noteChallengeHost(url)
+            }
             RawHttpResponse(
                 status = response.code,
                 statusText = response.message,
                 url = response.request.url.toString(),
-                body = readResponseBodyLimited(response.body, maxResponseBodyBytes),
+                body = responseBody,
                 headers = response.headers.toMultimap().mapValues { (_, values) ->
                     values.joinToString(",")
                 }.mapKeys { (name, _) ->

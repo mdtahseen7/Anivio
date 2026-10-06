@@ -829,6 +829,14 @@
     <string name="settings_content_discovery_addons_description">Install, remove, refresh, and sort your content sources.</string>
     <string name="settings_content_discovery_addons_description_appstore">Add and manage the addons you use with Anivio.</string>
     <string name="settings_content_discovery_plugins_description">Install JavaScript scraper repositories and test providers internally.</string>
+    <string name="settings_cloudflare_section">CLOUDFLARE</string>
+    <string name="settings_cloudflare_enable">Cloudflare clearance</string>
+    <string name="settings_cloudflare_enable_description">Let sources behind Cloudflare (e.g. AnimePahe) work by solving their human-check in an in-app browser.</string>
+    <string name="settings_cloudflare_clear">Solve a Cloudflare check</string>
+    <string name="settings_cloudflare_clear_pending">%1$s needs clearing. Tap to open the check.</string>
+    <string name="settings_cloudflare_clear_idle">Open the in-app browser to clear a protected source.</string>
+    <string name="settings_cloudflare_reset">Reset saved clearances</string>
+    <string name="settings_cloudflare_reset_description">Forget all saved Cloudflare cookies and pending checks.</string>
     <string name="settings_content_discovery_homescreen_description">Adjust home layout, content visibility, and poster behavior</string>
     <string name="settings_content_discovery_meta_screen_description">Settings for the detail and episode screens.</string>
     <string name="settings_content_discovery_collections_description">Create custom catalog groupings with folders shown on Home.</string>

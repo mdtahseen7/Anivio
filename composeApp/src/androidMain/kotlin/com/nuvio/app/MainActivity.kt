@@ -101,6 +101,7 @@ open class MainActivity : AppCompatActivity() {
         HomeCatalogSettingsStorage.initialize(applicationContext)
         HomeCatalogCacheStorage.initialize(applicationContext)
         PlayerSettingsStorage.initialize(applicationContext)
+        com.nuvio.app.features.cloudflare.CfClearanceStorage.initialize(applicationContext)
         PlayerTrackPreferenceStorage.initialize(applicationContext)
         P2pSettingsStorage.initialize(applicationContext)
         P2pStreamingEngine.initialize(applicationContext)

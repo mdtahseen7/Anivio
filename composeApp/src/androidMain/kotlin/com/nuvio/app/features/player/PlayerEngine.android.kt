@@ -2212,15 +2212,26 @@ private class CueNormalizingTextOutput(
 
     /**
      * SubtitleView only auto-stacks cues whose line is unset. When two lines are on screen at once
-     * (two speakers talking together) some subtitle formats hand both the same explicit line, so
-     * they paint on top of each other. If any text cues collide on the same line, clear the line on
-     * all of them and let SubtitleView lay them out on separate rows instead.
+     * (two speakers talking together) they can paint on top of each other in two ways: some formats
+     * hand both the same explicit line, and even when the lines differ a custom (enlarged) subtitle
+     * font can make adjacent lines physically overlap because the text is taller than the gap.
+     *
+     * Only cues that sit close together are collapsed — intentional placement like a sign pinned to
+     * the top versus dialogue at the bottom stays put. When 2+ near cues share placement, their
+     * lines are cleared so SubtitleView lays them out on separate rows regardless of font size.
      */
     private fun stackOverlappingCues(cues: List<Cue>): List<Cue> {
         val textCues = cues.filter { it.bitmap == null && it.text != null }
         if (textCues.size < 2) return cues
-        val lineKey = { cue: Cue -> "${cue.line}:${cue.lineType}:${cue.lineAnchor}" }
-        val collides = textCues.groupBy(lineKey).any { it.value.size > 1 }
+        // Only fractional, explicitly-lined cues can be compared for proximity.
+        val lined = textCues.filter {
+            it.lineType == Cue.LINE_TYPE_FRACTION && it.line != Cue.DIMEN_UNSET && !it.line.isNaN()
+        }
+        if (lined.size < 2) return cues
+        // Two dialogue rows that would collide sit within ~15% of the screen height of each other;
+        // a top sign vs bottom dialogue are far apart and won't trigger.
+        val sorted = lined.map { it.line }.sorted()
+        val collides = sorted.zipWithNext().any { (a, b) -> b - a < 0.15f }
         if (!collides) return cues
         return cues.map { cue ->
             if (cue.bitmap == null && cue.text != null && cue.verticalType == Cue.TYPE_UNSET) {
