@@ -837,6 +837,12 @@
     <string name="settings_cloudflare_clear_idle">Open the in-app browser to clear a protected source.</string>
     <string name="settings_cloudflare_reset">Reset saved clearances</string>
     <string name="settings_cloudflare_reset_description">Forget all saved Cloudflare cookies and pending checks.</string>
+    <string name="cloudflare_picker_title">Solve a Cloudflare check</string>
+    <string name="cloudflare_picker_subtitle">Pick a source to open its human-check in the in-app browser.</string>
+    <string name="cloudflare_picker_empty">No sources need a Cloudflare check right now.</string>
+    <string name="cloudflare_picker_cleared">Cleared</string>
+    <string name="cloudflare_picker_needs_check">Needs check</string>
+    <string name="streams_solve_captcha">Solve Cloudflare check</string>
     <string name="settings_content_discovery_homescreen_description">Adjust home layout, content visibility, and poster behavior</string>
     <string name="settings_content_discovery_meta_screen_description">Settings for the detail and episode screens.</string>
     <string name="settings_content_discovery_collections_description">Create custom catalog groupings with folders shown on Home.</string>

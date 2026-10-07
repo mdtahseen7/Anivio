@@ -272,8 +272,11 @@ private fun ExoPlayerSurface(
     val effectiveDecoderPriority = decoderPriorityOverride ?: playerSettings.decoderPriority
 
     val initialMediaItem = remember(playerSourceKey, externalSubtitles) {
+        Log.d(TAG, "externalSubtitles: count=${externalSubtitles.size} " +
+            externalSubtitles.joinToString { "[url=${it.url} lang=${it.language} name=${it.name}]" })
         val subtitleConfigs = externalSubtitles.mapNotNull { subtitle ->
             val mimeType = resolveSubtitleMimeType(subtitle.url, subtitle.headers)
+            Log.d(TAG, "externalSubtitles: building config url=${subtitle.url} mime=$mimeType")
             MediaItem.SubtitleConfiguration.Builder(Uri.parse(subtitle.url))
                 .setMimeType(mimeType)
                 .setLanguage(subtitle.language)
@@ -2048,6 +2051,8 @@ private fun ExoPlayer.extractSubtitleTracks(context: Context): List<SubtitleTrac
     for (group in currentTracks.groups) {
         if (group.type != C.TRACK_TYPE_TEXT) continue
         val format = group.mediaTrackGroup.getFormat(0)
+        Log.d(TAG, "extractSubtitleTracks: text group id=${format.id} lang=${format.language} " +
+            "label=${format.label} mime=${format.sampleMimeType} supported=${group.isTrackSupported(0)}")
         val hasForcedSelectionFlag = (format.selectionFlags and C.SELECTION_FLAG_FORCED) != 0
         tracks.add(
             SubtitleTrack(

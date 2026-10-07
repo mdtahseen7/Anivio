@@ -38,6 +38,10 @@ data class PluginManifestScraper(
     @SerialName("supportedFormats") val supportedFormats: List<String>? = null,
     @SerialName("supportsExternalPlayer") val supportsExternalPlayer: Boolean? = null,
     val limited: Boolean? = null,
+    /** When true, this provider's site is behind a Cloudflare challenge the user must pre-solve. */
+    @SerialName("needsCaptcha") val needsCaptcha: Boolean? = null,
+    /** Host(s) to open in the challenge solver for this provider (e.g. ["animepahe.pw"]). */
+    @SerialName("domains") val domains: List<String>? = null,
 )
 
 data class PluginRepositoryItem(
@@ -65,6 +69,8 @@ data class PluginScraper(
     val logo: String? = null,
     val contentLanguage: List<String> = emptyList(),
     val formats: List<String>? = null,
+    val needsCaptcha: Boolean = false,
+    val domains: List<String> = emptyList(),
     val code: String,
 ) {
     fun supportsType(type: String): Boolean {
@@ -142,6 +148,8 @@ internal data class StoredPluginScraper(
     val logo: String? = null,
     val contentLanguage: List<String> = emptyList(),
     val formats: List<String>? = null,
+    val needsCaptcha: Boolean = false,
+    val domains: List<String> = emptyList(),
     val code: String? = null,
 )
 
@@ -182,6 +190,8 @@ internal fun PluginScraper.toStoredPluginScraper(): StoredPluginScraper =
         logo = logo,
         contentLanguage = contentLanguage,
         formats = formats,
+        needsCaptcha = needsCaptcha,
+        domains = domains,
         code = null,
     )
 
@@ -205,6 +215,8 @@ internal fun StoredPluginScraper.restorePluginScraper(
             logo = logo,
             contentLanguage = contentLanguage,
             formats = formats,
+            needsCaptcha = needsCaptcha,
+            domains = domains,
             code = resolvedCode,
         ),
         requiresMigration = code != null,

@@ -419,7 +419,8 @@ private suspend fun downloadEpisodes(
 
         if (resolvedStream == null) continue
 
-        // Save any subtitle tracks the stream carries next to the video, for offline playback.
+        // Save subtitle tracks for offline playback: those the stream carries inline, plus any the
+        // installed subtitle addons return (anime streams rarely carry subtitles inline).
         val downloadedSubtitles = saveStreamSubtitles(
             subtitles = resolvedStream.externalSubtitles,
             baseFileName = buildString {
@@ -427,6 +428,10 @@ private suspend fun downloadEpisodes(
                 season?.let { append("_s").append(it) }
                 episode?.let { append("_e").append(it) }
             },
+            type = meta.type,
+            videoId = videoId,
+            hlsPlaylistUrl = resolvedStream.playableDirectUrl,
+            hlsHeaders = resolvedStream.behaviorHints.proxyHeaders?.request.orEmpty(),
         )
 
         val result = DownloadsRepository.enqueueFromStream(

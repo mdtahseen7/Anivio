@@ -42,8 +42,15 @@ import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.SearchOff
+import androidx.compose.material.icons.rounded.Shield
 import com.nuvio.app.core.ui.NuvioLoadingIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.IconButtonDefaults
+import com.nuvio.app.features.cloudflare.CfCaptchaPickerSheet
+import com.nuvio.app.features.cloudflare.CfClearanceRepository
+import com.nuvio.app.features.cloudflare.buildCfCaptchaProviders
+import com.nuvio.app.features.plugins.PluginRepository
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -79,7 +86,6 @@ import com.nuvio.app.core.ui.NuvioModalBottomSheet
 import com.nuvio.app.core.ui.NuvioToastController
 import com.nuvio.app.core.ui.dismissNuvioBottomSheet
 import com.nuvio.app.features.downloads.DownloadsRepository
-import com.nuvio.app.features.downloads.saveStreamSubtitles
 import com.nuvio.app.features.details.MetaScreenSettingsRepository
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -173,6 +179,20 @@ fun StreamsScreen(
         }
     }
 
+    val cfState by remember {
+        CfClearanceRepository.ensureLoaded()
+        CfClearanceRepository.uiState
+    }.collectAsStateWithLifecycle()
+    val pluginsUiState by PluginRepository.uiState.collectAsStateWithLifecycle()
+    var showCaptchaPicker by remember { mutableStateOf(false) }
+    val captchaProviders = remember(pluginsUiState.scrapers, cfState.challengeHosts) {
+        buildCfCaptchaProviders(
+            scrapers = pluginsUiState.scrapers,
+            challengeHosts = cfState.challengeHosts,
+        )
+    }
+    val showCaptchaButton = cfState.enabled && captchaProviders.isNotEmpty()
+
     fun subtitleBaseFileName(): String = buildString {
         append(parentMetaId.filter { it.isLetterOrDigit() }.take(40))
         seasonNumber?.let { append("_s").append(it) }
@@ -180,6 +200,7 @@ fun StreamsScreen(
     }
 
     fun handleDownloadStream(stream: StreamItem) {
+        val baseFileName = subtitleBaseFileName()
         if (DirectDebridPlaybackResolver.shouldResolveToPlayableStream(stream)) {
             downloadScope.launch {
                 val resolved = DirectDebridPlaybackResolver.resolveToPlayableStream(
@@ -189,11 +210,9 @@ fun StreamsScreen(
                 )
                 when (resolved) {
                     is DirectDebridPlayableResult.Success -> {
-                        val subtitles = saveStreamSubtitles(
-                            subtitles = resolved.stream.externalSubtitles,
-                            baseFileName = subtitleBaseFileName(),
-                        )
-                        val result = DownloadsRepository.enqueueFromStream(
+                        // Hand off to the repository's long-lived scope so subtitle saving + enqueue
+                        // survive this screen leaving composition.
+                        DownloadsRepository.enqueueFromStreamWithSubtitles(
                             contentType = type,
                             videoId = videoId,
                             parentMetaId = parentMetaId,
@@ -207,9 +226,10 @@ fun StreamsScreen(
                             episodeTitle = episodeTitle,
                             episodeThumbnail = episodeThumbnail,
                             stream = resolved.stream,
-                            subtitles = subtitles,
+                            streamCarriedSubtitles = resolved.stream.externalSubtitles,
+                            subtitleBaseFileName = baseFileName,
+                            onResult = { NuvioToastController.show(it.toastMessage()) },
                         )
-                        NuvioToastController.show(result.toastMessage())
                     }
                     else -> {
                         val message = resolved.toastMessage()
@@ -220,29 +240,24 @@ fun StreamsScreen(
                 }
             }
         } else {
-            downloadScope.launch {
-                val subtitles = saveStreamSubtitles(
-                    subtitles = stream.externalSubtitles,
-                    baseFileName = subtitleBaseFileName(),
-                )
-                val result = DownloadsRepository.enqueueFromStream(
-                    contentType = type,
-                    videoId = videoId,
-                    parentMetaId = parentMetaId,
-                    parentMetaType = parentMetaType,
-                    title = title,
-                    logo = logo,
-                    poster = poster,
-                    background = background,
-                    seasonNumber = seasonNumber,
-                    episodeNumber = episodeNumber,
-                    episodeTitle = episodeTitle,
-                    episodeThumbnail = episodeThumbnail,
-                    stream = stream,
-                    subtitles = subtitles,
-                )
-                NuvioToastController.show(result.toastMessage())
-            }
+            DownloadsRepository.enqueueFromStreamWithSubtitles(
+                contentType = type,
+                videoId = videoId,
+                parentMetaId = parentMetaId,
+                parentMetaType = parentMetaType,
+                title = title,
+                logo = logo,
+                poster = poster,
+                background = background,
+                seasonNumber = seasonNumber,
+                episodeNumber = episodeNumber,
+                episodeTitle = episodeTitle,
+                episodeThumbnail = episodeThumbnail,
+                stream = stream,
+                streamCarriedSubtitles = stream.externalSubtitles,
+                subtitleBaseFileName = baseFileName,
+                onResult = { NuvioToastController.show(it.toastMessage()) },
+            )
         }
     }
 
@@ -399,6 +414,22 @@ fun StreamsScreen(
                 containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.45f),
                 contentColor = MaterialTheme.colorScheme.onBackground,
             )
+            if (showCaptchaButton) {
+                FilledIconButton(
+                    onClick = { showCaptchaPicker = true },
+                    modifier = Modifier.size(40.dp),
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.45f),
+                        contentColor = MaterialTheme.colorScheme.onBackground,
+                    ),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Shield,
+                        contentDescription = stringResource(Res.string.streams_solve_captcha),
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
         }
 
         AnimatedVisibility(
@@ -499,6 +530,13 @@ fun StreamsScreen(
                 )
             },
         )
+
+        if (showCaptchaPicker) {
+            CfCaptchaPickerSheet(
+                providers = captchaProviders,
+                onDismiss = { showCaptchaPicker = false },
+            )
+        }
     }
 }
 

@@ -9,9 +9,11 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.core.build.AppFeaturePolicy
 import com.nuvio.app.features.anime.AnimeDataSourcePreference
-import com.nuvio.app.features.cloudflare.CfChallengeSolverDialog
+import com.nuvio.app.features.cloudflare.CfCaptchaPickerSheet
 import com.nuvio.app.features.cloudflare.CfClearanceRepository
+import com.nuvio.app.features.cloudflare.buildCfCaptchaProviders
 import com.nuvio.app.features.home.HomeCatalogSettingsRepository
+import com.nuvio.app.features.plugins.PluginRepository
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.anilist_source_name
 import nuvio.composeapp.generated.resources.anime_source_anilist_description
@@ -124,7 +126,8 @@ internal fun LazyListScope.contentDiscoveryContent(
 @Composable
 private fun CloudflareClearanceGroup(isTablet: Boolean) {
     val cfState by CfClearanceRepository.uiState.collectAsStateWithLifecycle()
-    var solverHost by remember { mutableStateOf<String?>(null) }
+    val pluginsState by PluginRepository.uiState.collectAsStateWithLifecycle()
+    var showPicker by remember { mutableStateOf(false) }
 
     SettingsSection(
         title = stringResource(Res.string.settings_cloudflare_section),
@@ -149,7 +152,7 @@ private fun CloudflareClearanceGroup(isTablet: Boolean) {
                         stringResource(Res.string.settings_cloudflare_clear_idle)
                     },
                     isTablet = isTablet,
-                    onClick = { solverHost = pending ?: DEFAULT_CF_SOLVER_HOST },
+                    onClick = { showPicker = true },
                 )
                 if (cfState.challengeHosts.isNotEmpty()) {
                     SettingsGroupDivider(isTablet = isTablet)
@@ -164,17 +167,16 @@ private fun CloudflareClearanceGroup(isTablet: Boolean) {
         }
     }
 
-    solverHost?.let { host ->
-        CfChallengeSolverDialog(
-            host = host,
-            onSolved = { solverHost = null },
-            onDismiss = { solverHost = null },
+    if (showPicker) {
+        CfCaptchaPickerSheet(
+            providers = buildCfCaptchaProviders(
+                scrapers = pluginsState.scrapers,
+                challengeHosts = cfState.challengeHosts,
+            ),
+            onDismiss = { showPicker = false },
         )
     }
 }
-
-/** Host opened when the user taps "Clear" with no pending challenge (the one site we currently gate). */
-private const val DEFAULT_CF_SOLVER_HOST = "animepahe.pw"
 
 @Composable
 private fun animeDataSourceLabel(source: AnimeDataSourcePreference): String = when (source) {

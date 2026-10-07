@@ -205,6 +205,97 @@ internal object DownloadsHlsPipeline {
         return variants
     }
 
+    /**
+     * Downloads any in-manifest subtitle renditions (`#EXT-X-MEDIA:TYPE=SUBTITLES`) referenced by an
+     * HLS master playlist and returns the concatenated WebVTT text for each. ExoPlayer renders these
+     * tracks automatically during online playback, so without this a downloaded episode would lose the
+     * subtitles the user saw while streaming. Returns an empty list for media playlists or when no
+     * subtitle renditions are present.
+     */
+    suspend fun extractSubtitles(
+        playlistUrl: String,
+        headers: Map<String, String>,
+    ): List<HlsSubtitleTrack> {
+        val masterBody = runCatching {
+            httpDownloadText(url = playlistUrl, headers = headers, maxBytes = MAX_PLAYLIST_BYTES)
+        }.getOrNull() ?: return emptyList()
+        if (!masterBody.contains("#EXT-X-STREAM-INF")) return emptyList()
+
+        val renditions = parseSubtitleRenditions(masterBody)
+        if (renditions.isEmpty()) return emptyList()
+
+        val tracks = mutableListOf<HlsSubtitleTrack>()
+        renditions.forEachIndexed { index, rendition ->
+            val subtitlePlaylistUrl = resolveSegmentUri(playlistUrl, rendition.uri)
+            val text = runCatching {
+                downloadWebVttTrack(subtitlePlaylistUrl, headers)
+            }.getOrNull()
+            if (!text.isNullOrBlank()) {
+                tracks += HlsSubtitleTrack(
+                    language = rendition.language ?: rendition.name ?: "sub$index",
+                    name = rendition.name,
+                    content = text,
+                )
+            }
+        }
+        return tracks
+    }
+
+    /** Parses `#EXT-X-MEDIA:TYPE=SUBTITLES` lines out of a master playlist. */
+    private fun parseSubtitleRenditions(body: String): List<SubtitleRendition> {
+        val renditions = mutableListOf<SubtitleRendition>()
+        body.lineSequence().map { it.trim() }.forEach { line ->
+            if (!line.startsWith("#EXT-X-MEDIA:")) return@forEach
+            val type = Regex("TYPE=([A-Za-z0-9-]+)").find(line)?.groupValues?.get(1)?.uppercase()
+            if (type != "SUBTITLES") return@forEach
+            val uri = Regex("URI=\"([^\"]+)\"").find(line)?.groupValues?.get(1) ?: return@forEach
+            val language = Regex("LANGUAGE=\"([^\"]+)\"").find(line)?.groupValues?.get(1)
+            val name = Regex("NAME=\"([^\"]+)\"").find(line)?.groupValues?.get(1)
+            renditions += SubtitleRendition(uri = uri, language = language, name = name)
+        }
+        return renditions
+    }
+
+    /**
+     * Resolves a subtitle rendition URI (which may itself be a tiny media playlist pointing at one or
+     * more .vtt segments, or a direct .vtt/.srt file) and returns a single concatenated WebVTT document.
+     */
+    private suspend fun downloadWebVttTrack(
+        subtitleUri: String,
+        headers: Map<String, String>,
+    ): String {
+        val lower = subtitleUri.substringBefore('?').lowercase()
+        // A direct subtitle file (no playlist indirection).
+        if (lower.endsWith(".vtt") || lower.endsWith(".srt") || lower.endsWith(".ass") || lower.endsWith(".ssa")) {
+            return httpDownloadText(url = subtitleUri, headers = headers, maxBytes = MAX_PLAYLIST_BYTES)
+        }
+
+        val playlistBody = httpDownloadText(url = subtitleUri, headers = headers, maxBytes = MAX_PLAYLIST_BYTES)
+        if (!playlistBody.contains("#EXTM3U")) {
+            // Not a playlist after all — treat the body as the subtitle itself.
+            return playlistBody
+        }
+
+        val segmentUris = playlistBody.lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && !it.startsWith("#") }
+            .map { resolveSegmentUri(subtitleUri, it) }
+            .toList()
+        if (segmentUris.isEmpty()) return ""
+
+        val builder = StringBuilder()
+        segmentUris.forEach { uri ->
+            val part = runCatching {
+                httpDownloadText(url = uri, headers = headers, maxBytes = MAX_PLAYLIST_BYTES)
+            }.getOrNull().orEmpty()
+            if (part.isNotBlank()) {
+                if (builder.isNotEmpty()) builder.append('\n')
+                builder.append(part)
+            }
+        }
+        return builder.toString()
+    }
+
     private fun parseMediaPlaylist(body: String): MediaPlaylist? {
         if (!body.contains("#EXTM3U")) return null
 
@@ -350,6 +441,19 @@ internal object DownloadsHlsPipeline {
         val iv: ByteArray,
     )
 }
+
+/** A subtitle track extracted from an HLS master playlist, as a concatenated WebVTT document. */
+internal data class HlsSubtitleTrack(
+    val language: String,
+    val name: String?,
+    val content: String,
+)
+
+private data class SubtitleRendition(
+    val uri: String,
+    val language: String?,
+    val name: String?,
+)
 
 expect suspend fun httpDownloadText(
     url: String,

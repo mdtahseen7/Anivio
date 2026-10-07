@@ -444,6 +444,8 @@ actual object PluginRepository {
                             logo = info.logo,
                             contentLanguage = info.contentLanguage ?: emptyList(),
                             formats = info.formats ?: info.supportedFormats,
+                            needsCaptcha = info.needsCaptcha ?: false,
+                            domains = info.domains ?: emptyList(),
                             code = code,
                         )
                     }.getOrNull()

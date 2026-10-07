@@ -6,6 +6,7 @@ import androidx.core.content.FileProvider
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.ensureActive
@@ -353,7 +354,7 @@ actual suspend fun httpDownloadText(
 actual suspend fun httpDownloadBytes(
     url: String,
     headers: Map<String, String>,
-): ByteArray {
+): ByteArray = withContext(Dispatchers.IO) {
     val requestBuilder = Request.Builder().url(url)
     headers.forEach { (key, value) ->
         requestBuilder.header(key, value)
@@ -365,6 +366,6 @@ actual suspend fun httpDownloadBytes(
             error("HTTP ${response.code} while downloading")
         }
         val body = response.body ?: error("Empty download response")
-        return body.bytes()
+        body.bytes()
     }
 }

@@ -845,6 +845,8 @@ internal fun MainAppContent(
 
         fun openDownloadedItem(item: DownloadItem) {
             val sourceUrl = DownloadsRepository.playableLocalFileUri(item) ?: return
+            println("openDownloadedItem: title=${item.title} subtitles=${item.subtitles.size} " +
+                item.subtitles.joinToString { "[uri=${it.localFileUri} lang=${it.language}]" })
             val resumeEntry = item.videoId
                 .takeIf { it.isNotBlank() }
                 ?.let(WatchProgressRepository::progressForVideo)

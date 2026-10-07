@@ -1,6 +1,11 @@
 package com.nuvio.app.features.downloads
 
 import com.nuvio.app.features.streams.StreamItem
+import com.nuvio.app.features.streams.StreamSubtitle
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,6 +21,11 @@ import org.jetbrains.compose.resources.getString
 object DownloadsRepository {
     private val _uiState = MutableStateFlow(DownloadsUiState())
     val uiState: StateFlow<DownloadsUiState> = _uiState.asStateFlow()
+
+    // Long-lived scope so subtitle download + enqueue survive the UI leaving composition. A
+    // composable's rememberCoroutineScope is cancelled on navigation, which previously killed
+    // subtitle saving mid-flight ("rememberCoroutineScope left the composition").
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private val activeHandles = mutableMapOf<String, DownloadsTaskHandle>()
     private var hasLoaded = false
@@ -98,6 +108,60 @@ object DownloadsRepository {
         }
 
         return resolvedUri
+    }
+
+    /**
+     * Fire-and-forget download entry point. Saves the stream's subtitle tracks (stream-carried,
+     * HLS-embedded and addon-provided) and enqueues the download on a long-lived scope so neither
+     * step is cancelled when the calling screen leaves composition. [onResult] is invoked with the
+     * enqueue outcome (e.g. to show a toast); callers that need the subtitles themselves should keep
+     * using [enqueueFromStream] directly.
+     */
+    fun enqueueFromStreamWithSubtitles(
+        contentType: String,
+        videoId: String,
+        parentMetaId: String,
+        parentMetaType: String,
+        title: String,
+        logo: String?,
+        poster: String?,
+        background: String?,
+        seasonNumber: Int?,
+        episodeNumber: Int?,
+        episodeTitle: String?,
+        episodeThumbnail: String?,
+        stream: StreamItem,
+        streamCarriedSubtitles: List<StreamSubtitle>,
+        subtitleBaseFileName: String,
+        onResult: (DownloadEnqueueResult) -> Unit = {},
+    ) {
+        scope.launch {
+            val subtitles = saveStreamSubtitles(
+                subtitles = streamCarriedSubtitles,
+                baseFileName = subtitleBaseFileName,
+                type = contentType,
+                videoId = videoId,
+                hlsPlaylistUrl = stream.playableDirectUrl,
+                hlsHeaders = stream.behaviorHints.proxyHeaders?.request.orEmpty(),
+            )
+            val result = enqueueFromStream(
+                contentType = contentType,
+                videoId = videoId,
+                parentMetaId = parentMetaId,
+                parentMetaType = parentMetaType,
+                title = title,
+                logo = logo,
+                poster = poster,
+                background = background,
+                seasonNumber = seasonNumber,
+                episodeNumber = episodeNumber,
+                episodeTitle = episodeTitle,
+                episodeThumbnail = episodeThumbnail,
+                stream = stream,
+                subtitles = subtitles,
+            )
+            onResult(result)
+        }
     }
 
     fun enqueueFromStream(
