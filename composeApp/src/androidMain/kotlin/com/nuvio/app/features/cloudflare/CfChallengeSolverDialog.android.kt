@@ -138,9 +138,21 @@ actual fun CfChallengeSolverDialog(
         }
     }
 
-    // Belt-and-suspenders: also try once on first composition in case cookies survived from a prior visit.
+    // First composition: the jar may hold a cf_clearance cookie from an earlier visit. Only trust
+    // it when the repository still considers that clearance fresh; otherwise it is a stale cookie
+    // that would instantly "solve" with a dead token (and re-arm it as fresh). Drop the stale one
+    // so the challenge page loads clean and the user can actually solve it.
     DisposableEffect(cleanHost) {
-        captureIfCleared()
+        if (cleanHost.isNotEmpty()) {
+            if (CfClearanceRepository.freshClearanceHeadersFor("https://$cleanHost") != null) {
+                captureIfCleared()
+            } else {
+                CookieManager.getInstance().setCookie(
+                    "https://$cleanHost",
+                    "cf_clearance=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/",
+                )
+            }
+        }
         onDispose { }
     }
 }
