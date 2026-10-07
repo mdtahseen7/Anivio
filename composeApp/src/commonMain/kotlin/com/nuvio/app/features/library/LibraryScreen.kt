@@ -159,6 +159,7 @@ fun LibraryScreen(
     var showSchedule by rememberSaveable { mutableStateOf(false) }
     var showAniListLists by rememberSaveable { mutableStateOf(false) }
     var showStats by rememberSaveable { mutableStateOf(false) }
+    var showProfile by rememberSaveable { mutableStateOf(false) }
     val sourceMode = remember(sourceModeName) {
         runCatching { LibraryViewMode.valueOf(sourceModeName) }.getOrDefault(LibraryViewMode.Saved)
     }
@@ -304,6 +305,18 @@ fun LibraryScreen(
         return
     }
 
+    if (showProfile) {
+        com.nuvio.app.features.profile.ProfileScreen(
+            onBack = { showProfile = false },
+            onOpenStats = {
+                showProfile = false
+                showStats = true
+            },
+            modifier = modifier.fillMaxSize(),
+        )
+        return
+    }
+
     if (showStats) {
         StatsScreen(
             onBack = { showStats = false },
@@ -411,11 +424,11 @@ fun LibraryScreen(
                                             .align(Alignment.CenterVertically)
                                             .size(36.dp)
                                             .clip(CircleShape)
-                                            .clickable { showStats = true },
+                                            .clickable { showProfile = true },
                                         contentScale = ContentScale.Crop,
                                     )
                                 } else {
-                                    IconButton(onClick = { showStats = true }) {
+                                    IconButton(onClick = { showProfile = true }) {
                                         Icon(
                                             imageVector = Icons.Rounded.AccountCircle,
                                             contentDescription = stringResource(Res.string.stats_open),

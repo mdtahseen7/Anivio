@@ -108,6 +108,8 @@ open class MainActivity : AppCompatActivity() {
         ExternalPlayerPlatform.initialize(applicationContext)
         SubtitleFileCache.initialize(applicationContext)
         ProfileStorage.initialize(applicationContext)
+        com.nuvio.app.features.profile.ProfileStatsStorage.initialize(applicationContext)
+        com.nuvio.app.features.profile.ProfileShare.initialize(applicationContext)
         AvatarStorage.initialize(applicationContext)
         ProfilePinCacheStorage.initialize(applicationContext)
         MemberAssetStorage.initialize(applicationContext)
