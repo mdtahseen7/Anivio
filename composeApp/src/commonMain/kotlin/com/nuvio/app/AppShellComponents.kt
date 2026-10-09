@@ -9,10 +9,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -29,6 +31,7 @@ import com.nuvio.app.features.cloud.CloudLibraryItem
 import com.nuvio.app.features.home.HomeCatalogSection
 import com.nuvio.app.features.home.HomeScreen
 import com.nuvio.app.features.home.MetaPreview
+import com.nuvio.app.features.profile.ProfileScreen
 import com.nuvio.app.features.library.LibraryItem
 import com.nuvio.app.features.library.LibraryScreen
 import com.nuvio.app.features.library.LibrarySection
@@ -185,28 +188,44 @@ internal fun AppTabHost(
                 }
 
                 AppScreenTab.Settings -> {
-                    SettingsScreen(
-                        modifier = Modifier.fillMaxSize(),
-                        rootActionRequests = requests.settingsRootActionRequests,
-                        requestedPageName = state.requestedSettingsPageName,
-                        onRequestedPageConsumed = actions.onRequestedSettingsPageConsumed,
-                        rootActionsEnabled = state.rootActionsEnabled,
-                        onNavigatePage = actions.onSettingsPageClick,
-                        onSwitchProfile = actions.onSwitchProfile,
-                        onHomescreenClick = actions.onHomescreenSettingsClick,
-                        onMetaScreenClick = actions.onMetaScreenSettingsClick,
-                        onContinueWatchingClick = actions.onContinueWatchingSettingsClick,
-                        onDownloadsClick = actions.onDownloadsSettingsClick,
-                        onAddonsClick = actions.onAddonsSettingsClick,
-                        onPluginsClick = actions.onPluginsSettingsClick,
-                        onAccountClick = actions.onAccountSettingsClick,
-                        onAboutClick = actions.onAboutSettingsClick,
-                        onPrivacyPolicyClick = actions.onPrivacyPolicySettingsClick,
-                        onLicensesAttributionsClick = actions.onLicensesAttributionsSettingsClick,
-                        onCheckForUpdatesClick = actions.onCheckForUpdatesClick,
-                        onTestUpdateBannerClick = actions.onTestUpdateBannerClick,
-                        onCollectionsClick = actions.onCollectionsSettingsClick,
-                    )
+                    // The "Profile" tab opens the gamified profile dashboard; Settings is reached
+                    // from a button inside it. Deep-links that target a specific settings page
+                    // (e.g. Debrid) still jump straight into Settings via requestedSettingsPageName.
+                    var showSettings by rememberSaveable { mutableStateOf(false) }
+                    LaunchedEffect(state.requestedSettingsPageName) {
+                        if (state.requestedSettingsPageName != null) showSettings = true
+                    }
+                    if (showSettings) {
+                        SettingsScreen(
+                            modifier = Modifier.fillMaxSize(),
+                            onExternalBack = { showSettings = false },
+                            rootActionRequests = requests.settingsRootActionRequests,
+                            requestedPageName = state.requestedSettingsPageName,
+                            onRequestedPageConsumed = actions.onRequestedSettingsPageConsumed,
+                            rootActionsEnabled = state.rootActionsEnabled,
+                            onNavigatePage = actions.onSettingsPageClick,
+                            onSwitchProfile = actions.onSwitchProfile,
+                            onHomescreenClick = actions.onHomescreenSettingsClick,
+                            onMetaScreenClick = actions.onMetaScreenSettingsClick,
+                            onContinueWatchingClick = actions.onContinueWatchingSettingsClick,
+                            onDownloadsClick = actions.onDownloadsSettingsClick,
+                            onAddonsClick = actions.onAddonsSettingsClick,
+                            onPluginsClick = actions.onPluginsSettingsClick,
+                            onAccountClick = actions.onAccountSettingsClick,
+                            onAboutClick = actions.onAboutSettingsClick,
+                            onPrivacyPolicyClick = actions.onPrivacyPolicySettingsClick,
+                            onLicensesAttributionsClick = actions.onLicensesAttributionsSettingsClick,
+                            onCheckForUpdatesClick = actions.onCheckForUpdatesClick,
+                            onTestUpdateBannerClick = actions.onTestUpdateBannerClick,
+                            onCollectionsClick = actions.onCollectionsSettingsClick,
+                        )
+                    } else {
+                        ProfileScreen(
+                            modifier = Modifier.fillMaxSize(),
+                            onBack = null,
+                            onOpenSettings = { showSettings = true },
+                        )
+                    }
                 }
             }
         }

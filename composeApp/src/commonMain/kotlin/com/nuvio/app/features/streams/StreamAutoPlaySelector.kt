@@ -45,6 +45,7 @@ object StreamAutoPlaySelector {
         bingeGroupOnly: Boolean = false,
         debridEnabled: Boolean = true,
         activeResolverProviderId: String? = null,
+        preferredAddonName: String? = null,
     ): StreamItem? =
         evaluateAutoPlayStream(
             streams = streams,
@@ -59,6 +60,7 @@ object StreamAutoPlaySelector {
             bingeGroupOnly = bingeGroupOnly,
             debridEnabled = debridEnabled,
             activeResolverProviderId = activeResolverProviderId,
+            preferredAddonName = preferredAddonName,
         ).stream
 
     fun evaluateAutoPlayStream(
@@ -74,6 +76,7 @@ object StreamAutoPlaySelector {
         bingeGroupOnly: Boolean = false,
         debridEnabled: Boolean = true,
         activeResolverProviderId: String? = null,
+        preferredAddonName: String? = null,
     ): StreamAutoPlayEvaluation {
         if (streams.isEmpty()) return StreamAutoPlayEvaluation()
 
@@ -173,11 +176,30 @@ object StreamAutoPlaySelector {
         }
         if (matchingStreams.isEmpty() && preferredStream == null) return StreamAutoPlayEvaluation()
 
-        val readyStreams = buildList {
-            preferredStream?.let(::add)
+        // Keep playing from the same provider the user chose for the previous episode: when a
+        // preferred addon is known, stable-sort its streams to the front of the match list so the
+        // next episode auto-plays from that source instead of whatever happens to be listed first.
+        val preferredAddon = preferredAddonName?.trim().orEmpty()
+        val orderedMatchingStreams = if (preferredAddon.isNotEmpty()) {
+            matchingStreams.sortedByDescending { it.addonName == preferredAddon }
+        } else {
             matchingStreams
+        }
+
+        // "Same server, nothing else": a ready stream from the previous provider wins outright,
+        // even over a binge-group match from a different provider.
+        val sameProviderReady = orderedMatchingStreams.firstOrNull { stream ->
+            preferredAddon.isNotEmpty() &&
+                stream.addonName == preferredAddon &&
+                stream.isAutoPlayable(debridEnabled, activeResolverProviderId)
+        }
+
+        val readyStreams = buildList {
+            sameProviderReady?.let(::add)
+            preferredStream?.takeIf { it != sameProviderReady }?.let(::add)
+            orderedMatchingStreams
                 .filter { it.isAutoPlayable(debridEnabled, activeResolverProviderId) }
-                .filterNot { it == preferredStream }
+                .filterNot { it == sameProviderReady || it == preferredStream }
                 .forEach(::add)
         }
         val selected = readyStreams.firstOrNull()
@@ -190,7 +212,7 @@ object StreamAutoPlaySelector {
 
         return StreamAutoPlayEvaluation(
             readyStreams = readyStreams,
-            hasPendingDebridCandidate = matchingStreams.any {
+            hasPendingDebridCandidate = orderedMatchingStreams.any {
                 it.isPendingDebridAutoPlay(debridEnabled, activeResolverProviderId)
             },
         )

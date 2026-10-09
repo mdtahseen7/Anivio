@@ -28,6 +28,7 @@ internal fun CoroutineScope.launchPlayerNextEpisodeAutoPlay(
     contentType: String?,
     settings: PlayerSettingsUiState,
     currentStreamBingeGroup: String?,
+    currentStreamAddonName: String?,
     onDownloadedEpisodeSelected: (DownloadItem, MetaVideo) -> Unit,
     onEpisodeStreamSelected: (StreamItem, MetaVideo) -> Unit,
     onManualSelectionRequired: (MetaVideo) -> Unit,
@@ -101,6 +102,10 @@ internal fun CoroutineScope.launchPlayerNextEpisodeAutoPlay(
         null
     }
 
+    // Carry the provider the user actually watched into next-episode selection so autoplay stays on
+    // the same source instead of defaulting to the first stream in the list.
+    val preferredAddonName = currentStreamAddonName?.takeIf { it.isNotBlank() }
+
     return launch {
         PlayerStreamsRepository.loadEpisodeStreams(
             type = type,
@@ -152,6 +157,7 @@ internal fun CoroutineScope.launchPlayerNextEpisodeAutoPlay(
                 bingeGroupOnly = bingeGroupOnlyManualMode,
                 debridEnabled = debridSettings.canResolvePlayableLinks,
                 activeResolverProviderId = debridSettings.activeResolverProviderId,
+                preferredAddonName = preferredAddonName,
             )
 
         fun tryBingeGroupOnly(streams: List<StreamItem>): StreamItem? {
@@ -169,6 +175,7 @@ internal fun CoroutineScope.launchPlayerNextEpisodeAutoPlay(
                 bingeGroupOnly = true,
                 debridEnabled = debridSettings.canResolvePlayableLinks,
                 activeResolverProviderId = debridSettings.activeResolverProviderId,
+                preferredAddonName = preferredAddonName,
             )
         }
 
@@ -188,7 +195,13 @@ internal fun CoroutineScope.launchPlayerNextEpisodeAutoPlay(
                         }
                     }
                 } else if (allStreams.isNotEmpty()) {
+                    // Lock onto the previous provider the moment its stream arrives (or a binge-group
+                    // match) instead of waiting for every source and risking the timeout picking a
+                    // different one. Non-preferred providers still wait for the full load below.
                     val earlyMatch = tryBingeGroupOnly(allStreams)
+                        ?: trySelectStream(allStreams)?.takeIf {
+                            preferredAddonName != null && it.addonName == preferredAddonName
+                        }
                     if (earlyMatch != null) {
                         selectStream(earlyMatch)
                     }

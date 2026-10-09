@@ -28,6 +28,8 @@ data class Achievement(
     val target: Int,
     val unlocked: Boolean,
     val unlockedAtEpochMs: Long? = null,
+    /** Awarded once per achievement id; included in the profile XP breakdown. */
+    val xpReward: Long = 0,
 )
 
 /**
@@ -43,6 +45,7 @@ data class AchievementDefinition(
     val tier: AchievementTier,
     val iconKey: String,
     val target: Int,
+    val xpReward: Long,
     val measure: (ProfileMetrics) -> Int,
 )
 
@@ -65,6 +68,7 @@ data class ProfileMetrics(
     val weekendEpisodes: Int,
     val longestSeriesEpisodes: Int,
     val completionRatePercent: Int,
+    val level: Int = 1,
 )
 
 /**
@@ -113,6 +117,11 @@ object AchievementCatalog {
         add(def("completionist", "Completionist", "Keep a 90%+ completion rate (20+ series)", AchievementCategory.TASTE, AchievementTier.GOLD, "trophy", 90) {
             if (it.seriesCompleted >= 20) it.completionRatePercent else 0
         })
+
+        // ---- Level milestones ----
+        add(def("level_5", "Rising Star", "Reach level 5", AchievementCategory.MILESTONE, AchievementTier.BRONZE, "trophy", 5) { it.level })
+        add(def("level_25", "Veteran Viewer", "Reach level 25", AchievementCategory.MILESTONE, AchievementTier.SILVER, "trophy", 25) { it.level })
+        add(def("level_50", "Profile Legend", "Reach level 50", AchievementCategory.MILESTONE, AchievementTier.GOLD, "trophy", 50) { it.level })
     }
 
     private fun def(
@@ -124,5 +133,13 @@ object AchievementCatalog {
         iconKey: String,
         target: Int,
         measure: (ProfileMetrics) -> Int,
-    ) = AchievementDefinition(id, title, description, category, tier, iconKey, target, measure)
+    ): AchievementDefinition {
+        val xpReward = when (tier) {
+            AchievementTier.NONE -> 30L
+            AchievementTier.BRONZE -> 75L
+            AchievementTier.SILVER -> 150L
+            AchievementTier.GOLD -> 300L
+        }
+        return AchievementDefinition(id, title, description, category, tier, iconKey, target, xpReward, measure)
+    }
 }

@@ -42,15 +42,15 @@ class ProfileStatsEngineTest {
     }
 
     @Test
-    fun `a single missed day is bridged by the freeze grace rule`() {
-        // today, and 2 days ago (yesterday missed) -> grace keeps the streak alive.
+    fun `a missed local calendar day breaks a streak`() {
+        // today and two days ago: duplicate emissions cannot bridge an inactive calendar day.
         val events = listOf(
             episodeAt(nowMs - 2 * dayMs),
             episodeAt(nowMs),
         )
         val stats = ProfileStatsEngine.compute(events, nowEpochMs = nowMs)
-        assertEquals(2, stats.streak.currentDays)
-        assertTrue(stats.streak.freezeActive)
+        assertEquals(1, stats.streak.currentDays)
+        assertFalse(stats.streak.freezeActive)
     }
 
     @Test
@@ -142,5 +142,119 @@ class ProfileStatsEngineTest {
             assertTrue(total > prev, "level $lvl total $total should exceed $prev")
             prev = total
         }
+    }
+
+    @Test
+    fun `xp breakdown is additive and awards every source once`() {
+        val stats = ProfileStatsEngine.compute(
+            events = listOf(episodeAt(nowMs)),
+            nowEpochMs = nowMs,
+            completedSeriesKeys = setOf("series-1"),
+        )
+
+        assertEquals((24 * ProfileLevelMath.XP_PER_MINUTE).toLong(), stats.xpBreakdown.watchMinutes)
+        assertEquals(ProfileLevelMath.XP_PER_EPISODE_COMPLETION, stats.xpBreakdown.episodeCompletions)
+        assertEquals(ProfileLevelMath.XP_PER_SERIES_COMPLETION, stats.xpBreakdown.seriesCompletions)
+        assertEquals(stats.xpBreakdown.total, stats.level.xp)
+        assertTrue(stats.xpBreakdown.achievementRewards > 0)
+    }
+
+    @Test
+    fun `runtime minutes drive watch xp when they are known`() {
+        val stats = ProfileStatsEngine.compute(
+            events = listOf(episodeAt(nowMs).copy(runtimeMinutes = 30)),
+            nowEpochMs = nowMs,
+        )
+        assertEquals(30L, stats.totals.minutesWatched)
+        assertEquals((30 * ProfileLevelMath.XP_PER_MINUTE).toLong(), stats.xpBreakdown.watchMinutes)
+    }
+
+    @Test
+    fun `duplicate watch events do not duplicate history or xp`() {
+        val event = episodeAt(nowMs)
+        val one = ProfileStatsEngine.compute(listOf(event), nowEpochMs = nowMs)
+        val repeated = ProfileStatsEngine.compute(listOf(event, event), nowEpochMs = nowMs)
+
+        assertEquals(one.totals.episodesWatched, repeated.totals.episodesWatched)
+        assertEquals(one.totals.minutesWatched, repeated.totals.minutesWatched)
+        assertEquals(one.level.xp, repeated.level.xp)
+        assertEquals(one.streak.currentDays, repeated.streak.currentDays)
+    }
+
+    @Test
+    fun `historical achievement survives a tracker correction and keeps its one-time reward`() {
+        val oldUnlock = nowMs - dayMs
+        val corrected = ProfileStatsEngine.compute(
+            events = emptyList(),
+            aniList = ProfileAniListInput(minutesWatched = 1),
+            nowEpochMs = nowMs,
+            previouslyUnlocked = mapOf("eps_1" to oldUnlock),
+        )
+        val achievement = corrected.achievements.first { it.id == "eps_1" }
+
+        assertTrue(achievement.unlocked)
+        assertEquals(oldUnlock, achievement.unlockedAtEpochMs)
+        assertEquals(achievement.xpReward, corrected.xpBreakdown.achievementRewards)
+    }
+
+    @Test
+    fun `rank and cosmetics are derived from level`() {
+        assertEquals(ProfileRank.ENTHUSIAST, ProfileRank.forLevel(10))
+        val level = ProfileLevelMath.levelForXp(ProfileLevelMath.totalXpForLevel(21))
+        assertEquals(ProfileRank.OTAKU.title, level.title)
+        assertTrue(level.rewards.isNotEmpty())
+    }
+
+    @Test
+    fun `level boundaries and very large xp remain valid`() {
+        val threshold = ProfileLevelMath.totalXpForLevel(10)
+        assertEquals(9, ProfileLevelMath.levelForXp(threshold - 1).level)
+        assertEquals(10, ProfileLevelMath.levelForXp(threshold).level)
+        val enormous = ProfileLevelMath.levelForXp(Long.MAX_VALUE)
+        assertTrue(enormous.level >= 1)
+        assertTrue(enormous.xpIntoLevel >= 0)
+        assertTrue(enormous.xpForNextLevel > 0)
+
+        val importedOverflow = ProfileStatsEngine.compute(
+            events = emptyList(),
+            aniList = ProfileAniListInput(minutesWatched = Long.MAX_VALUE),
+            nowEpochMs = nowMs,
+        )
+        assertTrue(importedOverflow.level.xp >= 0)
+    }
+
+    @Test
+    fun `achievement evaluation awards level milestones`() {
+        val achievements = ProfileStatsEngine.evaluateAchievements(
+            metrics = ProfileMetrics(
+                episodesWatched = 0,
+                moviesWatched = 0,
+                seriesCompleted = 0,
+                currentStreakDays = 0,
+                longestStreakDays = 0,
+                activeDays = 0,
+                maxEpisodesInOneDay = 0,
+                distinctGenres = 0,
+                distinctStudios = 0,
+                lateNightEpisodes = 0,
+                earlyMorningEpisodes = 0,
+                weekendEpisodes = 0,
+                longestSeriesEpisodes = 0,
+                completionRatePercent = 0,
+                level = 25,
+            ),
+            nowEpochMs = nowMs,
+            previouslyUnlocked = emptyMap(),
+        )
+        assertTrue(achievements.first { it.id == "level_5" }.unlocked)
+        assertTrue(achievements.first { it.id == "level_25" }.unlocked)
+        assertFalse(achievements.first { it.id == "level_50" }.unlocked)
+    }
+
+    @Test
+    fun `initial profile calculation never produces a level celebration`() {
+        assertFalse(shouldCelebrateLevel(previousLevel = 0, newLevel = 50))
+        assertFalse(shouldCelebrateAchievement(isFirstProfileCalculation = true, wasPreviouslyUnlocked = false))
+        assertTrue(shouldCelebrateLevel(previousLevel = 4, newLevel = 5))
     }
 }

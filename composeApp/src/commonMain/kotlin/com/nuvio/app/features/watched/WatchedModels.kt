@@ -1,6 +1,6 @@
 package com.nuvio.app.features.watched
 
-import com.nuvio.app.core.time.parseZonedIsoDateTimeToEpochMs
+import com.nuvio.app.core.time.EpisodeReleaseDatePlatform
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.tracking.TrackingAttributedItem
 import com.nuvio.app.features.watching.domain.WatchingContentRef
@@ -66,6 +66,9 @@ internal fun normalizeWatchedMarkedAtEpochMs(value: Long): Long {
         return value
     }
 
+    // Compact timestamps carry no timezone, so interpret the wall-clock in the viewer's local zone
+    // (the app's convention for zone-less datetimes). Interpreting as UTC here shifted near-midnight
+    // watches across the local day boundary and broke day-based streaks for non-UTC users.
     val iso = buildString {
         append(year.toString().padStart(4, '0'))
         append('-')
@@ -78,9 +81,9 @@ internal fun normalizeWatchedMarkedAtEpochMs(value: Long): Long {
         append(minute.toString().padStart(2, '0'))
         append(':')
         append(second.toString().padStart(2, '0'))
-        append('Z')
+        append(".000")
     }
-    return parseZonedIsoDateTimeToEpochMs(iso) ?: value
+    return EpisodeReleaseDatePlatform.localDateTimeToEpochMs(iso) ?: value
 }
 
 fun watchedItemKey(

@@ -291,6 +291,91 @@ class StreamAutoPlaySelectorTest {
         assertEquals(stream, selected)
     }
 
+    @Test
+    fun `prefers the same provider the user watched before falling back to first stream`() {
+        val otherProvider = stream(
+            addonName = "AnimePahe",
+            url = "https://example.com/animepahe.m3u8",
+            name = "1080p",
+        )
+        val samePreviousProvider = stream(
+            addonName = "HiAnime",
+            url = "https://example.com/hianime.m3u8",
+            name = "720p",
+        )
+
+        val selected = StreamAutoPlaySelector.selectAutoPlayStream(
+            streams = listOf(otherProvider, samePreviousProvider),
+            mode = StreamAutoPlayMode.FIRST_STREAM,
+            regexPattern = "",
+            source = StreamAutoPlaySource.ALL_SOURCES,
+            installedAddonNames = setOf("AnimePahe", "HiAnime"),
+            selectedAddons = emptySet(),
+            selectedPlugins = emptySet(),
+            preferredAddonName = "HiAnime",
+        )
+
+        assertEquals(samePreviousProvider, selected)
+    }
+
+    @Test
+    fun `falls back to first stream when preferred provider has no stream`() {
+        val first = stream(
+            addonName = "AnimePahe",
+            url = "https://example.com/animepahe.m3u8",
+            name = "1080p",
+        )
+        val second = stream(
+            addonName = "AniWave",
+            url = "https://example.com/aniwave.m3u8",
+            name = "720p",
+        )
+
+        val selected = StreamAutoPlaySelector.selectAutoPlayStream(
+            streams = listOf(first, second),
+            mode = StreamAutoPlayMode.FIRST_STREAM,
+            regexPattern = "",
+            source = StreamAutoPlaySource.ALL_SOURCES,
+            installedAddonNames = setOf("AnimePahe", "AniWave"),
+            selectedAddons = emptySet(),
+            selectedPlugins = emptySet(),
+            preferredAddonName = "HiAnime",
+        )
+
+        assertEquals(first, selected)
+    }
+
+    @Test
+    fun `same provider wins over a binge group match from a different provider`() {
+        val bingeOtherProvider = stream(
+            addonName = "AnimePahe",
+            url = "https://example.com/animepahe.m3u8",
+            name = "1080p",
+            bingeGroup = "same-group",
+        )
+        val samePreviousProvider = stream(
+            addonName = "HiAnime",
+            url = "https://example.com/hianime.m3u8",
+            name = "720p",
+            bingeGroup = "other-group",
+        )
+
+        val selected = StreamAutoPlaySelector.selectAutoPlayStream(
+            streams = listOf(bingeOtherProvider, samePreviousProvider),
+            mode = StreamAutoPlayMode.FIRST_STREAM,
+            regexPattern = "",
+            source = StreamAutoPlaySource.ALL_SOURCES,
+            installedAddonNames = setOf("AnimePahe", "HiAnime"),
+            selectedAddons = emptySet(),
+            selectedPlugins = emptySet(),
+            preferredBingeGroup = "same-group",
+            preferBingeGroupInSelection = true,
+            preferredAddonName = "HiAnime",
+        )
+
+        assertEquals(samePreviousProvider, selected)
+    }
+
     private fun stream(
         addonName: String,
         url: String? = null,

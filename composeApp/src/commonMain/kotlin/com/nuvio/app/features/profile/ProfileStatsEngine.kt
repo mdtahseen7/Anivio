@@ -15,6 +15,8 @@ data class WatchEvent(
     val seriesId: String,
     val seriesName: String,
     val runtimeMinutes: Int?,
+    /** Stable watched-item identity. Used to ignore duplicated history rows from sync providers. */
+    val eventId: String = "",
 )
 
 /**
@@ -54,9 +56,6 @@ object ProfileStatsEngine {
 
     const val HEATMAP_DAYS = 112 // 16 weeks
 
-    /** The grace rule: a streak survives this many consecutive missed days ("freeze"). */
-    private const val STREAK_GRACE_DAYS = 1
-
     fun eventsFrom(items: List<WatchedItem>): List<WatchEvent> =
         items.map { item ->
             val movie = item.type.equals("movie", ignoreCase = true) ||
@@ -68,6 +67,7 @@ object ProfileStatsEngine {
                 seriesId = item.id,
                 seriesName = item.name,
                 runtimeMinutes = null,
+                eventId = "${item.type}:${item.id}:${item.season ?: "-"}:${item.episode ?: "-"}",
             )
         }
 
@@ -76,13 +76,16 @@ object ProfileStatsEngine {
         aniList: ProfileAniListInput = ProfileAniListInput(),
         nowEpochMs: Long,
         previouslyUnlocked: Map<String, Long> = emptyMap(),
+        /** Completion keys from the active history source, independent of AniList enrichment. */
+        completedSeriesKeys: Set<String> = emptySet(),
     ): ProfileStats {
-        if (events.isEmpty() && aniList.minutesWatched == null) {
+        if (events.isEmpty() && aniList.minutesWatched == null && completedSeriesKeys.isEmpty() && previouslyUnlocked.isEmpty()) {
             return ProfileStats.EMPTY
         }
 
         val decorated = events
             .filter { it.epochMs > 0 }
+            .distinctBy(::eventIdentity)
             .map { it to ProfileStatsCalendar.fieldsOf(it.epochMs) }
             .sortedBy { it.first.epochMs }
 
@@ -129,11 +132,18 @@ object ProfileStatsEngine {
         val seriesTouched = seriesGroups.size
         val longestSeries = seriesGroups.maxByOrNull { it.value.size }
         val longestSeriesEpisodes = longestSeries?.value?.size ?: 0
-        val seriesCompleted = aniList.completedSeries ?: 0
+        val seriesCompleted = maxOf(aniList.completedSeries ?: 0, completedSeriesKeys.size)
 
-        val minutesWatched = aniList.minutesWatched
-            ?: (localEpisodes.toLong() * ProfileLevelMath.DEFAULT_EPISODE_MINUTES +
-                localMovies.toLong() * ProfileLevelMath.DEFAULT_MOVIE_MINUTES)
+        val localMinutes = decorated.sumOf { (event, _) ->
+            if (!event.isEpisode && !event.isMovie) return@sumOf 0L
+            val fallback = if (event.isMovie) {
+                ProfileLevelMath.DEFAULT_MOVIE_MINUTES
+            } else {
+                ProfileLevelMath.DEFAULT_EPISODE_MINUTES
+            }
+            (event.runtimeMinutes ?: fallback).coerceAtLeast(0).toLong()
+        }
+        val minutesWatched = aniList.minutesWatched ?: localMinutes
 
         val completionRate = if (seriesTouched > 0) {
             (seriesCompleted.toFloat() / seriesTouched.toFloat()).coerceIn(0f, 1f)
@@ -155,15 +165,11 @@ object ProfileStatsEngine {
             firstWatchEpochMs = decorated.firstOrNull()?.first?.epochMs,
         )
 
-        // ---- Level ----
-        val xp = (minutesWatched * ProfileLevelMath.XP_PER_MINUTE).toLong()
-        val level = ProfileLevelMath.levelForXp(xp)
-
         // ---- Habit ----
         val habit = deriveHabit(hourHistogram, weekdayHistogram)
 
         // ---- Achievements ----
-        val metrics = ProfileMetrics(
+        val baseMetrics = ProfileMetrics(
             episodesWatched = episodesWatched,
             moviesWatched = localMovies,
             seriesCompleted = seriesCompleted,
@@ -179,10 +185,45 @@ object ProfileStatsEngine {
             longestSeriesEpisodes = longestSeriesEpisodes,
             completionRatePercent = (completionRate * 100).toInt(),
         )
-        val achievements = evaluateAchievements(metrics, nowEpochMs, previouslyUnlocked)
+
+        // Rewards can unlock a level achievement, which can itself contribute XP. Iterate to the
+        // fixed point (the finite catalog makes this deterministic and bounded).
+        val watchXp = (minutesWatched.coerceAtLeast(0) * ProfileLevelMath.XP_PER_MINUTE).toLong()
+        val episodeXp = localEpisodes.toLong() * ProfileLevelMath.XP_PER_EPISODE_COMPLETION
+        val seriesXp = seriesCompleted.toLong() * ProfileLevelMath.XP_PER_SERIES_COMPLETION
+        val streakXp = streakMilestoneXp(streak.longestDays)
+        val baseXp = profileXpSum(watchXp, episodeXp, seriesXp, streakXp)
+        var level = ProfileLevelMath.levelForXp(baseXp)
+        var achievements = emptyList<Achievement>()
+        repeat(4) {
+            achievements = evaluateAchievements(
+                metrics = baseMetrics.copy(level = level.level),
+                nowEpochMs = nowEpochMs,
+                previouslyUnlocked = previouslyUnlocked,
+            )
+            val total = profileXpSum(baseXp, achievements.filter { it.unlocked }.sumOf { it.xpReward })
+            val resolved = ProfileLevelMath.levelForXp(total)
+            if (resolved.level == level.level) {
+                level = resolved
+                return@repeat
+            }
+            level = resolved
+        }
+        // Re-evaluate once with the resolved level so level-milestone progress matches display.
+        achievements = evaluateAchievements(baseMetrics.copy(level = level.level), nowEpochMs, previouslyUnlocked)
+        val achievementXp = achievements.filter { it.unlocked }.sumOf { it.xpReward }
+        val breakdown = ProfileXpBreakdown(
+            watchMinutes = watchXp,
+            episodeCompletions = episodeXp,
+            seriesCompletions = seriesXp,
+            streakMilestones = streakXp,
+            achievementRewards = achievementXp,
+        )
+        level = ProfileLevelMath.levelForXp(breakdown.total)
 
         return ProfileStats(
             level = level,
+            xpBreakdown = breakdown,
             streak = streak,
             totals = totals,
             heatmap = heatmap,
@@ -199,8 +240,10 @@ object ProfileStatsEngine {
         previouslyUnlocked: Map<String, Long>,
     ): List<Achievement> = AchievementCatalog.definitions.map { def ->
         val current = def.measure(metrics).coerceAtLeast(0)
-        val unlocked = current >= def.target
         val priorUnlockedAt = previouslyUnlocked[def.id]
+        // Unlock history is append-only. A tracker correction may lower current progress, but it
+        // must not revoke an earned badge or its one-time XP reward.
+        val unlocked = priorUnlockedAt != null || current >= def.target
         val unlockedAt = when {
             priorUnlockedAt != null -> priorUnlockedAt
             unlocked -> nowEpochMs
@@ -218,12 +261,14 @@ object ProfileStatsEngine {
             target = def.target,
             unlocked = unlocked,
             unlockedAtEpochMs = unlockedAt,
+            xpReward = def.xpReward,
         )
     }
 
     /**
-     * Walk active days newest→oldest. The current streak counts consecutive active days ending at
-     * today (or yesterday), tolerating up to [STREAK_GRACE_DAYS] missed days per gap once.
+     * Walk distinct local activity days newest→oldest. A streak is strictly consecutive calendar
+     * days and can end today or yesterday, so midnight and duplicate history entries cannot
+     * inflate it.
      */
     private fun computeStreak(activeDaysAsc: List<Long>, todayEpochDay: Long): ProfileStreak {
         if (activeDaysAsc.isEmpty()) return ProfileStreak()
@@ -231,35 +276,25 @@ object ProfileStatsEngine {
         val lastActive = days.last()
         val watchedToday = lastActive == todayEpochDay
 
-        // Longest streak across all history (grace-tolerant gaps count as continuations once).
+        // Longest strict run across all history.
         var longest = 1
         var run = 1
         for (i in 1 until days.size) {
             val gap = days[i] - days[i - 1]
-            run = when {
-                gap == 1L -> run + 1
-                gap in 2L..(1L + STREAK_GRACE_DAYS) -> run + 1 // bridged by a freeze
-                else -> 1
-            }
+            run = if (gap == 1L) run + 1 else 1
             if (run > longest) longest = run
         }
 
-        // Current streak: only valid if the last active day is today or within grace of today.
+        // Current streak: only valid if the last active day is today or yesterday.
         val daysSinceLast = todayEpochDay - lastActive
-        var freezeActive = false
         val current: Int
-        if (daysSinceLast > 1L + STREAK_GRACE_DAYS) {
+        if (daysSinceLast > 1L) {
             current = 0
         } else {
-            if (daysSinceLast in 1..(1L + STREAK_GRACE_DAYS) && !watchedToday) freezeActive = true
             var c = 1
             for (i in days.size - 1 downTo 1) {
                 val gap = days[i] - days[i - 1]
-                when {
-                    gap == 1L -> c++
-                    gap in 2L..(1L + STREAK_GRACE_DAYS) -> { c++; freezeActive = true }
-                    else -> break
-                }
+                if (gap == 1L) c++ else break
             }
             current = c
         }
@@ -267,7 +302,7 @@ object ProfileStatsEngine {
         return ProfileStreak(
             currentDays = current,
             longestDays = maxOf(longest, current),
-            freezeActive = freezeActive,
+            freezeActive = false,
             lastActiveEpochDay = lastActive,
             watchedToday = watchedToday,
         )
@@ -322,4 +357,13 @@ object ProfileStatsEngine {
         days.forEach { map[it] = (map[it] ?: 0) + 1 }
         return map.toSortedMap()
     }
+
+    private fun eventIdentity(event: WatchEvent): String = event.eventId.ifBlank {
+        "${event.seriesId}:${event.isEpisode}:${event.isMovie}:${event.epochMs}"
+    }
+
+    private fun streakMilestoneXp(longestStreakDays: Int): Long =
+        listOf(3, 7, 14, 30, 60, 100, 365)
+            .count { longestStreakDays >= it }
+            .toLong() * ProfileLevelMath.XP_PER_STREAK_MILESTONE
 }

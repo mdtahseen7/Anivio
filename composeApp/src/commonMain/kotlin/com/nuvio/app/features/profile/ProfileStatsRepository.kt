@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
@@ -22,6 +24,15 @@ sealed interface ProfileCelebration {
     data class LevelUp(val newLevel: Int, val title: String) : ProfileCelebration
     data class AchievementUnlocked(val achievement: Achievement) : ProfileCelebration
 }
+
+/** Kept separate from storage so the one-shot rules are straightforward to regression-test. */
+internal fun shouldCelebrateLevel(previousLevel: Int, newLevel: Int): Boolean =
+    previousLevel in 1 until newLevel
+
+internal fun shouldCelebrateAchievement(
+    isFirstProfileCalculation: Boolean,
+    wasPreviouslyUnlocked: Boolean,
+): Boolean = !isFirstProfileCalculation && !wasPreviouslyUnlocked
 
 data class ProfileStatsUiState(
     val stats: ProfileStats = ProfileStats.EMPTY,
@@ -46,6 +57,8 @@ object ProfileStatsRepository {
     val uiState: StateFlow<ProfileStatsUiState> = _uiState.asStateFlow()
 
     private var started = false
+    /** Serializes persistence + celebration detection across history and profile-switch emissions. */
+    private val recomputeMutex = Mutex()
 
     fun start() {
         if (started) return
@@ -54,14 +67,16 @@ object ProfileStatsRepository {
             combine(
                 WatchedRepository.uiState,
                 AniListStatisticsRepository.uiState,
-            ) { watched, aniListStats ->
-                watched to aniListStats
-            }.collect { (watched, aniListStats) ->
+                WatchedRepository.fullyWatchedSeriesKeys,
+            ) { watched, aniListStats, completedSeriesKeys ->
+                Triple(watched, aniListStats, completedSeriesKeys)
+            }.collect { (watched, aniListStats, completedSeriesKeys) ->
                 if (!watched.isLoaded) return@collect
                 recompute(
                     watchedItems = watched.items,
                     aniList = ProfileAniListInput.from(aniListStats.statistics),
                     aniListConnected = aniListStats.statistics != null,
+                    completedSeriesKeys = completedSeriesKeys,
                 )
             }
         }
@@ -71,11 +86,12 @@ object ProfileStatsRepository {
     fun onProfileChanged() {
         // Next recompute picks up the new profile-scoped storage automatically.
         scope.launch {
-            val current = _uiState.value
+            if (!WatchedRepository.uiState.value.isLoaded) return@launch
             recompute(
                 watchedItems = WatchedRepository.uiState.value.items,
                 aniList = ProfileAniListInput.from(AniListStatisticsRepository.uiState.value.statistics),
-                aniListConnected = current.aniListConnected,
+                aniListConnected = AniListStatisticsRepository.uiState.value.statistics != null,
+                completedSeriesKeys = WatchedRepository.fullyWatchedSeriesKeys.value,
             )
         }
     }
@@ -90,55 +106,60 @@ object ProfileStatsRepository {
         watchedItems: List<com.nuvio.app.features.watched.WatchedItem>,
         aniList: ProfileAniListInput,
         aniListConnected: Boolean,
+        completedSeriesKeys: Set<String>,
     ) {
-        val now = EpisodeReleaseDatePlatform.nowEpochMs()
-        val previouslyUnlocked = loadUnlocked()
-        val previousLevel = ProfileStatsStorage.loadLastSeenLevel()
+        recomputeMutex.withLock {
+            val now = EpisodeReleaseDatePlatform.nowEpochMs()
+            val previouslyUnlocked = loadUnlocked()
+            val previousLevel = ProfileStatsStorage.loadLastSeenLevel()
 
-        val stats = withContext(Dispatchers.Default) {
-            val events = ProfileStatsEngine.eventsFrom(watchedItems)
-            ProfileStatsEngine.compute(
-                events = events,
-                aniList = aniList,
-                nowEpochMs = now,
-                previouslyUnlocked = previouslyUnlocked,
+            val stats = withContext(Dispatchers.Default) {
+                val events = ProfileStatsEngine.eventsFrom(watchedItems)
+                ProfileStatsEngine.compute(
+                    events = events,
+                    aniList = aniList,
+                    nowEpochMs = now,
+                    previouslyUnlocked = previouslyUnlocked,
+                    completedSeriesKeys = completedSeriesKeys,
+                )
+            }
+
+            // Detect newly-unlocked achievements (unlocked now, absent from the persisted set).
+            val celebrations = mutableListOf<ProfileCelebration>()
+            val freshlyUnlocked = stats.achievements.filter { it.unlocked && !previouslyUnlocked.containsKey(it.id) }
+            val isFirstProfileCalculation = firstEverRun(previouslyUnlocked)
+            freshlyUnlocked
+                .filter { shouldCelebrateAchievement(isFirstProfileCalculation, previouslyUnlocked.containsKey(it.id)) }
+                .forEach { celebrations += ProfileCelebration.AchievementUnlocked(it) }
+
+            // Persist the full unlocked map (preserving earliest timestamps).
+            val mergedUnlocked = HashMap(previouslyUnlocked)
+            stats.achievements.filter { it.unlocked }.forEach { ach ->
+                if (!mergedUnlocked.containsKey(ach.id)) {
+                    mergedUnlocked[ach.id] = ach.unlockedAtEpochMs ?: now
+                }
+            }
+            if (mergedUnlocked != previouslyUnlocked) saveUnlocked(mergedUnlocked)
+
+            // Level-up celebration (skip the very first computation so we don't fire on install).
+            if (shouldCelebrateLevel(previousLevel, stats.level.level)) {
+                celebrations += ProfileCelebration.LevelUp(stats.level.level, stats.level.title)
+            }
+            if (stats.level.level != previousLevel) {
+                ProfileStatsStorage.saveLastSeenLevel(stats.level.level)
+            }
+
+            _uiState.value = ProfileStatsUiState(
+                stats = stats,
+                isReady = true,
+                aniListConnected = aniListConnected,
+                pendingCelebrations = _uiState.value.pendingCelebrations + celebrations,
             )
         }
-
-        // Detect newly-unlocked achievements (unlocked now, absent from the persisted set).
-        val celebrations = mutableListOf<ProfileCelebration>()
-        val freshlyUnlocked = stats.achievements.filter { it.unlocked && !previouslyUnlocked.containsKey(it.id) }
-        if (previouslyUnlocked.isNotEmpty() || !firstEverRun(previouslyUnlocked, stats)) {
-            freshlyUnlocked.forEach { celebrations += ProfileCelebration.AchievementUnlocked(it) }
-        }
-
-        // Persist the full unlocked map (preserving earliest timestamps).
-        val mergedUnlocked = HashMap(previouslyUnlocked)
-        stats.achievements.filter { it.unlocked }.forEach { ach ->
-            if (!mergedUnlocked.containsKey(ach.id)) {
-                mergedUnlocked[ach.id] = ach.unlockedAtEpochMs ?: now
-            }
-        }
-        if (mergedUnlocked != previouslyUnlocked) saveUnlocked(mergedUnlocked)
-
-        // Level-up celebration (skip the very first computation so we don't fire on install).
-        if (previousLevel in 1 until stats.level.level) {
-            celebrations += ProfileCelebration.LevelUp(stats.level.level, stats.level.title)
-        }
-        if (stats.level.level != previousLevel) {
-            ProfileStatsStorage.saveLastSeenLevel(stats.level.level)
-        }
-
-        _uiState.value = ProfileStatsUiState(
-            stats = stats,
-            isReady = true,
-            aniListConnected = aniListConnected,
-            pendingCelebrations = _uiState.value.pendingCelebrations + celebrations,
-        )
     }
 
     /** Treat the first-ever run (no persisted unlocks, no last level) as a silent baseline. */
-    private fun firstEverRun(previouslyUnlocked: Map<String, Long>, stats: ProfileStats): Boolean =
+    private fun firstEverRun(previouslyUnlocked: Map<String, Long>): Boolean =
         previouslyUnlocked.isEmpty() && ProfileStatsStorage.loadLastSeenLevel() == 0
 
     private fun loadUnlocked(): Map<String, Long> {

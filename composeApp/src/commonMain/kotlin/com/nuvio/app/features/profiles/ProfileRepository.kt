@@ -22,6 +22,7 @@ import com.nuvio.app.features.mdblist.MdbListSettingsRepository
 import com.nuvio.app.features.notifications.EpisodeReleaseNotificationsRepository
 import com.nuvio.app.features.p2p.P2pSettingsRepository
 import com.nuvio.app.features.player.PlayerSettingsRepository
+import com.nuvio.app.features.profile.ProfileStatsRepository
 import com.nuvio.app.features.plugins.PluginRepository
 import com.nuvio.app.features.search.SearchHistoryRepository
 import com.nuvio.app.features.search.SearchRepository
@@ -156,6 +157,7 @@ object ProfileRepository {
         )
         persist()
         WatchedRepository.onProfileChanged(profileIndex)
+        ProfileStatsRepository.onProfileChanged()
         TrackingSettingsRepository.onProfileChanged()
         ensureTrackingProvidersRegistered()
         TrackingProviderRegistry.onProfileChanged()

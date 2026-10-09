@@ -108,6 +108,19 @@ fun AchievementBadge(
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Box(contentAlignment = Alignment.Center) {
+            if (unlocked) {
+                // Soft accent halo so earned badges read as "lit up" instead of flat chips.
+                Box(
+                    modifier = Modifier
+                        .size(58.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.radialGradient(
+                                listOf(accent.copy(alpha = 0.45f), accent.copy(alpha = 0f)),
+                            ),
+                        ),
+                )
+            }
             if (!unlocked) {
                 LevelRing(
                     progress = achievement.progress,
@@ -212,7 +225,10 @@ fun AchievementDetail(achievement: Achievement, modifier: Modifier = Modifier) {
                 barColor = accent,
             )
         } else {
-            ProfilePill("Unlocked", color = tokens.colors.success)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ProfilePill("Unlocked", color = tokens.colors.success)
+                ProfilePill("+${achievement.xpReward} XP", color = accent)
+            }
         }
     }
 }

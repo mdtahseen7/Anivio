@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -31,6 +32,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -99,17 +101,45 @@ fun ProfileStatTile(
     label: String,
     modifier: Modifier = Modifier,
     accent: Color = MaterialTheme.nuvio.colors.textPrimary,
+    icon: ImageVector? = null,
 ) {
     val tokens = MaterialTheme.nuvio
+    val isAccented = accent != tokens.colors.textPrimary
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
-            .background(tokens.colors.surfaceElevated)
+            .background(
+                Brush.verticalGradient(
+                    if (isAccented) {
+                        listOf(accent.copy(alpha = 0.20f), tokens.colors.surfaceElevated)
+                    } else {
+                        listOf(tokens.colors.surfaceElevated, tokens.colors.surfaceElevated)
+                    },
+                ),
+            )
+            .border(
+                width = 1.dp,
+                color = if (isAccented) accent.copy(alpha = 0.28f) else Color.Transparent,
+                shape = RoundedCornerShape(16.dp),
+            )
             .padding(vertical = 14.dp, horizontal = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        Text(value, color = accent, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        if (icon != null) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (isAccented) accent else tokens.colors.textSecondary,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        Text(
+            value,
+            color = if (isAccented) accent else tokens.colors.textPrimary,
+            fontWeight = FontWeight.Bold,
+            fontSize = 20.sp,
+        )
         Text(
             label,
             color = tokens.colors.textSecondary,
@@ -132,6 +162,8 @@ fun ActivityHeatmap(
     cellGap: Dp = 3.dp,
 ) {
     val weeks = intensities.chunked(7)
+    val lastIndex = intensities.lastIndex
+    var index = 0
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(cellGap),
@@ -139,15 +171,32 @@ fun ActivityHeatmap(
         weeks.forEach { week ->
             Column(verticalArrangement = Arrangement.spacedBy(cellGap)) {
                 week.forEach { intensity ->
+                    val isToday = index == lastIndex
+                    val fill = if (intensity <= 0) {
+                        Brush.verticalGradient(listOf(emptyColor, emptyColor))
+                    } else {
+                        val top = (0.30f + 0.175f * intensity).coerceAtMost(1f)
+                        Brush.verticalGradient(
+                            listOf(
+                                baseColor.copy(alpha = top),
+                                baseColor.copy(alpha = (top - 0.12f).coerceAtLeast(0.12f)),
+                            ),
+                        )
+                    }
                     Box(
                         modifier = Modifier
                             .size(cellSize)
                             .clip(RoundedCornerShape(3.dp))
-                            .background(
-                                if (intensity <= 0) emptyColor
-                                else baseColor.copy(alpha = 0.25f + 0.1875f * intensity),
+                            .background(fill)
+                            .then(
+                                if (isToday) {
+                                    Modifier.border(1.dp, baseColor, RoundedCornerShape(3.dp))
+                                } else {
+                                    Modifier
+                                },
                             ),
                     )
+                    index++
                 }
             }
         }
@@ -224,7 +273,18 @@ fun ProfileVerticalBar(
                     .fillMaxWidth()
                     .height(maxHeight * animated.coerceAtLeast(0.04f))
                     .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
-                    .background(if (highlighted) tokens.colors.accent else tokens.colors.borderStrong),
+                    .background(
+                        Brush.verticalGradient(
+                            if (highlighted) {
+                                listOf(tokens.colors.accent, tokens.colors.accentStrong)
+                            } else {
+                                listOf(
+                                    tokens.colors.borderStrong,
+                                    tokens.colors.borderStrong.copy(alpha = 0.45f),
+                                )
+                            },
+                        ),
+                    ),
             )
         }
         Text(label, color = tokens.colors.textMuted, fontSize = 9.sp)

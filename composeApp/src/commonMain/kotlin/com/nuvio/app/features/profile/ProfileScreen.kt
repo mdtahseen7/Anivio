@@ -18,8 +18,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.LocalFireDepartment
+import androidx.compose.material.icons.rounded.Percent
+import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Theaters
+import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -68,9 +74,10 @@ import com.nuvio.app.features.profiles.ProfileRepository
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
-    onBack: () -> Unit,
+    onBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     onOpenStats: (() -> Unit)? = null,
+    onOpenSettings: (() -> Unit)? = null,
 ) {
     val tokens = MaterialTheme.nuvio
     val uiState by ProfileStatsRepository.uiState.collectAsStateWithLifecycle()
@@ -97,6 +104,15 @@ fun ProfileScreen(
                 title = "Profile",
                 onBack = onBack,
                 actions = {
+                    onOpenSettings?.let { open ->
+                        androidx.compose.material3.IconButton(onClick = open) {
+                            Icon(
+                                imageVector = Icons.Rounded.Settings,
+                                contentDescription = "Settings",
+                                tint = tokens.colors.textSecondary,
+                            )
+                        }
+                    }
                     androidx.compose.material3.IconButton(onClick = { showShareCard = true }) {
                         Icon(
                             imageVector = Icons.Rounded.IosShare,
@@ -136,7 +152,13 @@ fun ProfileScreen(
 
         item("streak") { StreakCard(stats.streak, stats.totals) }
 
-        item("heatmap") { HeatmapCard(stats.heatmap.map { it.intensity }) }
+        item("heatmap") {
+            HeatmapCard(
+                intensities = stats.heatmap.map { it.intensity },
+                activeDays = stats.totals.activeDays,
+                currentStreak = stats.streak.currentDays,
+            )
+        }
 
         item("totals") { TotalsCard(stats.totals, aniListConnected = uiState.aniListConnected) }
 
@@ -275,7 +297,7 @@ private fun IdentityCard(
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("XP", color = tokens.colors.textMuted, fontSize = 11.sp)
                 Text(
-                    "${levelInfo.xpIntoLevel} / ${levelInfo.xpForNextLevel}",
+                    "${levelInfo.xp} total XP · ${levelInfo.xpIntoLevel} / ${levelInfo.xpForNextLevel}",
                     color = tokens.colors.textMuted,
                     fontSize = 11.sp,
                 )
@@ -350,10 +372,21 @@ private fun StreakCard(streak: ProfileStreak, totals: ProfileTotals) {
 }
 
 @Composable
-private fun HeatmapCard(intensities: List<Int>) {
+private fun HeatmapCard(intensities: List<Int>, activeDays: Int, currentStreak: Int) {
     val tokens = MaterialTheme.nuvio
     NuvioSurfaceCard {
-        Text("Activity", color = tokens.colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Activity", color = tokens.colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+            if (activeDays > 0) {
+                ProfilePill(
+                    if (currentStreak > 0) "$activeDays active · $currentStreak-day streak" else "$activeDays active days",
+                )
+            }
+        }
         Spacer(Modifier.height(12.dp))
         ActivityHeatmap(intensities = intensities, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(10.dp))
@@ -381,15 +414,15 @@ private fun TotalsCard(totals: ProfileTotals, aniListConnected: Boolean) {
         Text("Lifetime", color = tokens.colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            ProfileStatTile("${totals.episodesWatched}", "Episodes", Modifier.weight(1f), tokens.colors.accent)
-            ProfileStatTile(formatDaysCompact(days), "Days", Modifier.weight(1f), tokens.colors.accent)
-            ProfileStatTile("${totals.seriesCompleted}", "Completed", Modifier.weight(1f), tokens.colors.accent)
+            ProfileStatTile("${totals.episodesWatched}", "Episodes", Modifier.weight(1f), tokens.colors.accent, Icons.Rounded.Videocam)
+            ProfileStatTile(formatDaysCompact(days), "Days", Modifier.weight(1f), tokens.colors.accent, Icons.Rounded.Schedule)
+            ProfileStatTile("${totals.seriesCompleted}", "Completed", Modifier.weight(1f), tokens.colors.accent, Icons.Rounded.CheckCircle)
         }
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            ProfileStatTile("${totals.seriesTouched}", "Series", Modifier.weight(1f))
-            ProfileStatTile("${totals.activeDays}", "Active days", Modifier.weight(1f))
-            ProfileStatTile("${(totals.completionRate * 100).toInt()}%", "Completion", Modifier.weight(1f))
+            ProfileStatTile("${totals.seriesTouched}", "Series", Modifier.weight(1f), icon = Icons.Rounded.Theaters)
+            ProfileStatTile("${totals.activeDays}", "Active days", Modifier.weight(1f), icon = Icons.Rounded.LocalFireDepartment)
+            ProfileStatTile("${(totals.completionRate * 100).toInt()}%", "Completion", Modifier.weight(1f), icon = Icons.Rounded.Percent)
         }
         if (!aniListConnected) {
             Spacer(Modifier.height(10.dp))
@@ -430,6 +463,15 @@ private fun HabitAnalyticsCard(
                     highlighted = i == peakBucket,
                 )
             }
+        }
+        if (peakBucket >= 0 && buckets[peakBucket] > 0) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Peak hours · ${formatHourLabel(peakBucket * 3)}–${formatHourLabel(peakBucket * 3 + 3)}",
+                color = tokens.colors.accent,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
         }
         Spacer(Modifier.height(18.dp))
         Text("Days of the week", color = tokens.colors.textSecondary, fontSize = 12.sp)
@@ -550,6 +592,14 @@ private fun formatDaysCompact(days: Double): String = when {
     days >= 100 -> "${days.toInt()}"
     days >= 10 -> "${days.toInt()}"
     else -> oneDecimal(days)
+}
+
+/** 24h hour → compact 12h label, e.g. 0 → "12am", 15 → "3pm", 24 → "12am". */
+private fun formatHourLabel(hour: Int): String {
+    val h = ((hour % 24) + 24) % 24
+    val period = if (h < 12) "am" else "pm"
+    val display = if (h % 12 == 0) 12 else h % 12
+    return "$display$period"
 }
 
 /** Common-safe one-decimal formatter (no java.util / String.format). */

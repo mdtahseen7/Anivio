@@ -6,6 +6,9 @@
     <cache-path
         name="nuvio_subtitles"
         path="subtitles/" />
+    <cache-path
+        name="nuvio_shared"
+        path="shared/" />
     <files-path
         name="nuvio_downloads"
         path="downloads/" />
