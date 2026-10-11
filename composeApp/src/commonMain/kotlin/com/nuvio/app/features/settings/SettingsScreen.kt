@@ -284,7 +284,12 @@ fun SettingsScreen(
         }
 
         fun navigateBack() {
-            val parentPage = previousPage ?: return
+            val parentPage = previousPage ?: run {
+                // At the root page there's no parent to pop to; exit back to whoever opened us
+                // (e.g. the Profile screen) when an external-back handler was supplied.
+                onExternalBack?.invoke()
+                return
+            }
             if (onNavigatePage != null && onExternalBack != null) {
                 onExternalBack()
             } else {
@@ -369,7 +374,11 @@ fun SettingsScreen(
         }
 
         PlatformBackHandler(
-            enabled = previousPage != null && (rootActionsEnabled || onExternalBack != null),
+            enabled = if (previousPage != null) {
+                rootActionsEnabled || onExternalBack != null
+            } else {
+                onExternalBack != null
+            },
             onBack = ::navigateBack,
         )
 
@@ -380,6 +389,7 @@ fun SettingsScreen(
                 onPageChange = ::openPage,
                 onNavigateBack = ::navigateBack,
                 showInternalHeader = showInternalHeader,
+                canExitToParent = onExternalBack != null,
                 showLoadingOverlay = playerSettingsUiState.showLoadingOverlay,
                 holdToSpeedEnabled = playerSettingsUiState.holdToSpeedEnabled,
                 holdToSpeedValue = playerSettingsUiState.holdToSpeedValue,
@@ -444,6 +454,7 @@ fun SettingsScreen(
                 onPageChange = ::openPage,
                 onNavigateBack = ::navigateBack,
                 showInternalHeader = showInternalHeader,
+                canExitToParent = onExternalBack != null,
                 showLoadingOverlay = playerSettingsUiState.showLoadingOverlay,
                 holdToSpeedEnabled = playerSettingsUiState.holdToSpeedEnabled,
                 holdToSpeedValue = playerSettingsUiState.holdToSpeedValue,
@@ -518,6 +529,7 @@ private fun MobileSettingsScreen(
     onPageChange: (SettingsPage) -> Unit,
     onNavigateBack: () -> Unit,
     showInternalHeader: Boolean,
+    canExitToParent: Boolean,
     showLoadingOverlay: Boolean,
     holdToSpeedEnabled: Boolean,
     holdToSpeedValue: Float,
@@ -663,7 +675,11 @@ private fun MobileSettingsScreen(
                     val previousPage = page.previousPage()
                     NuvioScreenHeader(
                         title = stringResource(page.titleRes),
-                        onBack = previousPage?.let { { onNavigateBack() } },
+                        onBack = if (previousPage != null || canExitToParent) {
+                            { onNavigateBack() }
+                        } else {
+                            null
+                        },
                     )
                 }
             } else {
@@ -885,6 +901,7 @@ private fun TabletSettingsScreen(
     onPageChange: (SettingsPage) -> Unit,
     onNavigateBack: () -> Unit,
     showInternalHeader: Boolean,
+    canExitToParent: Boolean,
     showLoadingOverlay: Boolean,
     holdToSpeedEnabled: Boolean,
     holdToSpeedValue: Float,
@@ -1083,7 +1100,7 @@ private fun TabletSettingsScreen(
                             } else {
                                 stringResource(page.titleRes)
                             },
-                            showBack = previousPage != null,
+                            showBack = previousPage != null || canExitToParent,
                             onBack = onNavigateBack,
                         )
                     }
