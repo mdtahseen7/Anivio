@@ -11,6 +11,8 @@ import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.search.DiscoverCatalogOption
 import com.nuvio.app.features.search.DiscoverEmptyStateReason
 import com.nuvio.app.features.search.DiscoverUiState
+import com.nuvio.app.features.content.ContentMode
+import com.nuvio.app.features.content.ContentModeRepository
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -42,6 +44,7 @@ private const val PER_PAGE = 24
 /** Content types the filter row offers, using the app's own type names. */
 private const val TYPE_SERIES = "series"
 private const val TYPE_MOVIE = "movie"
+private const val TYPE_MANGA = "manga"
 
 /**
  * The sort options Discover exposes. These fill the "catalog" slot of [DiscoverUiState], which the
@@ -87,6 +90,17 @@ object AniListDiscoverRepository {
         ),
     )
     val uiState: StateFlow<DiscoverUiState> = _uiState.asStateFlow()
+
+    fun setContentMode(mode: ContentMode) {
+        val types = if (mode == ContentMode.Manga) listOf(TYPE_MANGA) else listOf(TYPE_SERIES, TYPE_MOVIE)
+        val selectedType = types.first()
+        _uiState.value = DiscoverUiState(
+            typeOptions = types,
+            selectedType = selectedType,
+            catalogOptions = catalogOptions(selectedType, genres),
+            selectedCatalogKey = ANILIST_DISCOVER_SORTS.first().key,
+        )
+    }
 
     /**
      * Pages already fetched for a given filter combination, so paging back — or returning to a
@@ -263,6 +277,9 @@ data class AniListDiscoverPage(val items: List<MetaPreview>, val nextPage: Int?)
         sort: AniListDiscoverSort,
         forceRefresh: Boolean,
     ): AniListDiscoverPage {
+        if (ContentModeRepository.mode.value == ContentMode.Manga) {
+            return fetchAniListPage(page, type, genre, sort, forceRefresh)
+        }
         val result = com.nuvio.app.features.anime.PublicAnimeSource.discover(
             page = page,
             contentType = type,
@@ -288,7 +305,12 @@ data class AniListDiscoverPage(val items: List<MetaPreview>, val nextPage: Int?)
         forceRefresh: Boolean,
     ): AniListDiscoverPage {
         val includeAdult = AniListCatalogSource.adultContentEnabled()
-        val formatFilter = if (type == TYPE_MOVIE) ", format_in: [MOVIE]" else ", format_not_in: [MOVIE]"
+        val formatFilter = when (type) {
+            TYPE_MANGA -> ""
+            TYPE_MOVIE -> ", format_in: [MOVIE]"
+            else -> ", format_not_in: [MOVIE]"
+        }
+        val mediaType = if (type == TYPE_MANGA) "MANGA" else "ANIME"
         // The filter row is single-select. AniList splits its browse vocabulary into `genre`
         // (18 broad buckets) and `tag` (hundreds of finer themes), queried by different arguments.
         val selection = genre?.takeIf { it.isNotBlank() }
@@ -302,7 +324,7 @@ data class AniListDiscoverPage(val items: List<MetaPreview>, val nextPage: Int?)
             query {
                 Page(page: $page, perPage: $PER_PAGE) {
                     pageInfo { currentPage hasNextPage }
-                    media(type: ANIME${aniListAdultFilter(includeAdult)}, ${sort.selector}$formatFilter$genreFilter) {
+                    media(type: $mediaType${aniListAdultFilter(includeAdult)}, ${sort.selector}$formatFilter$genreFilter) {
                         $ANILIST_MEDIA_FIELDS
                     }
                 }

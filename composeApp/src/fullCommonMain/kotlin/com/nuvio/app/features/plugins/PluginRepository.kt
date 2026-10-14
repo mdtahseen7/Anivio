@@ -335,8 +335,29 @@ actual object PluginRepository {
         initialize()
         if (!_uiState.value.pluginsEnabled) return emptyList()
         return _uiState.value.scrapers.filter { scraper ->
-            scraper.enabled && scraper.supportsType(type)
+            scraper.enabled && !scraper.manga && scraper.supportsType(type)
         }
+    }
+
+    actual fun getEnabledMangaScrapers(): List<PluginScraper> {
+        initialize()
+        if (!_uiState.value.pluginsEnabled) return emptyList()
+        return _uiState.value.scrapers.filter { it.enabled && it.manga }
+    }
+
+    actual suspend fun getMangaChapters(
+        scraper: PluginScraper,
+        mangaId: String,
+        title: String,
+    ): Result<List<MangaPluginChapter>> = runCatching {
+        PluginRuntime.getMangaChapters(scraper.code, scraper.id, mangaId, title)
+    }
+
+    actual suspend fun getMangaChapterPages(
+        scraper: PluginScraper,
+        chapterId: String,
+    ): Result<List<MangaPluginPage>> = runCatching {
+        PluginRuntime.getMangaChapterPages(scraper.code, scraper.id, chapterId)
     }
 
     actual suspend fun testScraper(scraperId: String): Result<List<PluginRuntimeResult>> {
@@ -440,6 +461,7 @@ actual object PluginRepository {
                             supportedTypes = info.supportedTypes,
                             enabled = enabled,
                             manifestEnabled = info.enabled,
+                            manga = info.manga,
                             hasSettings = info.hasSettings,
                             logo = info.logo,
                             contentLanguage = info.contentLanguage ?: emptyList(),

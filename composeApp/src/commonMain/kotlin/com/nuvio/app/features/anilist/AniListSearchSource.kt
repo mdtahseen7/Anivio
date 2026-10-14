@@ -16,6 +16,7 @@ import kotlinx.serialization.json.put
 internal const val ANILIST_SEARCH_MOVIE_TYPE = "movie"
 
 internal const val ANILIST_SEARCH_SERIES_TYPE = "series"
+internal const val ANILIST_SEARCH_MANGA_TYPE = "manga"
 
 /**
  * Title search against AniList.
@@ -32,7 +33,10 @@ internal object AniListSearchSource {
         perPage: Int,
         forceRefresh: Boolean,
     ): CatalogPage = withContext(Dispatchers.Default) {
-        val formatFilter = if (contentType.equals(ANILIST_SEARCH_MOVIE_TYPE, ignoreCase = true)) {
+        val mediaType = if (contentType.equals(ANILIST_SEARCH_MANGA_TYPE, ignoreCase = true)) "MANGA" else "ANIME"
+        val formatFilter = if (contentType.equals(ANILIST_SEARCH_MANGA_TYPE, ignoreCase = true)) {
+            ""
+        } else if (contentType.equals(ANILIST_SEARCH_MOVIE_TYPE, ignoreCase = true)) {
             ", format_in: [MOVIE]"
         } else {
             ", format_not_in: [MOVIE]"
@@ -45,7 +49,7 @@ internal object AniListSearchSource {
                 Page(page: $page, perPage: $boundedPerPage) {
                     pageInfo { currentPage hasNextPage }
                     media(
-                        type: ANIME,
+                        type: $mediaType,
                         search: ${'$'}search,
                         sort: SEARCH_MATCH$formatFilter$adultFilter
                     ) {

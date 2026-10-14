@@ -7,7 +7,7 @@ import com.nuvio.app.features.addons.buildAddonResourceUrl
 import com.nuvio.app.features.addons.enabledAddons
 import com.nuvio.app.features.addons.fetchAddonResponseText
 import com.nuvio.app.features.anime.PublicAnimeSource
-import com.nuvio.app.features.anilist.isAniListId
+import com.nuvio.app.features.anilist.isAniListMediaId
 import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.home.filterReleasedItems
 import com.nuvio.app.features.mdblist.MdbListMetadataService
@@ -111,7 +111,7 @@ object MetaDetailsRepository {
         scope.launch {
             // AniList ids are served by the built-in source, not by addons. On failure we fall
             // through to the addon/TMDB path below rather than erroring outright.
-            if (isAniListId(id) || id.startsWith("mal:", ignoreCase = true)) {
+            if (isAniListMediaId(id) || id.startsWith("mal:", ignoreCase = true)) {
                 val aniListResult = withContext(Dispatchers.Default) {
                     PublicAnimeSource.details(
                         id = id,
@@ -223,7 +223,7 @@ object MetaDetailsRepository {
         val requestKey = "$type:$id"
         cachedMetaByRequestKey[requestKey]?.let { return it.baseMeta }
 
-        if (isAniListId(id) || id.startsWith("mal:", ignoreCase = true)) {
+        if (isAniListMediaId(id) || id.startsWith("mal:", ignoreCase = true)) {
             val publicMeta = PublicAnimeSource.details(id = id, contentType = type)?.meta
             if (publicMeta != null) {
                 if (cacheResult) cachedMetaByRequestKey[requestKey] = CachedMetaEntry(baseMeta = publicMeta)

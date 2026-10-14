@@ -32,6 +32,7 @@ import com.nuvio.app.features.details.MetaCompany
 import com.nuvio.app.features.details.AnimeReview
 import com.nuvio.app.features.details.MetaDetails
 import com.nuvio.app.features.details.MetaLink
+import com.nuvio.app.features.details.MangaInfo
 import com.nuvio.app.features.details.MetaPerson
 import com.nuvio.app.features.details.MoreLikeThisSource
 import com.nuvio.app.features.home.MetaPreview
@@ -65,11 +66,22 @@ const val ANILIST_SEASON = 1
 fun isAniListId(id: String): Boolean =
     id.trim().startsWith(ANILIST_ID_PREFIX, ignoreCase = true)
 
-/** Both `anilist:21` and the episode form `anilist:21:1:5` resolve to media 21. */
+/** Manga records deliberately use a separate prefix so they retain their media kind through routes. */
+fun isAniListMangaId(id: String): Boolean =
+    id.trim().startsWith(ANILIST_MANGA_ID_PREFIX, ignoreCase = true)
+
+/** Identifies either AniList media route without treating every Manga record as an anime. */
+fun isAniListMediaId(id: String): Boolean = isAniListId(id) || isAniListMangaId(id)
+
+/** Resolves an AniList media id from anime, episode, or manga route forms. */
 fun parseAniListMediaId(id: String): Int? {
     val trimmed = id.trim()
-    if (!isAniListId(trimmed)) return null
-    return trimmed.substring(ANILIST_ID_PREFIX.length)
+    val value = when {
+        isAniListId(trimmed) -> trimmed.substring(ANILIST_ID_PREFIX.length)
+        isAniListMangaId(trimmed) -> trimmed.substring(ANILIST_MANGA_ID_PREFIX.length)
+        else -> return null
+    }
+    return value
         .substringBefore(':')
         .toIntOrNull()
         ?.takeIf { it > 0 }
@@ -152,14 +164,29 @@ object AniListMetaSource {
     ): AniListMetaResult? = withContext(Dispatchers.Default) {
         val mediaId = parseAniListMediaId(id) ?: return@withContext null
 
-        val (detail, aniZip) = coroutineScope {
-            val mediaDeferred = async { fetchMediaDetail(mediaId, forceRefresh) }
-            // Best-effort: a null here just means fewer episode stills and no TMDB hop.
+        val isManga = type.equals("manga", ignoreCase = true)
+        if (isManga) {
+            val (media, mangaBaka) = coroutineScope {
+                val mediaDeferred = async { fetchMediaDetail(mediaId, isManga = true, forceRefresh = forceRefresh) }
+                val mangaBakaDeferred = async { MangaBakaClient.findByAniListId(mediaId) }
+                mediaDeferred.await() to mangaBakaDeferred.await()
+            }
+            val resolvedMedia = media ?: return@withContext null
+            return@withContext AniListMetaResult(
+                meta = resolvedMedia
+                    .toMangaMetaDetails(itemId = id, itemType = type)
+                    .enrichWithMangaBaka(mangaBaka),
+                externalFallbackId = null,
+            )
+        }
+        val (media, aniZip) = coroutineScope {
+            val mediaDeferred = async { fetchMediaDetail(mediaId, isManga = false, forceRefresh = forceRefresh) }
+            // Best-effort: a null here just means fewer episode stills and no TMDB hop. Manga never
+            // reaches this request because its details are wholly keyed by its AniList media id.
             val aniZipDeferred = async { AniZipClient.mappings(mediaId, forceRefresh) }
             mediaDeferred.await() to aniZipDeferred.await()
         }
-
-        val media = detail ?: return@withContext null
+        val resolvedMedia = media ?: return@withContext null
         val isMovie = type.equals("movie", ignoreCase = true)
         val mappedSeason = aniZip?.mappedSeasonNumber()
         val externalFallbackId = aniZip?.imdbId()
@@ -171,9 +198,9 @@ object AniListMetaSource {
                 val enrichment = loadAnimeEnrichment(
                     aniZip = aniZip,
                     isMovie = isMovie,
-                    expectedEpisodeCount = media.episodes,
-                ).copy(airingScheduleByEpisode = media.airingScheduleByEpisode())
-                val base = media.toMetaDetails(
+                    expectedEpisodeCount = resolvedMedia.episodes,
+                ).copy(airingScheduleByEpisode = resolvedMedia.airingScheduleByEpisode())
+                val base = resolvedMedia.toMetaDetails(
                     itemId = id,
                     itemType = type,
                     aniZip = aniZip,
@@ -197,7 +224,7 @@ object AniListMetaSource {
             }
 
             onPartialMeta?.invoke(
-                media.toMetaDetails(
+                resolvedMedia.toMetaDetails(
                     itemId = id,
                     itemType = type,
                     aniZip = aniZip,
@@ -224,7 +251,7 @@ object AniListMetaSource {
      * difference between a details screen that renders slightly old scores and one that shows an
      * error and has to be retried.
      */
-    private suspend fun fetchMediaDetail(mediaId: Int, forceRefresh: Boolean): AniListMediaDetail? {
+    private suspend fun fetchMediaDetail(mediaId: Int, isManga: Boolean, forceRefresh: Boolean): AniListMediaDetail? {
         val now = EpisodeReleaseDatePlatform.nowEpochMs()
         if (!forceRefresh) {
             val cached = AniListMediaDetailDiskCache.peek(mediaId, now)
@@ -236,7 +263,7 @@ object AniListMetaSource {
                 // when the request may be the one that trips the rate limit.
                 revalidationScope.launch {
                     try {
-                        requestMediaDetail(mediaId, forceRefresh = true)
+                        requestMediaDetail(mediaId, isManga, forceRefresh = true)
                     } catch (cancellation: CancellationException) {
                         throw cancellation
                     } catch (error: Throwable) {
@@ -249,7 +276,7 @@ object AniListMetaSource {
         }
 
         return try {
-            requestMediaDetail(mediaId, forceRefresh)
+            requestMediaDetail(mediaId, isManga, forceRefresh)
         } catch (error: AniListRateLimitedException) {
             AniListMediaDetailDiskCache.getStale(mediaId)?.also {
                 log.i { "AniList throttled Media $mediaId; serving stale cached detail" }
@@ -268,9 +295,9 @@ object AniListMetaSource {
     }
 
     /** The network half of [fetchMediaDetail]: fetch, decode, persist. Throws on failure. */
-    private suspend fun requestMediaDetail(mediaId: Int, forceRefresh: Boolean): AniListMediaDetail? {
+    private suspend fun requestMediaDetail(mediaId: Int, isManga: Boolean, forceRefresh: Boolean): AniListMediaDetail? {
         val data = AniListClient.query(
-            query = "query { Media(id: $mediaId, type: ANIME) { $ANILIST_MEDIA_DETAIL_FIELDS } }",
+            query = "query { Media(id: $mediaId, type: ${if (isManga) "MANGA" else "ANIME"}) { $ANILIST_MEDIA_DETAIL_FIELDS } }",
             forceRefresh = forceRefresh,
         )
         val mediaObject = data["Media"] as? JsonObject ?: return null
@@ -372,6 +399,91 @@ object AniListMetaSource {
             },
         )
     }
+
+    /** A reading-only detail record: it deliberately has no videos or playback enrichment. */
+    private fun AniListMediaDetail.toMangaMetaDetails(itemId: String, itemType: String): MetaDetails {
+        val staffEdges = staff?.edges.orEmpty()
+        val recommendedTitles = aniListMangaRecommendations()
+        return MetaDetails(
+            id = itemId,
+            type = itemType,
+            name = preferredTitle() ?: itemId,
+            poster = coverImage?.extraLarge?.takeIf { it.isNotBlank() } ?: coverImage?.large,
+            background = bannerImage?.takeIf { it.isNotBlank() },
+            description = description?.stripAniListMarkup(),
+            releaseInfo = (seasonYear ?: startDate?.year)?.toString(),
+            status = status?.humanizeAniListEnum(),
+            imdbRating = averageScore?.takeIf { it > 0 }?.let { (it / 10.0).toString() },
+            genres = genres,
+            writer = staffEdges.namesForRoles(WRITER_ROLE_HINTS),
+            productionCompanies = studios?.nodes.orEmpty().map { MetaCompany(name = it.name) },
+            country = countryOfOrigin?.takeIf { it.isNotBlank() },
+            moreLikeThis = recommendedTitles,
+            moreLikeThisSource = MoreLikeThisSource.ANILIST.takeIf { recommendedTitles.isNotEmpty() },
+            relatedTitles = aniListMangaRelations(),
+            animeReviews = aniListReviews(),
+            links = externalLinks.mapNotNull { link ->
+                val url = link.url?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                MetaLink(link.site?.takeIf { it.isNotBlank() } ?: "External link", "external", url)
+            },
+            mangaInfo = MangaInfo(format = format, chapters = chapters, volumes = volumes),
+        )
+    }
+
+    /** Keep AniList authoritative and only fill metadata it does not provide. */
+    private fun MetaDetails.enrichWithMangaBaka(mangaBaka: MangaBakaSeries?): MetaDetails {
+        mangaBaka ?: return this
+        val manga = mangaInfo ?: return this
+        val authors = mangaBaka.authors.cleanNames()
+        val artists = mangaBaka.artists.cleanNames()
+        val publishers = mangaBaka.publishers.mapNotNull { it.name?.takeIf(String::isNotBlank) }.distinct()
+        val externalLinks = mangaBaka.links.mapNotNull { link ->
+            val url = link.url?.takeIf(String::isNotBlank) ?: return@mapNotNull null
+            MetaLink(link.name?.takeIf(String::isNotBlank) ?: "Official link", link.type ?: "external", url)
+        }
+        return copy(
+            description = description ?: mangaBaka.description?.stripAniListMarkup(),
+            status = status ?: mangaBaka.status?.humanizeMangaBakaStatus(),
+            country = country ?: mangaBaka.originalLanguage?.takeIf(String::isNotBlank),
+            writer = (writer + authors + artists).distinct(),
+            productionCompanies = (productionCompanies + publishers.map(::MetaCompany)).distinctBy { it.name.lowercase() },
+            links = (links + externalLinks).distinctBy { it.url },
+            mangaInfo = manga.copy(
+                chapters = manga.chapters ?: mangaBaka.totalChapters?.toIntOrNull(),
+                volumes = manga.volumes ?: mangaBaka.finalVolume?.toIntOrNull(),
+                authors = authors,
+                artists = artists,
+                publishers = publishers,
+            ),
+        )
+    }
+
+    private fun List<String>.cleanNames(): List<String> =
+        map { it.trim() }.filter { it.isNotBlank() }.distinct()
+
+    private fun String.humanizeMangaBakaStatus(): String =
+        replace('_', ' ').replace('-', ' ').split(' ').filter { it.isNotBlank() }
+            .joinToString(" ") { word -> word.lowercase().replaceFirstChar { it.uppercaseChar() } }
+
+    private fun AniListMediaDetail.aniListMangaRecommendations(): List<MetaPreview> =
+        recommendations?.nodes.orEmpty()
+            .filter { (it.rating ?: 0) >= 0 }
+            .mapNotNull { it.mediaRecommendation }
+            .filterNot { it.isAdult }
+            .filter { it.format?.uppercase() in MANGA_FORMATS }
+            .distinctBy { it.id }
+            .mapNotNull { it.toMetaPreview() }
+            .take(MAX_MORE_LIKE_THIS)
+
+    private fun AniListMediaDetail.aniListMangaRelations(): List<MetaPreview> =
+        relations?.edges.orEmpty()
+            .filter { it.relationType?.uppercase() in RELATION_TYPES }
+            .sortedBy { RELATION_TYPES.indexOf(it.relationType?.uppercase()) }
+            .mapNotNull { it.node }
+            .filterNot { it.isAdult }
+            .filter { it.format?.uppercase() in MANGA_FORMATS }
+            .distinctBy { it.id }
+            .mapNotNull { it.toMetaPreview() }
 
     /**
      * "More like this" from AniList's own community recommendations.

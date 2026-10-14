@@ -49,6 +49,7 @@ import com.nuvio.app.core.ui.nuvioConsumePointerEvents
 import com.nuvio.app.core.ui.withDuplicateSafeLazyKeys
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.search.AniListSearchRepository
+import com.nuvio.app.features.content.ContentModeRepository
 import com.nuvio.app.features.addons.enabledAddons
 import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.home.MetaPreview
@@ -106,6 +107,7 @@ fun SearchScreen(
 
     val addonsUiState by AddonRepository.uiState.collectAsStateWithLifecycle()
     val uiState by AniListSearchRepository.uiState.collectAsStateWithLifecycle()
+    val contentMode by ContentModeRepository.mode.collectAsStateWithLifecycle()
     val homeCatalogSettingsUiState by remember {
         HomeCatalogSettingsRepository.snapshot()
         HomeCatalogSettingsRepository.uiState
@@ -145,7 +147,7 @@ fun SearchScreen(
         }
     }
 
-    LaunchedEffect(query, addonRefreshKey, homeCatalogSettingsUiState.hideUnreleasedContent) {
+    LaunchedEffect(query, addonRefreshKey, homeCatalogSettingsUiState.hideUnreleasedContent, contentMode) {
         val normalizedQuery = query.trim()
         if (normalizedQuery.isBlank()) {
             lastRequestedQuery = null

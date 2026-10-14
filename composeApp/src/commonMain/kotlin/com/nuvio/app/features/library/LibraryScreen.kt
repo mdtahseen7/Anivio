@@ -563,18 +563,15 @@ fun LibraryScreen(
                                 fullyWatchedSeriesKeys = fullyWatchedSeriesKeys,
                                 onPosterClick = { preview ->
                                     val item = aniListItemsById[preview.id]
-                                    when {
-                                        // Manga has no in-app page yet, so it opens on AniList.
-                                        preview.id.startsWith(ANILIST_MANGA_ID_PREFIX) ->
-                                            item?.trackingSourceUrl?.let(uriHandler::openUri)
-                                        item != null -> onPosterClick?.invoke(item)
+                                    if (preview.id.startsWith(ANILIST_MANGA_ID_PREFIX)) {
+                                        onAniListPosterClick?.invoke(preview)
+                                    } else if (item != null) {
+                                        onPosterClick?.invoke(item)
                                     }
                                 },
                                 onPosterLongClick = onAniListPosterLongClick?.let { callback ->
                                     { preview ->
-                                        // Manga has no in-app page, so the poster actions (add to
-                                        // library, mark watched) mean nothing for it -- only the
-                                        // anime rows get the long-press menu.
+                                        // Manga has a details page but no watch-progress actions.
                                         if (!preview.id.startsWith(ANILIST_MANGA_ID_PREFIX)) {
                                             callback(preview)
                                         }

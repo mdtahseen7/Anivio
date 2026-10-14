@@ -29,12 +29,20 @@ fun DetailAdditionalInfoSection(
     showHeader: Boolean = true,
 ) {
     val isSeriesLike = meta.type == "series" || meta.videos.any { it.season != null || it.episode != null }
-    val title = if (isSeriesLike) {
+    val title = if (meta.mangaInfo != null) {
+        "Manga details"
+    } else if (isSeriesLike) {
         stringResource(Res.string.details_show_details)
     } else {
         stringResource(Res.string.details_movie_details)
     }
     val rows = buildList {
+        meta.mangaInfo?.format?.let { add("Format" to it.lowercase().replaceFirstChar(Char::uppercase)) }
+        meta.mangaInfo?.chapters?.let { add("Chapters" to it.toString()) }
+        meta.mangaInfo?.volumes?.let { add("Volumes" to it.toString()) }
+        meta.mangaInfo?.authors?.takeIf { it.isNotEmpty() }?.let { add("Author" to it.joinToString(", ")) }
+        meta.mangaInfo?.artists?.takeIf { it.isNotEmpty() }?.let { add("Artist" to it.joinToString(", ")) }
+        meta.mangaInfo?.publishers?.takeIf { it.isNotEmpty() }?.let { add("Publisher" to it.joinToString(", ")) }
         meta.status?.let { add(stringResource(Res.string.details_status) to it) }
         meta.releaseInfo?.let {
             add(stringResource(Res.string.details_release_info) to formatReleaseDateForDisplay(it))
@@ -48,21 +56,22 @@ fun DetailAdditionalInfoSection(
             add(stringResource(Res.string.details_original_language) to it.uppercase())
         }
     }
-    if (rows.isEmpty()) return
-
-    DetailSection(
-        title = title,
-        modifier = modifier,
-        showHeader = showHeader,
-    ) {
-        rows.forEachIndexed { index, (label, value) ->
-            DetailInfoRow(
-                label = label,
-                value = value,
-                showDivider = index < rows.lastIndex,
-            )
+    if (rows.isNotEmpty()) {
+        DetailSection(
+            title = title,
+            modifier = modifier,
+            showHeader = showHeader,
+        ) {
+            rows.forEachIndexed { index, (label, value) ->
+                DetailInfoRow(
+                    label = label,
+                    value = value,
+                    showDivider = index < rows.lastIndex,
+                )
+            }
         }
     }
+    if (meta.mangaInfo != null) MangaChaptersSection(meta)
 }
 
 @Composable

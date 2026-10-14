@@ -5,6 +5,9 @@ import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.enabledAddons
 import com.nuvio.app.features.anime.PublicAnimeSource
 import com.nuvio.app.features.anilist.AniListHeroArtwork
+import com.nuvio.app.features.anilist.AniListCatalogSource
+import com.nuvio.app.features.content.ContentMode
+import com.nuvio.app.features.content.ContentModeRepository
 import com.nuvio.app.features.catalog.CatalogPage
 import com.nuvio.app.features.catalog.CatalogTarget
 import com.nuvio.app.features.catalog.fetchCatalogPage
@@ -327,13 +330,17 @@ object HomeRepository {
             // Normally already resolved by the batched query; falls back to a single-row
             // request if that call failed.
             HomeCatalogSource.ANILIST -> aniListPages[catalogId]
-                ?: PublicAnimeSource.catalog(
-                    catalogId = catalogId,
-                    contentType = type,
-                    page = 1,
-                    maxItems = HOME_CATALOG_PREVIEW_FETCH_LIMIT,
-                    forceRefresh = forceRefresh,
-                )
+                ?: if (ContentModeRepository.mode.value == ContentMode.Manga) {
+                    AniListCatalogSource.resolve(catalogId, 1, HOME_CATALOG_PREVIEW_FETCH_LIMIT, forceRefresh)
+                } else {
+                    PublicAnimeSource.catalog(
+                        catalogId = catalogId,
+                        contentType = type,
+                        page = 1,
+                        maxItems = HOME_CATALOG_PREVIEW_FETCH_LIMIT,
+                        forceRefresh = forceRefresh,
+                    )
+                }
 
             HomeCatalogSource.ADDON -> fetchCatalogPage(
                 manifestUrl = manifestUrl,
@@ -396,7 +403,9 @@ object HomeRepository {
         if (catalogIds.isEmpty()) return emptyMap()
 
         return try {
-            PublicAnimeSource.homeRows(
+            if (ContentModeRepository.mode.value == ContentMode.Manga) {
+                AniListCatalogSource.resolveHomeRows(catalogIds, HOME_CATALOG_PREVIEW_FETCH_LIMIT, forceRefresh)
+            } else PublicAnimeSource.homeRows(
                 catalogIds = catalogIds,
                 maxItems = HOME_CATALOG_PREVIEW_FETCH_LIMIT,
                 forceRefresh = forceRefresh,

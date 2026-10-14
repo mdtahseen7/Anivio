@@ -29,6 +29,12 @@ expect object PluginRepository {
 
     fun getEnabledScrapersForType(type: String): List<PluginScraper>
 
+    fun getEnabledMangaScrapers(): List<PluginScraper>
+
+    suspend fun getMangaChapters(scraper: PluginScraper, mangaId: String, title: String): Result<List<MangaPluginChapter>>
+
+    suspend fun getMangaChapterPages(scraper: PluginScraper, chapterId: String): Result<List<MangaPluginPage>>
+
     suspend fun testScraper(scraperId: String): Result<List<PluginRuntimeResult>>
 
     suspend fun executeScraper(

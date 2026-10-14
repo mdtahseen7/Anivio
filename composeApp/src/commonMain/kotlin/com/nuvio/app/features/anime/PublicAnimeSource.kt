@@ -2,6 +2,7 @@ package com.nuvio.app.features.anime
 
 import com.nuvio.app.features.anilist.AniListCatalogSource
 import com.nuvio.app.features.anilist.AniListMetaSource
+import com.nuvio.app.features.anilist.isAniListMangaId
 import com.nuvio.app.features.catalog.CatalogPage
 import com.nuvio.app.features.details.MetaDetails
 
@@ -64,6 +65,16 @@ object PublicAnimeSource {
         forceRefresh: Boolean = false,
         onPartialMeta: ((MetaDetails) -> Unit)? = null,
     ): PublicAnimeMetaResult? {
+        // Manga has an AniList-native identity (`anilist-manga:<mediaId>`), not an IMDb/TMDB/MAL
+        // identity. It must never be handed to the anime fallback router.
+        if (contentType.equals("manga", ignoreCase = true) || isAniListMangaId(id)) {
+            return AniListMetaSource.fetchMeta(
+                id = id,
+                type = "manga",
+                forceRefresh = forceRefresh,
+                onPartialMeta = onPartialMeta,
+            )?.let { PublicAnimeMetaResult(it.meta, it.externalFallbackId) }
+        }
         if (id.startsWith("mal:", ignoreCase = true)) {
             return PublicAnimeRouter.fallbackOnly { it.details(id, contentType, forceRefresh) }
         }

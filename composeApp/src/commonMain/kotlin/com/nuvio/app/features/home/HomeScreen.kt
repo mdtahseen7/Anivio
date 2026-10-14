@@ -1,13 +1,16 @@
 package com.nuvio.app.features.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -37,6 +40,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import com.nuvio.app.core.ui.LocalNuvioBottomNavigationOverlayPadding
 import com.nuvio.app.core.ui.NuvioCircularGlassButton
 import com.nuvio.app.core.ui.NuvioScreen
@@ -106,6 +110,8 @@ import com.nuvio.app.features.watching.application.WatchingState
 import com.nuvio.app.features.watching.domain.WatchingContentRef
 import com.nuvio.app.features.watching.domain.isReleasedBy
 import com.nuvio.app.features.collection.CollectionRepository
+import com.nuvio.app.features.content.ContentMode
+import com.nuvio.app.features.content.ContentModeRepository
 import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.home.components.HomeCollectionRowSection
 import kotlinx.coroutines.Dispatchers
@@ -153,6 +159,7 @@ fun HomeScreen(
     }
 
     val addonsUiState by AddonRepository.uiState.collectAsStateWithLifecycle()
+    val contentMode by ContentModeRepository.mode.collectAsStateWithLifecycle()
     val homeUiState by HomeRepository.uiState.collectAsStateWithLifecycle()
     val homeSettingsUiState by remember {
         HomeCatalogSettingsRepository.snapshot()
@@ -608,7 +615,7 @@ fun HomeScreen(
         mutableStateOf(0)
     }
 
-    val catalogRefreshKey = remember(enabledAddons) {
+    val catalogRefreshKey = remember(enabledAddons, contentMode) {
         buildHomeCatalogRefreshSignature(enabledAddons)
     }
 
@@ -888,8 +895,8 @@ fun HomeScreen(
         onFirstCatalogRendered?.invoke()
     }
 
-    val visibleCollections = remember(collections) {
-        collections.filter { it.folders.isNotEmpty() }
+    val visibleCollections = remember(collections, contentMode) {
+        if (contentMode == ContentMode.Manga) emptyList() else collections.filter { it.folders.isNotEmpty() }
     }
     val collectionsMap = remember(visibleCollections) {
         visibleCollections.associateBy { "collection_${it.id}" }
@@ -897,8 +904,8 @@ fun HomeScreen(
     val sectionsMap = remember(homeUiState.sections) {
         homeUiState.sections.associateBy(HomeCatalogSection::key)
     }
-    val enabledHomeItems = remember(homeSettingsUiState.items) {
-        homeSettingsUiState.items.filter { it.enabled }
+    val enabledHomeItems = remember(homeSettingsUiState.items, contentMode) {
+        homeSettingsUiState.items.filter { it.enabled && (contentMode == ContentMode.Anime || !it.isCollection) }
     }
     val keyedEnabledHomeItems = remember(enabledHomeItems) {
         enabledHomeItems.withDuplicateSafeLazyKeys(HomeCatalogSettingsItem::key)
@@ -1006,7 +1013,7 @@ fun HomeScreen(
                 // There is no "no active addons" branch any more: the AniList rows are built in,
                 // so an empty home means still-loading or genuinely-failed, both handled below.
                 homeUiState.isLoading && homeUiState.sections.isEmpty() && !hasRenderableCollectionRows -> {
-                    homeContinueWatchingSections(
+                    if (contentMode == ContentMode.Anime) homeContinueWatchingSections(
                         preferences = continueWatchingPreferences,
                         continueWatchingItems = continueWatchingItems,
                         upcomingItems = upcomingItems,
@@ -1064,7 +1071,7 @@ fun HomeScreen(
                 }
 
                 else -> {
-                    homeContinueWatchingSections(
+                    if (contentMode == ContentMode.Anime) homeContinueWatchingSections(
                         preferences = continueWatchingPreferences,
                         continueWatchingItems = continueWatchingItems,
                         upcomingItems = upcomingItems,
@@ -1154,6 +1161,43 @@ fun HomeScreen(
                     }
                 }
             }
+        }
+
+        ContentModeToggle(
+            selected = contentMode,
+            onSelected = ContentModeRepository::select,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 10.dp),
+        )
+    }
+}
+
+@Composable
+private fun ContentModeToggle(
+    selected: ContentMode,
+    onSelected: (ContentMode) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(24.dp))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.88f))
+            .padding(3.dp),
+    ) {
+        ContentMode.entries.forEach { mode ->
+            val active = mode == selected
+            Text(
+                text = if (mode == ContentMode.Anime) "Anime" else "Manga",
+                color = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(if (active) MaterialTheme.nuvio.colors.accent else Color.Transparent)
+                    .clickable { onSelected(mode) }
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+            )
         }
     }
 }
