@@ -50,7 +50,7 @@ object AniListCatalogSource {
             )
         }
 
-        val catalog = aniListCatalog(catalogId) ?: error("Unknown AniList catalog: $catalogId")
+        val catalog = aniListCatalog(catalogId) ?: mangaCatalog(catalogId) ?: error("Unknown AniList catalog: $catalogId")
         val nowSeconds = aniListNowBucketSeconds()
         val perPage = if (maxItems == null) ANILIST_MAX_PER_PAGE else catalog.homePerPage
         val alias = ALIAS_PREFIX + "0"
@@ -81,7 +81,7 @@ object AniListCatalogSource {
         maxItems: Int? = null,
         forceRefresh: Boolean = false,
     ): Map<String, CatalogPage> = withContext(Dispatchers.Default) {
-        val catalogs = catalogIds.mapNotNull(::aniListCatalog)
+        val catalogs = catalogIds.mapNotNull { aniListCatalog(it) ?: mangaCatalog(it) }
         if (catalogs.isEmpty()) return@withContext emptyMap()
 
         val nowSeconds = aniListNowBucketSeconds()

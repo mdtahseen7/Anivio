@@ -18,6 +18,8 @@ data class MetaDetails(
     val imdbRating: String? = null,
     val ageRating: String? = null,
     val runtime: String? = null,
+    /** AniList-only reading information. Null for anime and addon metadata. */
+    val mangaInfo: MangaInfo? = null,
     val externalRatings: List<MetaExternalRating> = emptyList(),
     val genres: List<String> = emptyList(),
     val director: List<String> = emptyList(),
@@ -42,6 +44,16 @@ data class MetaDetails(
     val trailers: List<MetaTrailer> = emptyList(),
     val links: List<MetaLink> = emptyList(),
     val videos: List<MetaVideo> = emptyList(),
+)
+
+data class MangaInfo(
+    val format: String? = null,
+    val chapters: Int? = null,
+    val volumes: Int? = null,
+    /** Optional MangaBaka enrichment; empty when the source has no matching record. */
+    val authors: List<String> = emptyList(),
+    val artists: List<String> = emptyList(),
+    val publishers: List<String> = emptyList(),
 )
 
 enum class MoreLikeThisSource {

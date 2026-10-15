@@ -698,10 +698,11 @@ private fun MobileSettingsScreen(
                         onTargetClick = { openSearchTarget(it) },
                     )
                     if (settingsSearchQuery.isBlank()) {
-                        settingsRootContent(
-                            isTablet = false,
-                            onPlaybackClick = { onPageChange(SettingsPage.Playback) },
-                            onAppearanceClick = { onPageChange(SettingsPage.Appearance) },
+                    settingsRootContent(
+                        isTablet = false,
+                        onPlaybackClick = { onPageChange(SettingsPage.Playback) },
+                        onReaderClick = { onPageChange(SettingsPage.Reader) },
+                        onAppearanceClick = { onPageChange(SettingsPage.Appearance) },
                             onAdvancedClick = { onPageChange(SettingsPage.Advanced) },
                             onNotificationsClick = { onPageChange(SettingsPage.Notifications) },
                             onContentDiscoveryClick = { onPageChange(SettingsPage.ContentDiscovery) },
@@ -756,6 +757,9 @@ private fun MobileSettingsScreen(
                     libassRenderType = libassRenderType,
                 )
                 SettingsPage.Streams -> streamsSettingsContent(
+                    isTablet = false,
+                )
+                SettingsPage.Reader -> readerSettingsContent(
                     isTablet = false,
                 )
                 SettingsPage.Appearance -> appearanceSettingsContent(
@@ -1120,6 +1124,7 @@ private fun TabletSettingsScreen(
                             settingsRootContent(
                                 isTablet = true,
                                 onPlaybackClick = { openInlinePage(SettingsPage.Playback) },
+                                onReaderClick = { openInlinePage(SettingsPage.Reader) },
                                 onAppearanceClick = { openInlinePage(SettingsPage.Appearance) },
                                 onAdvancedClick = { openInlinePage(SettingsPage.Advanced) },
                                 onNotificationsClick = { openInlinePage(SettingsPage.Notifications) },
@@ -1179,6 +1184,9 @@ private fun TabletSettingsScreen(
                         libassRenderType = libassRenderType,
                     )
                     SettingsPage.Streams -> streamsSettingsContent(
+                        isTablet = true,
+                    )
+                    SettingsPage.Reader -> readerSettingsContent(
                         isTablet = true,
                     )
                     SettingsPage.Appearance -> appearanceSettingsContent(

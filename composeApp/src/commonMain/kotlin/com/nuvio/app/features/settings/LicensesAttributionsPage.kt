@@ -45,6 +45,7 @@ private const val AniZipUrl = "https://ani.zip"
 private const val KitsuUrl = "https://kitsu.app"
 private const val FanartUrl = "https://fanart.tv"
 private const val TvdbUrl = "https://thetvdb.com"
+private const val MangaBakaUrl = "https://mangabaka.org"
 private const val ImdbDatasetsUrl = "https://developer.imdb.com/non-commercial-datasets/"
 private const val PremiumizeUrl = "https://www.premiumize.me"
 private const val TorboxUrl = "https://torbox.app"
@@ -414,6 +415,13 @@ private fun attributionItems(): List<AttributionItem> = listOf(
         logo = null,
         logoUrl = faviconUrl("thetvdb.com"),
         link = TvdbUrl,
+    ),
+    AttributionItem(
+        titleRes = Res.string.settings_licenses_attributions_mangabaka_title,
+        bodyRes = Res.string.settings_licenses_attributions_mangabaka_body,
+        logo = null,
+        logoUrl = faviconUrl("mangabaka.org"),
+        link = MangaBakaUrl,
     ),
     AttributionItem(
         titleRes = Res.string.settings_licenses_attributions_fanart_title,

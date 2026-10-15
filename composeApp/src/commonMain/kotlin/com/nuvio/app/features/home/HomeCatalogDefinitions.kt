@@ -7,6 +7,8 @@ import com.nuvio.app.features.addons.ManagedAddon
 import com.nuvio.app.features.addons.enabledAddons
 import com.nuvio.app.features.anilist.aniListCatalogRefreshSignature
 import com.nuvio.app.features.anilist.buildAniListCatalogDefinitions
+import com.nuvio.app.features.content.ContentMode
+import com.nuvio.app.features.content.ContentModeRepository
 import com.nuvio.app.features.catalog.supportsPagination
 import kotlinx.coroutines.runBlocking
 import nuvio.composeapp.generated.resources.Res
@@ -55,8 +57,11 @@ data class HomeCatalogDefinition(
  * addon catalogs the user has installed. Distinct by key, so an addon whose manifest id happened to
  * be `anilist` could not shadow a built-in row.
  */
-fun buildAllHomeCatalogDefinitions(addons: List<ManagedAddon>): List<HomeCatalogDefinition> =
-    (buildAniListCatalogDefinitions() + buildHomeCatalogDefinitions(addons))
+fun buildAllHomeCatalogDefinitions(
+    addons: List<ManagedAddon>,
+    mode: ContentMode = ContentModeRepository.mode.value,
+): List<HomeCatalogDefinition> =
+    (buildAniListCatalogDefinitions(mode) + if (mode == ContentMode.Anime) buildHomeCatalogDefinitions(addons) else emptyList())
         .distinctBy(HomeCatalogDefinition::key)
 
 fun buildHomeCatalogRefreshSignature(addons: List<ManagedAddon>): List<String> =

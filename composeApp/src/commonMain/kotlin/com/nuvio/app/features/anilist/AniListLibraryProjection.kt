@@ -17,7 +17,7 @@ import nuvio.composeapp.generated.resources.anilist_library_planned_ongoing
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.getString
 
-/** Manga ids are prefixed differently so `isAniListId` never routes one to the anime meta source. */
+/** Manga ids preserve their media kind and route directly to AniList's MANGA metadata query. */
 const val ANILIST_MANGA_ID_PREFIX = "anilist-manga:"
 
 const val ANILIST_MANGA_TYPE = "manga"

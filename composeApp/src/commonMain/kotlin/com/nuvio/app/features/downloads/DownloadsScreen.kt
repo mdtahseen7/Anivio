@@ -64,6 +64,7 @@ import org.jetbrains.compose.resources.stringResource
 fun DownloadsScreen(
     onBack: () -> Unit,
     onOpenDownload: (DownloadItem) -> Unit,
+    onOpenMangaDownload: (MangaDownloadItem) -> Unit,
     initialShowId: String? = null,
     onNavigateToShow: ((showId: String, title: String) -> Unit)? = null,
     onBackFromShow: (() -> Unit)? = null,
@@ -75,6 +76,8 @@ fun DownloadsScreen(
 
     var selectedShowId by rememberSaveable(initialShowId) { mutableStateOf(initialShowId) }
     var downloadPendingDeletionId by rememberSaveable { mutableStateOf<String?>(null) }
+    var mangaPendingDeletionId by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedMediaTab by rememberSaveable { mutableStateOf(0) }
     var showServerPicker by rememberSaveable { mutableStateOf(false) }
     val openDownloadsDirectoryFailedText = stringResource(Res.string.downloads_open_directory_failed)
 
@@ -84,6 +87,11 @@ fun DownloadsScreen(
         // screen has not been opened this session.
         PluginRepository.initialize()
         DownloadSettingsRepository.uiState
+    }.collectAsStateWithLifecycle()
+
+    val mangaUiState by remember {
+        MangaDownloadsRepository.ensureLoaded()
+        MangaDownloadsRepository.uiState
     }.collectAsStateWithLifecycle()
 
     val completedEpisodes = remember(uiState.items) {
@@ -131,6 +139,13 @@ fun DownloadsScreen(
         }
 
         if (selectedShowId == null) {
+            item {
+                DownloadsMediaTabs(
+                    selectedIndex = selectedMediaTab,
+                    onSelected = { selectedMediaTab = it },
+                )
+            }
+            if (selectedMediaTab == 0) {
             downloadsRootContent(
                 uiState = uiState,
                 defaultServerName = downloadSettings.defaultServerAddonName,
@@ -141,6 +156,13 @@ fun DownloadsScreen(
                 },
                 onDeleteDownload = { downloadPendingDeletionId = it },
             )
+            } else {
+                downloadsMangaContent(
+                    uiState = mangaUiState,
+                    onOpenDownload = onOpenMangaDownload,
+                    onDeleteDownload = { mangaPendingDeletionId = it },
+                )
+            }
         } else {
             downloadsShowContent(
                 showId = selectedShowId.orEmpty(),
@@ -164,6 +186,22 @@ fun DownloadsScreen(
                 downloadPendingDeletionId = null
             },
             onDismiss = { downloadPendingDeletionId = null },
+        )
+    }
+
+    val pendingMangaDeletionId = mangaPendingDeletionId
+    if (pendingMangaDeletionId != null) {
+        NuvioStatusModal(
+            title = stringResource(Res.string.action_delete_confirm_title),
+            message = stringResource(Res.string.action_delete_confirm_message),
+            isVisible = true,
+            confirmText = stringResource(Res.string.action_yes),
+            dismissText = stringResource(Res.string.action_no),
+            onConfirm = {
+                MangaDownloadsRepository.cancelDownload(pendingMangaDeletionId)
+                mangaPendingDeletionId = null
+            },
+            onDismiss = { mangaPendingDeletionId = null },
         )
     }
 
@@ -386,6 +424,212 @@ private fun LazyListScope.downloadsRootContent(
             }
         }
     }
+}
+
+@Composable
+private fun DownloadsMediaTabs(
+    selectedIndex: Int,
+    onSelected: (Int) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        listOf("Anime", "Manga").forEachIndexed { index, label ->
+            Surface(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onSelected(index) },
+                shape = RoundedCornerShape(12.dp),
+                color = if (selectedIndex == index) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainer
+                },
+            ) {
+                Text(
+                    text = label,
+                    modifier = Modifier.padding(vertical = 10.dp),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (selectedIndex == index) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
+        }
+    }
+}
+
+private fun LazyListScope.downloadsMangaContent(
+    uiState: MangaDownloadsUiState,
+    onOpenDownload: (MangaDownloadItem) -> Unit,
+    onDeleteDownload: (String) -> Unit,
+) {
+    val items = uiState.items.sortedWith(
+        compareBy<MangaDownloadItem> { it.title.lowercase() }
+            .thenBy { it.chapterNumber.toDoubleOrNull() ?: Double.MAX_VALUE }
+            .thenBy { it.chapterNumber },
+    )
+
+    if (items.isNotEmpty()) {
+        item { SectionTitle("Manga chapters") }
+        items(
+            items = items,
+            key = { it.id },
+        ) { item ->
+            MangaDownloadRow(
+                item = item,
+                onOpen = { onOpenDownload(item) },
+                onPause = { MangaDownloadsRepository.pauseDownload(item.id) },
+                onResume = { MangaDownloadsRepository.resumeDownload(item.id) },
+                onRetry = { MangaDownloadsRepository.retryDownload(item.id) },
+                onDelete = { onDeleteDownload(item.id) },
+            )
+        }
+    } else {
+        item {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 40.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "No manga downloads yet",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MangaDownloadRow(
+    item: MangaDownloadItem,
+    onOpen: () -> Unit,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onRetry: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .clickable(enabled = item.isPlayable, onClick = onOpen),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 10.dp, top = 10.dp, end = 4.dp, bottom = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(width = 64.dp, height = 84.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    item.poster?.let { poster ->
+                        AsyncImage(
+                            model = poster,
+                            contentDescription = item.title,
+                            modifier = Modifier
+                                .size(width = 64.dp, height = 84.dp)
+                                .clip(RoundedCornerShape(8.dp)),
+                            contentScale = ContentScale.Crop,
+                        )
+                    }
+                    if (item.status == DownloadStatus.Downloading) {
+                        Text(
+                            text = "${(item.progressFraction * 100).toInt()}%",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    Text(
+                        text = item.title,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = "Chapter ${item.chapterNumber}${item.chapterTitle?.let { " • $it" }.orEmpty()}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = mangaDownloadStatusText(item),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = when (item.status) {
+                            DownloadStatus.Completed -> MaterialTheme.colorScheme.primary
+                            DownloadStatus.Failed -> MaterialTheme.colorScheme.error
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    when (item.status) {
+                        DownloadStatus.Downloading -> IconButton(onClick = onPause) {
+                            Icon(Icons.Rounded.Pause, contentDescription = stringResource(Res.string.compose_action_pause))
+                        }
+                        DownloadStatus.Paused -> IconButton(onClick = onResume) {
+                            Icon(Icons.Rounded.PlayArrow, contentDescription = stringResource(Res.string.action_resume))
+                        }
+                        DownloadStatus.Failed -> IconButton(onClick = onRetry) {
+                            Icon(Icons.Rounded.Refresh, contentDescription = stringResource(Res.string.action_retry))
+                        }
+                        DownloadStatus.Completed -> IconButton(onClick = onOpen) {
+                            Icon(Icons.Rounded.PlayArrow, contentDescription = stringResource(Res.string.action_play))
+                        }
+                    }
+                    IconButton(onClick = onDelete) {
+                        Icon(Icons.Rounded.Delete, contentDescription = stringResource(Res.string.action_delete))
+                    }
+                }
+            }
+            if (item.status == DownloadStatus.Downloading) {
+                LinearProgressIndicator(
+                    progress = { item.progressFraction },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp)
+                        .padding(bottom = 10.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp)),
+                )
+            } else {
+                Spacer(modifier = Modifier.height(6.dp))
+            }
+        }
+    }
+}
+
+private fun mangaDownloadStatusText(item: MangaDownloadItem): String = when (item.status) {
+    DownloadStatus.Downloading -> "Downloading pages ${item.downloadedPages}/${item.totalPages}"
+    DownloadStatus.Paused -> "Paused • ${item.downloadedPages}/${item.totalPages} pages"
+    DownloadStatus.Completed -> "Downloaded ${item.totalPages} pages"
+    DownloadStatus.Failed -> item.errorMessage ?: "Download failed"
 }
 
 private fun LazyListScope.downloadsShowContent(

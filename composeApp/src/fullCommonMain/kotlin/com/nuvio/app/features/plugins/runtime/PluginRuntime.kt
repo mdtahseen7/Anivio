@@ -1,6 +1,8 @@
 package com.nuvio.app.features.plugins.runtime
 
 import com.nuvio.app.features.plugins.PluginRuntimeResult
+import com.nuvio.app.features.plugins.MangaPluginChapter
+import com.nuvio.app.features.plugins.MangaPluginPage
 import com.nuvio.app.features.plugins.PluginStorage
 import com.nuvio.app.features.plugins.runtime.crypto.CryptoBridge
 import com.nuvio.app.features.plugins.runtime.dom.DomBridge
@@ -60,6 +62,40 @@ internal object PluginRuntime {
             )
         }
     }
+
+    suspend fun getMangaChapters(code: String, scraperId: String, mangaId: String, title: String): List<MangaPluginChapter> =
+        withContext(Dispatchers.Default) {
+            val settings = PluginStorage.loadScraperSettings(scraperId) ?: "{}"
+            withTimeout(PLUGIN_TIMEOUT_MS) {
+                executeMangaCall(code, scraperId, settings, "getChapters", JsonPrimitive(mangaId).toString(), JsonPrimitive(title).toString())
+            }
+        }
+
+    suspend fun getMangaChapterPages(code: String, scraperId: String, chapterId: String): List<MangaPluginPage> =
+        withContext(Dispatchers.Default) {
+            val settings = PluginStorage.loadScraperSettings(scraperId) ?: "{}"
+            withTimeout(PLUGIN_TIMEOUT_MS) {
+                val raw = executeMangaCallRaw(
+                    code = code,
+                    scraperId = scraperId,
+                    settingsJson = settings,
+                    functionName = "getChapterImages",
+                    firstArg = JsonPrimitive(chapterId).toString(),
+                    secondArg = "undefined",
+                )
+                val array = json.parseToJsonElement(raw) as? JsonArray ?: return@withTimeout emptyList()
+                array.mapNotNull { element ->
+                    val item = element as? JsonObject ?: return@mapNotNull null
+                    val url = item["url"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+                        ?: return@mapNotNull null
+                    val headers = (item["headers"] as? JsonObject)
+                        ?.mapNotNull { (name, value) -> value.jsonPrimitive.contentOrNull?.let { name to it } }
+                        ?.toMap()
+                        .orEmpty()
+                    MangaPluginPage(url, headers)
+                }
+            }
+        }
 
     suspend fun getPluginSettingsLayout(
         code: String,
@@ -246,6 +282,48 @@ internal object PluginRuntime {
                 )
             }.filter { it.url.isNotBlank() }
         }.getOrElse { emptyList() }
+    }
+
+    private suspend fun executeMangaCall(
+        code: String, scraperId: String, settingsJson: String, functionName: String, firstArg: String, secondArg: String,
+    ): List<MangaPluginChapter> {
+        val raw = executeMangaCallRaw(code, scraperId, settingsJson, functionName, firstArg, secondArg)
+        val array = json.parseToJsonElement(raw) as? JsonArray ?: return emptyList()
+        return array.mapNotNull { element ->
+            val item = element as? JsonObject ?: return@mapNotNull null
+            val id = item["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            val number = item["number"]?.jsonPrimitive?.contentOrNull ?: item["chapter"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            MangaPluginChapter(id, number, item["title"]?.jsonPrimitive?.contentOrNull)
+        }
+    }
+
+    private suspend fun executeMangaCallRaw(
+        code: String, scraperId: String, settingsJson: String, functionName: String, firstArg: String, secondArg: String,
+    ): String {
+        val runtime = JsRuntime()
+        val deferred = CompletableDeferred<String>()
+        val domBridge = DomBridge()
+        val registry = HostApiRegistry().apply {
+            addModule(HostFunctions(scraperId) { deferred.complete(it) })
+            addModule(FetchBridge()); addModule(UrlBridge()); addModule(CryptoBridge()); addModule(WasmBridge()); addModule(domBridge)
+        }
+        try {
+            runtime.use {
+                registry.registerAll(this)
+                evaluate<Any?>(JsBindings.buildPolyfillCode(JsonPrimitive(scraperId).toString(), settingsJson))
+                evaluate<Any?>("var module = { exports: {} }; var exports = module.exports; (function() { $code })();")
+                evaluate<Any?>("""
+                    (async function() {
+                      try {
+                        var fn = module.exports.$functionName || globalThis.$functionName;
+                        __capture_result(JSON.stringify(fn ? (await fn($firstArg, $secondArg)) || [] : []));
+                      } catch (e) { console.error('$functionName error:', e); __capture_result('[]'); }
+                    })();
+                """.trimIndent())
+                deferred.await()
+            }
+            return deferred.await()
+        } finally { domBridge.clear() }
     }
 
     private fun JsonObject.stringOrNull(key: String): String? =

@@ -84,12 +84,29 @@ object AniListHeroArtwork {
             val tvdbId = aniZip?.tvdbId()
             val mappedSeason = aniZip?.mappedSeasonNumber()
 
+            // ani.zip has no mapping for some anime (no TMDB/TVDB ids). fanart.tv is
+            // id-keyed with no title search, so resolve a TVDB series id by title and
+            // reuse the normal fanart + TVDB artwork path below. Series only: movies
+            // need a TMDB id fanart cannot get from TVDB, and manga never reaches TVDB.
+            val searchedTvdbId =
+                if (tmdbId == null && tvdbId == null && item.type.equals("series", ignoreCase = true)) {
+                    TvdbClient.searchSeriesId(item.name)
+                } else {
+                    null
+                }
+
             val (tmdbArtwork, fanartArtwork, tvdbArtwork) = coroutineScope {
                 val tmdb = async {
                     if (tmdbId == null) TmdbArtwork() else TmdbArtworkSource.artwork(tmdbId, item.type)
                 }
-                val fanart = async { fanartFor(item, aniZip, tmdbId) }
-                val tvdb = async { if (tvdbId == null) TvdbArtwork() else TvdbClient.seriesArtwork(tvdbId) }
+                val fanart = async {
+                    if (searchedTvdbId != null) FanartClient.tvArtwork(searchedTvdbId)
+                    else fanartFor(item, aniZip, tmdbId)
+                }
+                val tvdb = async {
+                    val seriesId = tvdbId ?: searchedTvdbId
+                    if (seriesId == null) TvdbArtwork() else TvdbClient.seriesArtwork(seriesId)
+                }
                 Triple(tmdb.await(), fanart.await(), tvdb.await())
             }
 

@@ -8,6 +8,8 @@ import com.nuvio.app.features.anime.PublicAnimeRouter
 import com.nuvio.app.features.home.HomeCatalogDefinition
 import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.home.HomeCatalogSource
+import com.nuvio.app.features.content.ContentMode
+import com.nuvio.app.features.content.ContentModeRepository
 import kotlinx.coroutines.runBlocking
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.anilist_row_movies
@@ -126,6 +128,9 @@ internal val ANILIST_CATALOGS: List<AniListCatalog> = listOf(
 internal fun aniListCatalog(catalogId: String): AniListCatalog? =
     ANILIST_CATALOGS.firstOrNull { it.id == catalogId }
 
+internal fun mangaCatalog(catalogId: String): AniListCatalog? =
+    MANGA_CATALOGS.firstOrNull { it.id == catalogId }
+
 /**
  * Truncated to a bucket so repeated refreshes reuse the same query string — and therefore the same
  * [com.nuvio.app.core.anilist.AniListClient] cache entry — instead of missing the cache on every tick
@@ -158,7 +163,7 @@ internal fun AniListCatalog.cacheTtlMs(): Long =
  * from composition via `buildHomeCatalogRefreshSignature`, so it must not block on resource loading.
  */
 fun aniListCatalogRefreshSignature(): String =
-    aniListCatalogDescriptorSignature() + ":" + ANILIST_CATALOGS.joinToString(",") { it.id }
+    aniListCatalogDescriptorSignature() + ":" + activeAniListCatalogs().joinToString(",") { it.id }
 
 /**
  * Carries the adult preference so cached home sections are invalidated when it is toggled — the row
@@ -167,10 +172,10 @@ fun aniListCatalogRefreshSignature(): String =
  * The active provider is included for the same reason: AniList and MAL fill the same row keys, so
  * without it a source switch would redisplay the other provider's cached pages.
  */
-internal fun aniListCatalogDescriptorSignature(): String {
+internal fun aniListCatalogDescriptorSignature(mode: ContentMode = ContentModeRepository.mode.value): String {
     val includeAdult = HomeCatalogSettingsRepository.snapshot().adultContentEnabled
     val source = PublicAnimeRouter.activeProvider.name.lowercase()
-    return "anilist-v$ANILIST_CATALOG_VERSION:adult=$includeAdult:src=$source"
+    return "anilist-v$ANILIST_CATALOG_VERSION:adult=$includeAdult:src=$source:mode=${mode.name}"
 }
 
 /**
@@ -181,7 +186,7 @@ internal fun aniListCatalogDescriptorSignature(): String {
  * currently coming from. [aniListCatalogDescriptorSignature] carries the provider, which is what
  * makes these definitions rebuild on a source switch.
  */
-fun buildAniListCatalogDefinitions(): List<HomeCatalogDefinition> {
+fun buildAniListCatalogDefinitions(mode: ContentMode = ContentModeRepository.mode.value): List<HomeCatalogDefinition> {
     val sourceName = runBlocking {
         getString(
             when (PublicAnimeRouter.activeProvider) {
@@ -190,7 +195,7 @@ fun buildAniListCatalogDefinitions(): List<HomeCatalogDefinition> {
             },
         )
     }
-    return ANILIST_CATALOGS.map { catalog ->
+    return activeAniListCatalogs(mode).map { catalog ->
         val title = runBlocking { getString(catalog.titleResource) }
         HomeCatalogDefinition(
             key = "$ANILIST_ADDON_ID:${catalog.contentType}:${catalog.id}",
@@ -203,10 +208,28 @@ fun buildAniListCatalogDefinitions(): List<HomeCatalogDefinition> {
             type = catalog.contentType,
             catalogId = catalog.id,
             supportsPagination = true,
-            descriptorSignature = aniListCatalogDescriptorSignature(),
+            descriptorSignature = aniListCatalogDescriptorSignature(mode),
             source = HomeCatalogSource.ANILIST,
             defaultHeroSourceEnabled = catalog.isDefaultHeroSource,
             isRecencyBased = catalog.isAiringFeed,
         )
     }
 }
+
+private fun activeAniListCatalogs(mode: ContentMode = ContentModeRepository.mode.value): List<AniListCatalog> =
+    if (mode == ContentMode.Manga) MANGA_CATALOGS else ANILIST_CATALOGS
+
+private val MANGA_CATALOGS = listOf(
+    AniListCatalog("manga-trending", Res.string.anilist_row_trending, "manga", true) { _, adult ->
+        "media(type: MANGA, sort: TRENDING_DESC${aniListAdultFilter(adult)}) { $ANILIST_MEDIA_FIELDS }"
+    },
+    AniListCatalog("manga-popular", Res.string.anilist_row_popular, "manga") { _, adult ->
+        "media(type: MANGA, sort: POPULARITY_DESC${aniListAdultFilter(adult)}) { $ANILIST_MEDIA_FIELDS }"
+    },
+    AniListCatalog("manga-top-rated", Res.string.anilist_row_upcoming, "manga") { _, adult ->
+        "media(type: MANGA, sort: SCORE_DESC, averageScore_greater: 60${aniListAdultFilter(adult)}) { $ANILIST_MEDIA_FIELDS }"
+    },
+    AniListCatalog("manga-newest", Res.string.anilist_row_recently_released, "manga") { _, adult ->
+        "media(type: MANGA, sort: START_DATE_DESC${aniListAdultFilter(adult)}) { $ANILIST_MEDIA_FIELDS }"
+    },
+)

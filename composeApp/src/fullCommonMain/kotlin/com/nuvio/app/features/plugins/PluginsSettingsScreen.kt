@@ -11,6 +11,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Extension
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.HorizontalDivider
@@ -115,10 +117,14 @@ fun PluginsSettingsPageContent(
         sortedRepos.associate { it.manifestUrl to it.name }
     }
     val sortedScrapers = remember(uiState.scrapers, repositoryNameByUrl) {
+        // Repositories sort by name, but providers inside a repo keep the user's own
+        // order — that order is what the manga server dropdown and stream
+        // resolution follow.
+        val orderById = uiState.scrapers.mapIndexed { index, scraper -> scraper.id to index }.toMap()
         uiState.scrapers.sortedWith(
             compareBy<PluginScraper>(
                 { repositoryNameByUrl[it.repositoryUrl]?.lowercase() ?: it.repositoryUrl.lowercase() },
-                { it.name.lowercase() },
+                { orderById[it.id] ?: Int.MAX_VALUE },
             ),
         )
     }
@@ -391,8 +397,7 @@ fun PluginsSettingsPageContent(
                             results = testResults[scraper.id],
                             isTesting = testingScraperId == scraper.id,
                             testEnabled = hasTmdbApiKey,
-                            onTest = {
-                                testingScraperId = scraper.id
+                            onTest = {                                testingScraperId = scraper.id
                                 coroutineScope.launch {
                                     PluginRepository.testScraper(scraper.id)
                                         .onSuccess { testResults[scraper.id] = it }
@@ -409,6 +414,16 @@ fun PluginsSettingsPageContent(
                                 }
                             },
                             onToggle = { PluginRepository.toggleScraper(scraper.id, it) },
+                            onMoveUp = if (index > 0) {
+                                { PluginRepository.moveScraper(scraper.id, moveUp = true) }
+                            } else {
+                                null
+                            },
+                            onMoveDown = if (index < scrapers.lastIndex) {
+                                { PluginRepository.moveScraper(scraper.id, moveUp = false) }
+                            } else {
+                                null
+                            },
                             onConfigure = if (scraper.hasSettings) {
                                 {
                                     coroutineScope.launch {
@@ -448,6 +463,8 @@ private fun ProviderRow(
     testEnabled: Boolean,
     onTest: () -> Unit,
     onToggle: (Boolean) -> Unit,
+    onMoveUp: (() -> Unit)?,
+    onMoveDown: (() -> Unit)?,
     onConfigure: (() -> Unit)?,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -486,6 +503,36 @@ private fun ProviderRow(
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
+                if (onMoveUp != null || onMoveDown != null) {
+                    IconButton(
+                        onClick = { onMoveUp?.invoke() },
+                        enabled = onMoveUp != null,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.KeyboardArrowUp,
+                            contentDescription = "Move provider up",
+                            tint = if (onMoveUp != null) {
+                                MaterialTheme.colorScheme.onSurface
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+                            },
+                        )
+                    }
+                    IconButton(
+                        onClick = { onMoveDown?.invoke() },
+                        enabled = onMoveDown != null,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.KeyboardArrowDown,
+                            contentDescription = "Move provider down",
+                            tint = if (onMoveDown != null) {
+                                MaterialTheme.colorScheme.onSurface
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+                            },
+                        )
+                    }
+                }
                 if (onConfigure != null) {
                     IconButton(onClick = onConfigure) {
                         Icon(

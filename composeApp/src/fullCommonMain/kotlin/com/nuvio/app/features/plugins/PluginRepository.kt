@@ -319,6 +319,30 @@ actual object PluginRepository {
         persist()
     }
 
+    actual fun moveScraper(scraperId: String, moveUp: Boolean) {
+        initialize()
+        _uiState.update { state ->
+            val list = state.scrapers.toMutableList()
+            val index = list.indexOfFirst { it.id == scraperId }
+            if (index < 0) return@update state
+            // Constrained to the same repository so the grouped settings list and the
+            // global order never disagree with each other.
+            val repoUrl = list[index].repositoryUrl
+            val neighbor = if (moveUp) {
+                (index - 1 downTo 0).firstOrNull { list[it].repositoryUrl == repoUrl }
+            } else {
+                (index + 1 until list.size).firstOrNull { list[it].repositoryUrl == repoUrl }
+            } ?: return@update state
+            val moving = list.removeAt(index)
+            // Removal shifts everything after it left by one, which exactly cancels
+            // the +1 a downward move would otherwise need — both cases insert at
+            // the neighbor's pre-removal index.
+            list.add(neighbor, moving)
+            state.copy(scrapers = list)
+        }
+        persist()
+    }
+
     actual fun setPluginsEnabled(enabled: Boolean) {
         initialize()
         _uiState.update { it.copy(pluginsEnabled = enabled) }
@@ -335,8 +359,29 @@ actual object PluginRepository {
         initialize()
         if (!_uiState.value.pluginsEnabled) return emptyList()
         return _uiState.value.scrapers.filter { scraper ->
-            scraper.enabled && scraper.supportsType(type)
+            scraper.enabled && !scraper.manga && scraper.supportsType(type)
         }
+    }
+
+    actual fun getEnabledMangaScrapers(): List<PluginScraper> {
+        initialize()
+        if (!_uiState.value.pluginsEnabled) return emptyList()
+        return _uiState.value.scrapers.filter { it.enabled && it.manga }
+    }
+
+    actual suspend fun getMangaChapters(
+        scraper: PluginScraper,
+        mangaId: String,
+        title: String,
+    ): Result<List<MangaPluginChapter>> = runCatching {
+        PluginRuntime.getMangaChapters(scraper.code, scraper.id, mangaId, title)
+    }
+
+    actual suspend fun getMangaChapterPages(
+        scraper: PluginScraper,
+        chapterId: String,
+    ): Result<List<MangaPluginPage>> = runCatching {
+        PluginRuntime.getMangaChapterPages(scraper.code, scraper.id, chapterId)
     }
 
     actual suspend fun testScraper(scraperId: String): Result<List<PluginRuntimeResult>> {
@@ -440,6 +485,7 @@ actual object PluginRepository {
                             supportedTypes = info.supportedTypes,
                             enabled = enabled,
                             manifestEnabled = info.enabled,
+                            manga = info.manga,
                             hasSettings = info.hasSettings,
                             logo = info.logo,
                             contentLanguage = info.contentLanguage ?: emptyList(),

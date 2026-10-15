@@ -226,9 +226,24 @@ internal actual object DownloadsPlatformDownloader {
     }
 
     actual fun saveAuxiliaryFile(destinationFileName: String, bytes: ByteArray): String? {
-        // ponytail: iOS offline-subtitle saving not wired (Android-focused). Return null so callers
-        // simply skip attaching downloaded subtitles here; implement with NSData.writeToFile if iOS needs it.
-        return null
+        val path = "${downloadsDirectoryPath()}/$destinationFileName"
+        val file = fopen(path, "wb") ?: return null
+        return try {
+            val written = if (bytes.isEmpty()) {
+                0L
+            } else {
+                bytes.usePinned { pinned ->
+                    fwrite(pinned.addressOf(0), 1.convert(), bytes.size.convert(), file).toLong()
+                }
+            }
+            if (written == bytes.size.toLong()) {
+                NSURL.fileURLWithPath(path).absoluteString ?: "file://$path"
+            } else {
+                null
+            }
+        } finally {
+            fclose(file)
+        }
     }
 
     actual fun resolveLocalFileUri(localFileUri: String?, destinationFileName: String): String? {

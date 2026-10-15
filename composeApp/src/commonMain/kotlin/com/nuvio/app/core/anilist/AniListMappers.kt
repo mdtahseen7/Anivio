@@ -5,6 +5,7 @@ import com.nuvio.app.features.home.PosterShape
 
 /** The one AniList `format` that is a film rather than an episodic release. */
 private const val MOVIE_FORMAT = "MOVIE"
+private val MANGA_FORMATS = setOf("MANGA", "NOVEL", "ONE_SHOT")
 
 private val HTML_TAG_REGEX = Regex("<[^>]+>")
 private val LINE_BREAK_REGEX = Regex("<br\\s*/?>", RegexOption.IGNORE_CASE)
@@ -14,8 +15,11 @@ private val EXCESS_NEWLINE_REGEX = Regex("\n{3,}")
  * The app's content type for this title. AniList models anime films as `format: MOVIE`; everything
  * else (TV, ONA, OVA, SPECIAL, …) is episodic and maps to `series`.
  */
-fun AniListMedia.aniListContentType(): String =
-    if (format?.uppercase() == MOVIE_FORMAT) "movie" else "series"
+fun AniListMedia.aniListContentType(): String = when (format?.uppercase()) {
+    in MANGA_FORMATS -> "manga"
+    MOVIE_FORMAT -> "movie"
+    else -> "series"
+}
 
 /** Stable app-wide id for this title. Episodes append `:1:<episode>`. */
 fun AniListMedia.aniListMetaId(): String = "anilist:$id"

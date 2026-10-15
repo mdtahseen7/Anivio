@@ -23,11 +23,23 @@ expect object PluginRepository {
 
     fun toggleScraper(scraperId: String, enabled: Boolean)
 
+    /**
+     * Moves a provider one step within its own repository group. The manga server
+     * dropdown and stream resolution follow this order.
+     */
+    fun moveScraper(scraperId: String, moveUp: Boolean)
+
     fun setPluginsEnabled(enabled: Boolean)
 
     fun setGroupStreamsByRepository(enabled: Boolean)
 
     fun getEnabledScrapersForType(type: String): List<PluginScraper>
+
+    fun getEnabledMangaScrapers(): List<PluginScraper>
+
+    suspend fun getMangaChapters(scraper: PluginScraper, mangaId: String, title: String): Result<List<MangaPluginChapter>>
+
+    suspend fun getMangaChapterPages(scraper: PluginScraper, chapterId: String): Result<List<MangaPluginPage>>
 
     suspend fun testScraper(scraperId: String): Result<List<PluginRuntimeResult>>
 
