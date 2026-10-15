@@ -57,8 +57,11 @@ data class HomeCatalogDefinition(
  * addon catalogs the user has installed. Distinct by key, so an addon whose manifest id happened to
  * be `anilist` could not shadow a built-in row.
  */
-fun buildAllHomeCatalogDefinitions(addons: List<ManagedAddon>): List<HomeCatalogDefinition> =
-    (buildAniListCatalogDefinitions() + if (ContentModeRepository.mode.value == ContentMode.Anime) buildHomeCatalogDefinitions(addons) else emptyList())
+fun buildAllHomeCatalogDefinitions(
+    addons: List<ManagedAddon>,
+    mode: ContentMode = ContentModeRepository.mode.value,
+): List<HomeCatalogDefinition> =
+    (buildAniListCatalogDefinitions(mode) + if (mode == ContentMode.Anime) buildHomeCatalogDefinitions(addons) else emptyList())
         .distinctBy(HomeCatalogDefinition::key)
 
 fun buildHomeCatalogRefreshSignature(addons: List<ManagedAddon>): List<String> =

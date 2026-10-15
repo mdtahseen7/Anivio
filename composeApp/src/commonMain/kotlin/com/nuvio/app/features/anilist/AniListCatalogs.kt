@@ -172,10 +172,10 @@ fun aniListCatalogRefreshSignature(): String =
  * The active provider is included for the same reason: AniList and MAL fill the same row keys, so
  * without it a source switch would redisplay the other provider's cached pages.
  */
-internal fun aniListCatalogDescriptorSignature(): String {
+internal fun aniListCatalogDescriptorSignature(mode: ContentMode = ContentModeRepository.mode.value): String {
     val includeAdult = HomeCatalogSettingsRepository.snapshot().adultContentEnabled
     val source = PublicAnimeRouter.activeProvider.name.lowercase()
-    return "anilist-v$ANILIST_CATALOG_VERSION:adult=$includeAdult:src=$source:mode=${ContentModeRepository.mode.value.name}"
+    return "anilist-v$ANILIST_CATALOG_VERSION:adult=$includeAdult:src=$source:mode=${mode.name}"
 }
 
 /**
@@ -186,7 +186,7 @@ internal fun aniListCatalogDescriptorSignature(): String {
  * currently coming from. [aniListCatalogDescriptorSignature] carries the provider, which is what
  * makes these definitions rebuild on a source switch.
  */
-fun buildAniListCatalogDefinitions(): List<HomeCatalogDefinition> {
+fun buildAniListCatalogDefinitions(mode: ContentMode = ContentModeRepository.mode.value): List<HomeCatalogDefinition> {
     val sourceName = runBlocking {
         getString(
             when (PublicAnimeRouter.activeProvider) {
@@ -195,7 +195,7 @@ fun buildAniListCatalogDefinitions(): List<HomeCatalogDefinition> {
             },
         )
     }
-    return activeAniListCatalogs().map { catalog ->
+    return activeAniListCatalogs(mode).map { catalog ->
         val title = runBlocking { getString(catalog.titleResource) }
         HomeCatalogDefinition(
             key = "$ANILIST_ADDON_ID:${catalog.contentType}:${catalog.id}",
@@ -208,7 +208,7 @@ fun buildAniListCatalogDefinitions(): List<HomeCatalogDefinition> {
             type = catalog.contentType,
             catalogId = catalog.id,
             supportsPagination = true,
-            descriptorSignature = aniListCatalogDescriptorSignature(),
+            descriptorSignature = aniListCatalogDescriptorSignature(mode),
             source = HomeCatalogSource.ANILIST,
             defaultHeroSourceEnabled = catalog.isDefaultHeroSource,
             isRecencyBased = catalog.isAiringFeed,
@@ -216,8 +216,8 @@ fun buildAniListCatalogDefinitions(): List<HomeCatalogDefinition> {
     }
 }
 
-private fun activeAniListCatalogs(): List<AniListCatalog> =
-    if (ContentModeRepository.mode.value == ContentMode.Manga) MANGA_CATALOGS else ANILIST_CATALOGS
+private fun activeAniListCatalogs(mode: ContentMode = ContentModeRepository.mode.value): List<AniListCatalog> =
+    if (mode == ContentMode.Manga) MANGA_CATALOGS else ANILIST_CATALOGS
 
 private val MANGA_CATALOGS = listOf(
     AniListCatalog("manga-trending", Res.string.anilist_row_trending, "manga", true) { _, adult ->

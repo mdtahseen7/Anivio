@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -54,6 +56,8 @@ fun DetailFloatingHeader(
     backgroundColor: Color? = null,
     onBack: () -> Unit,
     onToggleSaved: () -> Unit,
+    isNotifySubscribed: Boolean = false,
+    onNotifyClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val useNativeNavigation = LocalUseNativeNavigation.current
@@ -150,6 +154,32 @@ fun DetailFloatingHeader(
                     enabled = interactive,
                     onClick = onToggleSaved,
                 )
+                if (onNotifyClick != null) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clickable(enabled = interactive, onClick = onNotifyClick),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = if (isNotifySubscribed) {
+                                Icons.Default.NotificationsActive
+                            } else {
+                                Icons.Default.NotificationsNone
+                            },
+                            contentDescription = if (isNotifySubscribed) {
+                                stringResource(Res.string.details_notify_subscribed)
+                            } else {
+                                stringResource(Res.string.details_notify_new_episodes)
+                            },
+                            tint = if (isNotifySubscribed) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onBackground
+                            },
+                        )
+                    }
+                }
             }
 
             if (isIos) {

@@ -319,6 +319,30 @@ actual object PluginRepository {
         persist()
     }
 
+    actual fun moveScraper(scraperId: String, moveUp: Boolean) {
+        initialize()
+        _uiState.update { state ->
+            val list = state.scrapers.toMutableList()
+            val index = list.indexOfFirst { it.id == scraperId }
+            if (index < 0) return@update state
+            // Constrained to the same repository so the grouped settings list and the
+            // global order never disagree with each other.
+            val repoUrl = list[index].repositoryUrl
+            val neighbor = if (moveUp) {
+                (index - 1 downTo 0).firstOrNull { list[it].repositoryUrl == repoUrl }
+            } else {
+                (index + 1 until list.size).firstOrNull { list[it].repositoryUrl == repoUrl }
+            } ?: return@update state
+            val moving = list.removeAt(index)
+            // Removal shifts everything after it left by one, which exactly cancels
+            // the +1 a downward move would otherwise need — both cases insert at
+            // the neighbor's pre-removal index.
+            list.add(neighbor, moving)
+            state.copy(scrapers = list)
+        }
+        persist()
+    }
+
     actual fun setPluginsEnabled(enabled: Boolean) {
         initialize()
         _uiState.update { it.copy(pluginsEnabled = enabled) }

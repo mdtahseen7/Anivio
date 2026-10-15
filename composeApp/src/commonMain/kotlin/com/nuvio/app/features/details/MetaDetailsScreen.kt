@@ -93,6 +93,8 @@ import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import com.nuvio.app.features.details.components.DetailActionButtons
 import com.nuvio.app.features.details.components.DetailSecondaryAction
+import com.nuvio.app.features.details.components.MangaReaderHost
+import com.nuvio.app.features.details.components.MangaReaderOverlay
 import com.nuvio.app.features.details.components.DetailAdditionalInfoSection
 import com.nuvio.app.features.details.components.DetailCastSection
 import com.nuvio.app.features.details.components.DetailCommentsSection
@@ -107,6 +109,10 @@ import com.nuvio.app.features.details.components.EpisodeDownloadSheet
 import com.nuvio.app.features.details.components.EpisodeWatchedActionSheet
 import com.nuvio.app.features.details.components.SeasonWatchedActionSheet
 import com.nuvio.app.features.details.components.TrailerPlayerPopup
+import com.nuvio.app.features.anilist.AniListListRepository
+import com.nuvio.app.features.anilist.aniListMediaIdOf
+import com.nuvio.app.features.anilist.parseAniListMediaId
+import com.nuvio.app.features.plugins.PluginRepository
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.library.LibraryRepository
 import com.nuvio.app.features.notifications.EpisodeReleaseNotificationsRepository
@@ -601,7 +607,8 @@ fun MetaDetailsScreen(
                     meta.productionCompanies.isNotEmpty() || meta.networks.isNotEmpty()
                 }
                 val hasAdditionalInfoSection = remember(meta) {
-                    meta.status != null ||
+                    meta.mangaInfo != null ||
+                        meta.status != null ||
                         meta.releaseInfo != null ||
                         meta.runtime != null ||
                         meta.ageRating != null ||
@@ -695,8 +702,11 @@ fun MetaDetailsScreen(
                 }
                 val playText = stringResource(Res.string.action_play)
                 val resumeText = stringResource(Res.string.action_resume)
-                val playButtonLabel = remember(movieProgress, seriesAction, meta.type, hasEpisodes, playText, resumeText) {
+                val readText = stringResource(Res.string.action_read)
+                val isMangaDetails = meta.mangaInfo != null
+                val playButtonLabel = remember(movieProgress, seriesAction, meta.type, hasEpisodes, playText, resumeText, readText, isMangaDetails) {
                     when {
+                        isMangaDetails -> readText
                         (meta.type == "series" || hasEpisodes) && seriesAction != null ->
                             seriesAction.label
                         meta.type != "series" && !hasEpisodes && movieProgress != null ->
@@ -704,8 +714,36 @@ fun MetaDetailsScreen(
                         else -> playText
                     }
                 }
+                val onMangaReadClick: () -> Unit = {
+                    detailsScope.launch {
+                        val provider = PluginRepository.getEnabledMangaScrapers().firstOrNull()
+                            ?: return@launch
+                        val fetched = PluginRepository.getMangaChapters(
+                            scraper = provider,
+                            mangaId = parseAniListMediaId(meta.id)?.toString().orEmpty(),
+                            title = meta.name,
+                        ).getOrDefault(emptyList())
+                        if (fetched.isEmpty()) return@launch
+                        val sorted = fetched.sortedBy { it.number.trim().toDoubleOrNull() ?: Double.MAX_VALUE }
+                        val mediaId = aniListMediaIdOf(meta.id)
+                        val progress = AniListListRepository.snapshot().manga
+                            .firstOrNull { it.media?.id == mediaId }?.progress ?: 0
+                        val initial = sorted.firstOrNull {
+                            (it.number.trim().toDoubleOrNull() ?: 0.0) > progress
+                        } ?: sorted.last()
+                        MangaReaderOverlay.open(
+                            title = meta.name,
+                            metaId = meta.id,
+                            provider = provider,
+                            chapters = sorted,
+                            chapter = initial,
+                        )
+                    }
+                }
                 val onPrimaryPlayClick: () -> Unit = {
-                    when {
+                    if (isMangaDetails) {
+                        onMangaReadClick()
+                    } else when {
                         (meta.type == "series" || hasEpisodes) && seriesAction != null -> {
                             onPlay?.invoke(
                                 meta.type,
@@ -1112,7 +1150,22 @@ fun MetaDetailsScreen(
                             backgroundColor = dominantBackdropColor.takeIf { dominantColorEnabled },
                             onBack = onBackFromDetails,
                             onToggleSaved = toggleSaved,
+                            isNotifySubscribed = isNotifySubscribed,
+                            onNotifyClick = toggleEpisodeNotifications,
                         )
+
+                        // Fullscreen manga reader: one overlay at the root, above
+                        // everything. Never inline in a lazy item, never a Dialog.
+                        MangaReaderOverlay.request?.let { request ->
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .zIndex(3f)
+                                    .background(Color(0xFF0D0E12)),
+                            ) {
+                                MangaReaderHost(request = request)
+                            }
+                        }
 
                         selectedEpisodeForActions
                             ?.takeIf { selectedEpisodeZoomAnchor == null }
@@ -1531,6 +1584,8 @@ private fun DetailHeaderOverlay(
     backgroundColor: Color?,
     onBack: () -> Unit,
     onToggleSaved: () -> Unit,
+    isNotifySubscribed: Boolean,
+    onNotifyClick: (() -> Unit)?,
 ) {
     val headerTarget = if (isHeroCollapsed.value) 1f else 0f
     val headerProgress by animateFloatAsState(
@@ -1563,6 +1618,8 @@ private fun DetailHeaderOverlay(
         backgroundColor = backgroundColor,
         onBack = onBack,
         onToggleSaved = onToggleSaved,
+        isNotifySubscribed = isNotifySubscribed,
+        onNotifyClick = onNotifyClick,
         modifier = Modifier.zIndex(2f),
     )
 }
@@ -1948,23 +2005,6 @@ private fun ConfiguredMetaSections(
                             onClick = onSaveClick,
                             onLongClick = onSaveLongClick,
                         ))
-                        if (onNotifyClick != null) {
-                            add(DetailSecondaryAction(
-                                label = if (isNotifySubscribed) {
-                                    stringResource(Res.string.details_notify_subscribed)
-                                } else {
-                                    stringResource(Res.string.details_notify_new_episodes)
-                                },
-                                shortLabel = stringResource(Res.string.hero_short_notify),
-                                icon = if (isNotifySubscribed) {
-                                    Icons.Default.NotificationsActive
-                                } else {
-                                    Icons.Default.NotificationsNone
-                                },
-                                isActive = isNotifySubscribed,
-                                onClick = onNotifyClick,
-                            ))
-                        }
                         if (hasEpisodes && onDownloadClick != null) {
                             add(DetailSecondaryAction(
                                 label = stringResource(Res.string.hero_download_episodes),

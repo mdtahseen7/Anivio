@@ -67,7 +67,34 @@ data class MangaBakaSeries(
     val artists: List<String> = emptyList(),
     val publishers: List<MangaBakaPublisher> = emptyList(),
     @SerialName("links_v2") val links: List<MangaBakaLink> = emptyList(),
+    val cover: MangaBakaCover? = null,
+) {
+    /**
+     * Row/detail-sized cover first (x350 suits cards and the details header), falling
+     * back to the full-size original. Blank when MangaBaka has no cover record.
+     */
+    fun coverUrl(): String? =
+        cover?.sized?.url?.takeIf { it.isNotBlank() }
+            ?: cover?.raw?.url?.takeIf { it.isNotBlank() }
+}
+
+@Serializable
+data class MangaBakaCover(
+    val raw: MangaBakaCoverFile? = null,
+    /** 350px-wide imgproxy variant; other sizes (x150/x250) exist but are unused. */
+    @SerialName("x350") val sized: MangaBakaCoverSized? = null,
 )
+
+@Serializable
+data class MangaBakaCoverFile(val url: String? = null)
+
+@Serializable
+data class MangaBakaCoverSized(
+    @SerialName("x1") val x1: String? = null,
+    @SerialName("x2") val x2: String? = null,
+) {
+    val url: String? get() = x1?.takeIf { it.isNotBlank() } ?: x2?.takeIf { it.isNotBlank() }
+}
 
 @Serializable
 data class MangaBakaPublisher(val name: String? = null)

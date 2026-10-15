@@ -38,7 +38,7 @@ fun DetailAdditionalInfoSection(
     }
     val rows = buildList {
         meta.mangaInfo?.format?.let { add("Format" to it.lowercase().replaceFirstChar(Char::uppercase)) }
-        meta.mangaInfo?.chapters?.let { add("Chapters" to it.toString()) }
+        // No "Chapters" count row for manga: the dedicated Chapters section below already covers it.
         meta.mangaInfo?.volumes?.let { add("Volumes" to it.toString()) }
         meta.mangaInfo?.authors?.takeIf { it.isNotEmpty() }?.let { add("Author" to it.joinToString(", ")) }
         meta.mangaInfo?.artists?.takeIf { it.isNotEmpty() }?.let { add("Artist" to it.joinToString(", ")) }
@@ -56,22 +56,38 @@ fun DetailAdditionalInfoSection(
             add(stringResource(Res.string.details_original_language) to it.uppercase())
         }
     }
-    if (rows.isNotEmpty()) {
-        DetailSection(
-            title = title,
-            modifier = modifier,
-            showHeader = showHeader,
-        ) {
-            rows.forEachIndexed { index, (label, value) ->
-                DetailInfoRow(
-                    label = label,
-                    value = value,
-                    showDivider = index < rows.lastIndex,
-                )
+    // Manga stacks the details rows and the Chapters section. They must be wrapped in a
+    // Column: DetailSectionContainer hosts this composable in a Box, so two unwrapped
+    // siblings paint on top of each other. The anime/movie path below is untouched.
+    val detailsContent: @Composable () -> Unit = {
+        if (rows.isNotEmpty()) {
+            DetailSection(
+                title = title,
+                modifier = modifier,
+                showHeader = showHeader,
+            ) {
+                rows.forEachIndexed { index, (label, value) ->
+                    DetailInfoRow(
+                        label = label,
+                        value = value,
+                        showDivider = index < rows.lastIndex,
+                    )
+                }
             }
         }
     }
-    if (meta.mangaInfo != null) MangaChaptersSection(meta)
+    if (meta.mangaInfo != null) {
+        androidx.compose.foundation.layout.Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+        ) {
+            // Chapters lead for manga; the detail rows follow.
+            MangaChaptersSection(meta)
+            detailsContent()
+        }
+        return
+    }
+    detailsContent()
 }
 
 @Composable

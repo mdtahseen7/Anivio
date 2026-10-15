@@ -4,11 +4,17 @@ import co.touchlab.kermit.Logger
 import com.nuvio.app.core.time.EpisodeReleaseDatePlatform
 import com.nuvio.app.features.addons.httpGetTextWithHeaders
 import com.nuvio.app.features.addons.httpPostJsonWithHeaders
+import io.ktor.http.encodeURLParameter
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
 
 @Serializable
 data class TvdbEpisode(
@@ -70,6 +76,7 @@ object TvdbClient {
     private val seasonPosters = linkedMapOf<String, CachedValue<String?>>()
     private val episodeCache = linkedMapOf<String, CachedValue<Map<Int, TvdbEpisode>>>()
     private val artworkCache = linkedMapOf<String, CachedValue<TvdbArtwork>>()
+    private val searchCache = linkedMapOf<String, CachedValue<String>>()
 
     /**
      * Best series artwork TVDB has, one request for all slots.
@@ -248,6 +255,60 @@ object TvdbClient {
         }
         return resolved
     }
+
+    /**
+     * Title search for anime `api.ani.zip` has no mapping for. fanart.tv is id-keyed with
+     * no search endpoint, so callers use the returned TVDB series id with the normal
+     * fanart/TVDB artwork path. Best-match only: a normalized exact title wins, otherwise
+     * the first series hit. Null on miss — callers cache the untouched item, so an
+     * unmatchable title costs one search per process.
+     */
+    suspend fun searchSeriesId(title: String): String? {
+        if (!TvdbSettingsRepository.isConfigured || title.isBlank()) return null
+        val query = title.trim()
+        cacheMutex.withLock {
+            searchCache[query]?.takeIf { nowMs() - it.storedAtMs <= CACHE_TTL_MS }?.let { return it.value }
+        }
+        val resolved = runCatching {
+            val payload = authorizedGet("/search?query=${query.encodeURLParameter()}&type=series&limit=5")
+                ?: return null
+            pickSeriesId(payload, query)
+        }.onFailure { error ->
+            log.w(error) { "TVDB title search failed" }
+        }.getOrNull()
+        if (!resolved.isNullOrBlank()) {
+            cacheMutex.withLock {
+                searchCache[query] = CachedValue(resolved, nowMs())
+                while (searchCache.size > CACHE_MAX_ENTRIES) searchCache.remove(searchCache.keys.first())
+            }
+        }
+        return resolved?.takeIf { it.isNotBlank() }
+    }
+
+    private fun pickSeriesId(payload: String, title: String): String? {
+        val results = json.parseToJsonElement(payload).jsonObject["data"] as? JsonArray
+            ?: return null
+        data class Candidate(val id: String, val name: String)
+        val candidates = results.mapNotNull { element ->
+            val obj = element as? JsonObject ?: return@mapNotNull null
+            val type = (obj["type"] as? JsonPrimitive)?.contentOrNull
+            if (type != null && !type.equals("series", ignoreCase = true)) return@mapNotNull null
+            val rawId = (obj["tvdb_id"] as? JsonPrimitive)?.contentOrNull
+                ?: (obj["id"] as? JsonPrimitive)?.contentOrNull
+                ?: return@mapNotNull null
+            // tvdb_id can arrive as "series-12345" or a bare number.
+            val numeric = Regex("\\d+").findAll(rawId).lastOrNull()?.value
+                ?: return@mapNotNull null
+            Candidate(numeric, (obj["name"] as? JsonPrimitive)?.contentOrNull.orEmpty())
+        }
+        if (candidates.isEmpty()) return null
+        val want = normalizeSearchTitle(title)
+        return candidates.firstOrNull { normalizeSearchTitle(it.name) == want }?.id
+            ?: candidates.first().id
+    }
+
+    private fun normalizeSearchTitle(value: String): String =
+        value.lowercase().replace(Regex("[^a-z0-9]+"), " ").replace(Regex("\\s+"), " ").trim()
 
     private suspend fun authorizedGet(path: String): String? {
         val bearer = bearerToken() ?: return null

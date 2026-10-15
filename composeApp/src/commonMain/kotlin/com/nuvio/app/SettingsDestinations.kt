@@ -12,6 +12,9 @@ import com.nuvio.app.features.collection.CollectionRepository
 import com.nuvio.app.features.collection.FolderDetailRepository
 import com.nuvio.app.features.collection.FolderDetailScreen
 import com.nuvio.app.features.downloads.DownloadItem
+import com.nuvio.app.features.downloads.MangaDownloadsRepository
+import com.nuvio.app.features.details.components.MangaReaderOverlay
+import com.nuvio.app.features.plugins.MangaPluginChapter
 import com.nuvio.app.features.downloads.DownloadsScreen
 import com.nuvio.app.features.home.HomeCatalogSection
 import com.nuvio.app.features.home.MetaPreview
@@ -79,6 +82,19 @@ internal fun DownloadsDestination(
     DownloadsScreen(
         onBack = onBack,
         onOpenDownload = onOpenDownload,
+        onOpenMangaDownload = { item ->
+            MangaReaderOverlay.openLocal(
+                title = item.title,
+                metaId = item.parentMetaId,
+                chapter = MangaPluginChapter(
+                    id = item.chapterId,
+                    number = item.chapterNumber,
+                    title = item.chapterTitle,
+                ),
+                localPageUris = MangaDownloadsRepository.localPageUris(item),
+            )
+            navController.navigate(DetailRoute(type = "manga", id = item.parentMetaId, title = item.title))
+        },
         onNavigateToShow = if (useNativeNavigation) {
             { showId, title -> navController.navigate(DownloadShowRoute(showId, title)) }
         } else {
@@ -97,6 +113,7 @@ internal fun DownloadShowDestination(
     DownloadsScreen(
         onBack = onBack,
         onOpenDownload = onOpenDownload,
+        onOpenMangaDownload = {},
         initialShowId = route.showId,
         onBackFromShow = onBack,
     )

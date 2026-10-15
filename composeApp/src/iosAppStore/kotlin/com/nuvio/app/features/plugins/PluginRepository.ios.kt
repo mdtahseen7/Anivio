@@ -31,6 +31,8 @@ actual object PluginRepository {
 
     actual fun toggleScraper(scraperId: String, enabled: Boolean) = Unit
 
+    actual fun moveScraper(scraperId: String, moveUp: Boolean) = Unit
+
     actual fun setPluginsEnabled(enabled: Boolean) = Unit
 
     actual fun setGroupStreamsByRepository(enabled: Boolean) = Unit

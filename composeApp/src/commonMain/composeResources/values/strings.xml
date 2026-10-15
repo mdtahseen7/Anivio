@@ -22,6 +22,7 @@
     <string name="action_ok">OK</string>
     <string name="action_play">Play</string>
     <string name="action_previous">Previous</string>
+    <string name="action_read">Read</string>
     <string name="action_remove">Remove</string>
     <string name="action_remove_anyway">Remove anyway</string>
     <string name="action_reorder">Reorder</string>
@@ -2514,4 +2515,17 @@
     <string name="settings_licenses_attributions_fanart_body">Anivio uses fanart.tv for clear logos and background artwork on hero cards. That artwork is contributed by the fanart.tv community. Anivio is not affiliated with or endorsed by fanart.tv.</string>
     <string name="settings_licenses_attributions_tvdb_title">TheTVDB</string>
     <string name="settings_licenses_attributions_tvdb_body">Metadata and artwork provided by TheTVDB, used here for season posters, backgrounds and clear logos. Please consider adding missing information or subscribing to support them. Anivio is not affiliated with or endorsed by TheTVDB.</string>
+    <string name="settings_licenses_attributions_mangabaka_title">MangaBaka</string>
+    <string name="settings_licenses_attributions_mangabaka_body">Anivio uses the MangaBaka API for manga metadata, cover artwork, authors, publishers and cross-provider ids. MangaBaka data is licensed CC BY-NC-SA 4.0; upstream data remains subject to each provider's own terms. Anivio is not affiliated with or endorsed by MangaBaka.</string>
+    <string name="compose_settings_page_reader">Reader</string>
+    <string name="compose_settings_root_reader_description">Manga reader preferences</string>
+    <string name="settings_reader_section_general">READER</string>
+    <string name="settings_reader_coming_soon">More reader settings are coming soon.</string>
+    <string name="settings_reader_section_mode">READING MODE</string>
+    <string name="settings_reader_mode_webtoon">Webtoon</string>
+    <string name="settings_reader_mode_webtoon_description">Continuous vertical scroll, one long strip.</string>
+    <string name="settings_reader_mode_ltr">Left to right</string>
+    <string name="settings_reader_mode_ltr_description">Swipe pages left to right.</string>
+    <string name="settings_reader_mode_rtl">Right to left</string>
+    <string name="settings_reader_mode_rtl_description">Classic manga direction, swipe right to left.</string>
 </resources>

@@ -23,6 +23,12 @@ expect object PluginRepository {
 
     fun toggleScraper(scraperId: String, enabled: Boolean)
 
+    /**
+     * Moves a provider one step within its own repository group. The manga server
+     * dropdown and stream resolution follow this order.
+     */
+    fun moveScraper(scraperId: String, moveUp: Boolean)
+
     fun setPluginsEnabled(enabled: Boolean)
 
     fun setGroupStreamsByRepository(enabled: Boolean)

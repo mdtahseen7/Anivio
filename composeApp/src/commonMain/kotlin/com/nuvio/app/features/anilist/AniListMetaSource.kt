@@ -445,6 +445,8 @@ object AniListMetaSource {
             description = description ?: mangaBaka.description?.stripAniListMarkup(),
             status = status ?: mangaBaka.status?.humanizeMangaBakaStatus(),
             country = country ?: mangaBaka.originalLanguage?.takeIf(String::isNotBlank),
+            // Manga posters come from MangaBaka; AniList's cover stays as the fallback.
+            poster = mangaBaka.coverUrl() ?: poster,
             writer = (writer + authors + artists).distinct(),
             productionCompanies = (productionCompanies + publishers.map(::MetaCompany)).distinctBy { it.name.lowercase() },
             links = (links + externalLinks).distinctBy { it.url },

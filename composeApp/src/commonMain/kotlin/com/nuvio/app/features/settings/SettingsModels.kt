@@ -26,6 +26,7 @@ import nuvio.composeapp.generated.resources.compose_settings_page_notifications
 import nuvio.composeapp.generated.resources.compose_settings_page_playback
 import nuvio.composeapp.generated.resources.compose_settings_page_plugins
 import nuvio.composeapp.generated.resources.compose_settings_page_poster_customization
+import nuvio.composeapp.generated.resources.compose_settings_page_reader
 import nuvio.composeapp.generated.resources.compose_settings_page_root
 import nuvio.composeapp.generated.resources.compose_settings_page_streams
 import nuvio.composeapp.generated.resources.compose_settings_page_about
@@ -78,6 +79,11 @@ internal enum class SettingsPage(
     ),
     Playback(
         titleRes = Res.string.compose_settings_page_playback,
+        category = SettingsCategory.General,
+        parentPage = Root,
+    ),
+    Reader(
+        titleRes = Res.string.compose_settings_page_reader,
         category = SettingsCategory.General,
         parentPage = Root,
     ),

@@ -12,6 +12,7 @@ import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Link
+import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.People
@@ -36,6 +37,7 @@ import nuvio.composeapp.generated.resources.compose_settings_page_licenses_attri
 import nuvio.composeapp.generated.resources.compose_settings_page_notifications
 import nuvio.composeapp.generated.resources.compose_settings_page_playback
 import nuvio.composeapp.generated.resources.compose_settings_page_privacy_policy
+import nuvio.composeapp.generated.resources.compose_settings_page_reader
 import nuvio.composeapp.generated.resources.compose_settings_page_about
 import nuvio.composeapp.generated.resources.compose_settings_root_account_description
 import nuvio.composeapp.generated.resources.compose_settings_root_appearance_description
@@ -48,6 +50,7 @@ import nuvio.composeapp.generated.resources.compose_settings_root_general_sectio
 import nuvio.composeapp.generated.resources.compose_settings_root_integrations_description
 import nuvio.composeapp.generated.resources.compose_settings_root_notifications_description
 import nuvio.composeapp.generated.resources.compose_settings_root_privacy_policy_description
+import nuvio.composeapp.generated.resources.compose_settings_root_reader_description
 import nuvio.composeapp.generated.resources.compose_settings_root_switch_profile_description
 import nuvio.composeapp.generated.resources.compose_settings_root_switch_profile_title
 import nuvio.composeapp.generated.resources.compose_settings_root_tracking_description
@@ -68,6 +71,7 @@ import org.jetbrains.compose.resources.stringResource
 internal fun LazyListScope.settingsRootContent(
     isTablet: Boolean,
     onPlaybackClick: () -> Unit,
+    onReaderClick: () -> Unit,
     onAppearanceClick: () -> Unit,
     onAdvancedClick: () -> Unit,
     onNotificationsClick: () -> Unit,
@@ -161,6 +165,14 @@ internal fun LazyListScope.settingsRootContent(
                         icon = Icons.Rounded.PlayArrow,
                         isTablet = isTablet,
                         onClick = onPlaybackClick,
+                    )
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsNavigationRow(
+                        title = stringResource(Res.string.compose_settings_page_reader),
+                        description = stringResource(Res.string.compose_settings_root_reader_description),
+                        icon = Icons.Rounded.MenuBook,
+                        isTablet = isTablet,
+                        onClick = onReaderClick,
                     )
                     SettingsGroupDivider(isTablet = isTablet)
                     SettingsNavigationRow(

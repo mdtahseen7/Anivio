@@ -51,6 +51,7 @@ object HomeRepository {
     val reloadGeneration: StateFlow<Int> = _reloadGeneration.asStateFlow()
 
     private var activeJob: Job? = null
+    private var mangaWarmJob: Job? = null
     private var activeRequestKey: String? = null
     private var currentRequestKey: String? = null
     private var currentDefinitions: List<HomeCatalogDefinition> = emptyList()
@@ -68,6 +69,10 @@ object HomeRepository {
         val requests = buildAllHomeCatalogDefinitions(activeAddons)
         currentDefinitions = requests
         val requestCacheKeys = requests.mapTo(mutableSetOf(), HomeCatalogDefinition::cacheKey)
+        // Keep the other mode's rows in memory too: toggling Anime <-> Manga must find
+        // warm rows instead of re-fetching them on every switch.
+        val idleMode = if (ContentModeRepository.mode.value == ContentMode.Manga) ContentMode.Anime else ContentMode.Manga
+        requestCacheKeys += buildAllHomeCatalogDefinitions(activeAddons, idleMode).map(HomeCatalogDefinition::cacheKey)
         cachedSections = cachedSections.filterKeys(requestCacheKeys::contains)
         val requestKey = requests.joinToString(separator = "|", transform = HomeCatalogDefinition::cacheKey)
         currentRequestKey = requestKey
@@ -95,6 +100,13 @@ object HomeRepository {
         }
 
         activeJob?.cancel()
+        // Stale-while-revalidate: paint matching in-memory rows synchronously so a toggle
+        // back to warm rows shows content instantly; the network job below then refreshes
+        // behind it instead of behind skeletons. No-op when nothing is cached.
+        publishCurrentState(
+            isLoading = true,
+            requestKey = requestKey,
+        )
         _uiState.update { it.copy(isLoading = true, errorMessage = null) }
         activeJob = scope.launch {
             // Paint last session's rows first: the network refresh below then happens behind
@@ -168,6 +180,62 @@ object HomeRepository {
                 requestKey = requestKey,
             )
             persistCache()
+            if (ContentModeRepository.mode.value == ContentMode.Anime) {
+                prefetchMangaRows(activeAddons)
+            }
+        }
+    }
+
+    /**
+     * Background-warms the manga home rows while the user browses anime, so the first
+     * Anime → Manga toggle paints instantly instead of paying a cold fetch plus a
+     * hero-artwork storm. Never touches [_uiState], jobs or request keys: it only fills
+     * [cachedSections], the hero-artwork cache and the disk cache. No-op once warm.
+     */
+    fun prefetchMangaRows(addons: List<ManagedAddon>) {
+        if (ContentModeRepository.mode.value != ContentMode.Anime) return
+        val mangaDefinitions = buildAllHomeCatalogDefinitions(addons.enabledAddons(), ContentMode.Manga)
+        val missing = mangaDefinitions.filter { !cachedSections.containsKey(it.cacheKey) }
+        if (missing.isEmpty()) return
+        mangaWarmJob?.cancel()
+        mangaWarmJob = scope.launch {
+            val pages = try {
+                AniListCatalogSource.resolveHomeRows(
+                    missing.map(HomeCatalogDefinition::catalogId),
+                    HOME_CATALOG_PREVIEW_FETCH_LIMIT,
+                    false,
+                )
+            } catch (_: Throwable) {
+                return@launch
+            }
+            val warmedItems = mutableListOf<MetaPreview>()
+            missing.forEach { definition ->
+                val page = pages[definition.catalogId] ?: return@forEach
+                if (page.items.isEmpty()) return@forEach
+                warmedItems += page.items
+                cachedSections = cachedSections + (definition.cacheKey to HomeCatalogSection(
+                    key = definition.key,
+                    title = definition.defaultTitle,
+                    subtitle = definition.addonName,
+                    addonName = definition.addonName,
+                    target = CatalogTarget.AniList(
+                        catalogId = definition.catalogId,
+                        contentType = definition.type,
+                        supportsPagination = definition.supportsPagination,
+                    ),
+                    items = page.items,
+                    availableItemCount = page.rawItemCount.takeIf { it > 0 } ?: page.items.size,
+                    hasMore = page.items.isNotEmpty() && definition.supportsPagination && page.nextSkip != null,
+                ))
+            }
+            if (warmedItems.isEmpty()) return@launch
+            // Move the toggle-time artwork storm earlier. Misses cache as misses, so each
+            // title pays this once per install.
+            try {
+                AniListHeroArtwork.resolve(warmedItems)
+            } catch (_: Throwable) {
+            }
+            persistCache()
         }
     }
 
@@ -187,6 +255,8 @@ object HomeRepository {
     fun clear() {
         activeJob?.cancel()
         activeJob = null
+        mangaWarmJob?.cancel()
+        mangaWarmJob = null
         activeRequestKey = null
         currentRequestKey = null
         currentDefinitions = emptyList()
@@ -269,6 +339,7 @@ object HomeRepository {
                 )
             }
 
+        val heroMode = ContentModeRepository.mode.value
         val catalogHeroItems = if (snapshot.heroEnabled) {
             val heroRandom = Random((requestKey?.hashCode() ?: 0).absoluteValue + 1)
             currentDefinitions
@@ -276,6 +347,9 @@ object HomeRepository {
                 .mapNotNull { definition -> cachedSections[definition.cacheKey] }
                 .map { section -> section.withReleaseFilter() }
                 .flatMap { section -> section.items }
+                // Never show the other mode's heroes while its rows load: without this the
+                // hero sits on stale anime art for the whole manga fetch.
+                .filter { item -> if (heroMode == ContentMode.Manga) item.type == "manga" else item.type != "manga" }
                 .distinctBy { item -> "${item.type}:${item.id}" }
                 .shuffled(heroRandom)
                 .take(HOME_HERO_ITEM_LIMIT)
@@ -284,7 +358,11 @@ object HomeRepository {
         }
         lastPublishedCatalogHeroEmpty = snapshot.heroEnabled && catalogHeroItems.isEmpty()
         val heroItems = if (snapshot.heroEnabled) {
-            catalogHeroItems.ifEmpty { cachedCollectionHeroItems }
+            catalogHeroItems.ifEmpty {
+                // Collection heroes are anime-only; in manga mode an empty hero beats a
+                // stale anime one while the rows load.
+                cachedCollectionHeroItems.takeIf { heroMode == ContentMode.Anime }.orEmpty()
+            }
         } else {
             emptyList()
         }
