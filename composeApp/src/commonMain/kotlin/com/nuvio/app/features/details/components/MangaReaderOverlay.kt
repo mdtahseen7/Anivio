@@ -16,6 +16,7 @@ data class MangaReaderRequest(
     val title: String,
     val metaId: String,
     val provider: PluginScraper?,
+    val providerId: String,
     val chapters: List<MangaPluginChapter>,
     val chapter: MangaPluginChapter,
     val localPageUris: List<String>? = null,
@@ -33,12 +34,20 @@ object MangaReaderOverlay {
         chapter: MangaPluginChapter,
     ) {
         if (chapters.isEmpty()) return
-        request = MangaReaderRequest(title, metaId, provider, chapters, chapter)
+        request = MangaReaderRequest(
+            title = title,
+            metaId = metaId,
+            provider = provider,
+            providerId = provider.id,
+            chapters = chapters,
+            chapter = chapter,
+        )
     }
 
     fun openLocal(
         title: String,
         metaId: String,
+        providerId: String,
         chapter: MangaPluginChapter,
         localPageUris: List<String>,
     ) {
@@ -47,6 +56,7 @@ object MangaReaderOverlay {
             title = title,
             metaId = metaId,
             provider = null,
+            providerId = providerId,
             chapters = listOf(chapter),
             chapter = chapter,
             localPageUris = localPageUris,

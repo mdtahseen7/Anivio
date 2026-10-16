@@ -40,12 +40,14 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,12 +70,16 @@ import com.nuvio.app.core.ui.PlatformBackHandler
 import com.nuvio.app.features.anilist.recordAniListMangaChapterRead
 import com.nuvio.app.features.details.MangaReaderSettingsRepository
 import com.nuvio.app.features.details.MangaReadingMode
+import com.nuvio.app.features.details.MangaReaderProgressRepository
+import com.nuvio.app.features.details.mangaReaderProgressKey
 import com.nuvio.app.features.plugins.MangaPluginChapter
 import com.nuvio.app.features.plugins.MangaPluginPage
 import com.nuvio.app.features.plugins.PluginRepository
 import com.nuvio.app.features.plugins.PluginScraper
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.distinctUntilChanged
+import androidx.compose.runtime.snapshotFlow
 
 private const val CONTROLS_AUTO_HIDE_MS = 3000L
 private const val READER_SHEET_SCRIM = 0xFF16181D
@@ -112,6 +118,11 @@ internal fun MangaReaderHost(request: MangaReaderRequest) {
         loadingPages = false
     }
     PlatformBackHandler(enabled = true, onBack = MangaReaderOverlay::close)
+    val progressKey = mangaReaderProgressKey(
+        metaId = request.metaId,
+        providerId = request.providerId,
+        chapterId = request.chapter.id,
+    )
     MangaReaderDialog(
         title = request.title,
         sourceName = request.provider?.name ?: "Offline",
@@ -119,6 +130,7 @@ internal fun MangaReaderHost(request: MangaReaderRequest) {
         chapters = request.chapters,
         pages = pages,
         loading = loadingPages,
+        progressKey = progressKey,
         onDismiss = MangaReaderOverlay::close,
         onSelectChapter = MangaReaderOverlay::selectChapter,
         onChapterCompleted = { completed ->
@@ -136,6 +148,7 @@ internal fun MangaReaderDialog(
     chapters: List<MangaPluginChapter>,
     pages: List<MangaPluginPage>,
     loading: Boolean,
+    progressKey: String,
     onDismiss: () -> Unit,
     onSelectChapter: (MangaPluginChapter) -> Unit,
     onChapterCompleted: (MangaPluginChapter) -> Unit,
@@ -152,14 +165,62 @@ internal fun MangaReaderDialog(
     // Pages currently pinched past 1x. The pager locks swiping while any is zoomed so
     // pan gestures never fight page turns.
     val zoomedPages = remember { mutableStateListOf<Int>() }
-    var completionReported by remember(chapter.id) { mutableStateOf(false) }
+    var positionRestored by remember(progressKey) { mutableStateOf(false) }
+    var restoredMode by remember(progressKey) { mutableStateOf<MangaReadingMode?>(null) }
+    var completionReported by remember(progressKey) { mutableStateOf(false) }
+    val latestPositionRestored by androidx.compose.runtime.rememberUpdatedState(positionRestored)
 
-    LaunchedEffect(chapter.id, mode) {
+    fun currentPosition(forMode: MangaReadingMode = mode): Pair<Int, Int> = if (forMode == MangaReadingMode.WEBTOON) {
+        listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
+    } else {
+        pagerState.currentPage to 0
+    }
+
+    fun saveCurrentPosition(forMode: MangaReadingMode = mode) {
+        if (!latestPositionRestored || pages.isEmpty()) return
+        val (pageIndex, offset) = currentPosition(forMode)
+        MangaReaderProgressRepository.save(progressKey, pageIndex, offset)
+    }
+
+    LaunchedEffect(progressKey, pages.size, mode) {
         zoomedPages.clear()
-        if (pages.isNotEmpty()) {
-            if (isPager) pagerState.scrollToPage(0) else listState.scrollToItem(0)
+        if (pages.isEmpty()) {
+            positionRestored = false
+            return@LaunchedEffect
         }
+
+        if (positionRestored && restoredMode != null && restoredMode != mode) {
+            saveCurrentPosition(restoredMode ?: mode)
+        }
+
+        val saved = MangaReaderProgressRepository.progressFor(progressKey)
+        val pageIndex = saved?.pageIndex?.coerceIn(0, pages.lastIndex) ?: 0
+        if (isPager) {
+            pagerState.scrollToPage(pageIndex)
+        } else {
+            listState.scrollToItem(pageIndex, saved?.webtoonOffset?.coerceAtLeast(0) ?: 0)
+        }
+        restoredMode = mode
+        positionRestored = true
         controlsVisible = true
+    }
+
+    LaunchedEffect(progressKey, pages.size, mode, positionRestored) {
+        if (!positionRestored || pages.isEmpty()) return@LaunchedEffect
+        snapshotFlow { currentPosition(mode) }
+            .distinctUntilChanged()
+            .collect { (pageIndex, offset) ->
+                MangaReaderProgressRepository.save(progressKey, pageIndex, offset)
+            }
+    }
+
+    DisposableEffect(progressKey, mode, pages.size) {
+        onDispose {
+            if (latestPositionRestored && pages.isNotEmpty()) {
+                val (pageIndex, offset) = currentPosition(mode)
+                MangaReaderProgressRepository.save(progressKey, pageIndex, offset)
+            }
+        }
     }
 
     // Focus mode: controls hide a few seconds after the last tap or page turn.
@@ -173,10 +234,17 @@ internal fun MangaReaderDialog(
         delay(CONTROLS_AUTO_HIDE_MS)
         controlsVisible = false
     }
-    LaunchedEffect(currentPage, pages.size, chapter.id) {
-        if (!completionReported && pages.isNotEmpty() && currentPage == pages.size) {
-            completionReported = true
-            onChapterCompleted(chapter)
+    fun reportChapterCompletedOnce() {
+        if (completionReported || pages.isEmpty()) return
+        completionReported = true
+        val (pageIndex, offset) = currentPosition()
+        MangaReaderProgressRepository.save(progressKey, pageIndex, offset, completed = true)
+        onChapterCompleted(chapter)
+    }
+
+    LaunchedEffect(currentPage, pages.size, progressKey, positionRestored) {
+        if (positionRestored && pages.isNotEmpty() && currentPage == pages.size) {
+            reportChapterCompletedOnce()
         }
     }
 
@@ -191,8 +259,14 @@ internal fun MangaReaderDialog(
         val currentNumber = chapterNumberOf(chapter)
         val targetNumber = chapterNumberOf(target)
         if (currentNumber != null && targetNumber != null && targetNumber > currentNumber) {
-            onChapterCompleted(chapter)
+            reportChapterCompletedOnce()
         }
+        saveCurrentPosition()
+        onSelectChapter(target)
+    }
+
+    fun selectPreviousChapter(target: MangaPluginChapter) {
+        saveCurrentPosition()
         onSelectChapter(target)
     }
 
@@ -269,7 +343,7 @@ internal fun MangaReaderDialog(
                         previous = previous,
                         next = next,
                         rightToLeft = mode == MangaReadingMode.RIGHT_TO_LEFT,
-                        onPrevious = { previous?.let(onSelectChapter) },
+                        onPrevious = { previous?.let(::selectPreviousChapter) },
                         onNext = { next?.let(::goToChapter) },
                     )
                 }

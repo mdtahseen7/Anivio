@@ -728,7 +728,18 @@ fun MetaDetailsScreen(
                         val mediaId = aniListMediaIdOf(meta.id)
                         val progress = AniListListRepository.snapshot().manga
                             .firstOrNull { it.media?.id == mediaId }?.progress ?: 0
-                        val initial = sorted.firstOrNull {
+                        MangaReaderProgressRepository.ensureLoaded()
+                        val resumed = sorted
+                            .mapNotNull { candidate ->
+                                MangaReaderProgressRepository.progressFor(
+                                    mangaReaderProgressKey(meta.id, provider.id, candidate.id),
+                                )?.takeIf { entry ->
+                                    !entry.completed && (entry.pageIndex > 0 || entry.webtoonOffset > 0)
+                                }?.let { entry -> candidate to entry }
+                            }
+                            .maxByOrNull { (_, entry) -> entry.updatedAtEpochMs }
+                            ?.first
+                        val initial = resumed ?: sorted.firstOrNull {
                             (it.number.trim().toDoubleOrNull() ?: 0.0) > progress
                         } ?: sorted.last()
                         MangaReaderOverlay.open(

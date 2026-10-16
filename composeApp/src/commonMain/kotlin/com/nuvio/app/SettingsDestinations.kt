@@ -86,6 +86,7 @@ internal fun DownloadsDestination(
             MangaReaderOverlay.openLocal(
                 title = item.title,
                 metaId = item.parentMetaId,
+                providerId = item.providerId,
                 chapter = MangaPluginChapter(
                     id = item.chapterId,
                     number = item.chapterNumber,
