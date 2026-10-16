@@ -133,6 +133,7 @@ open class MainActivity : AppCompatActivity() {
         LibraryDisplaySettingsStorage.initialize(applicationContext)
         ContinueWatchingPreferencesStorage.initialize(applicationContext)
         com.nuvio.app.features.details.MangaReaderSettingsStorage.initialize(applicationContext)
+        com.nuvio.app.features.details.MangaReaderProgressStorage.initialize(applicationContext)
         ResumePromptStorage.initialize(applicationContext)
         ContinueWatchingEnrichmentStorage.initialize(applicationContext)
         EpisodeReleaseNotificationsStorage.initialize(applicationContext)
