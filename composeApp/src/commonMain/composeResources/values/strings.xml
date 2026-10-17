@@ -635,6 +635,8 @@
     <string name="detail_comments_spoiler_card">This comment contains spoilers.</string>
     <string name="detail_comments_spoiler_hidden_sheet">This comment contains spoilers and has been hidden.</string>
     <string name="detail_comments_title">Comments</string>
+    <string name="detail_tab_info">Info</string>
+    <string name="detail_tab_comments">Comments</string>
     <string name="detail_tab_trailer">Trailer</string>
     <string name="detail_trailer_category_count">%1$s (%2$d)</string>
     <string name="detail_trailers_title">Trailers</string>
@@ -2332,6 +2334,10 @@
     <string name="plugins_provider_version">v%1$s</string>
     <string name="plugins_repo_fallback_label">Plugin repository</string>
     <string name="plugins_repo_version">Version %1$s</string>
+    <string name="plugins_reorder_title">Change provider order</string>
+    <string name="plugins_reorder_hint">Tap and hold the handle to change this provider’s sequence. Provider details stay visible while you reorder.</string>
+    <string name="plugins_reorder_up">Move up</string>
+    <string name="plugins_reorder_down">Move down</string>
     <string name="plugins_repository_already_installed">That plugin repository is already installed.</string>
     <string name="plugins_repository_install_failed">Unable to install plugin repository</string>
     <string name="plugins_repository_refresh_failed">Unable to refresh repository</string>
@@ -2343,6 +2349,16 @@
     <string name="plugins_test_failed">Provider test failed</string>
     <string name="plugins_test_results_count">Test results (%1$d)</string>
     <string name="plugins_tmdb_required_message">Plugin providers require a TMDB API key. Set it on the TMDB screen or plugin providers will not work correctly.</string>
+    <string name="profile_share_anilist_background">AniList background</string>
+    <string name="profile_share_anilist_avatar">AniList avatar</string>
+    <string name="profile_share_anilist_username">Show AniList username</string>
+    <string name="profile_share_mal_username">Show MAL username</string>
+    <string name="profile_share_avatar">Avatar</string>
+    <string name="profile_share_avatar_anivio">Anivio</string>
+    <string name="profile_share_avatar_hidden">Hide</string>
+    <string name="profile_share_background_opacity">Background opacity</string>
+    <string name="profile_share_show_rank">Show rank</string>
+    <string name="profile_share_show_stats">Show stats</string>
     <string name="search_error_no_results_for_catalog">No search results returned for %1$s.</string>
     <string name="settings_playback_introdb_invalid_key">Invalid API Key or connection failed</string>
     <string name="streams_plugin_repository_fallback">Plugin repository</string>
