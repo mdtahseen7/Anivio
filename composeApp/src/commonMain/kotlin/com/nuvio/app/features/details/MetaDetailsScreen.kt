@@ -100,7 +100,7 @@ import com.nuvio.app.features.details.components.DetailAdditionalInfoSection
 import com.nuvio.app.features.details.components.DetailCastSection
 import com.nuvio.app.features.details.components.DetailContentTab
 import com.nuvio.app.features.details.components.DetailContentTabBar
-import com.nuvio.app.features.details.components.AnimeCommunityCommentsSection
+import com.nuvio.app.features.details.components.DantotsuCommentsSection
 import com.nuvio.app.features.details.components.DetailFloatingHeader
 import com.nuvio.app.features.details.components.DetailHero
 import com.nuvio.app.features.details.components.DetailMetaInfo
@@ -1870,7 +1870,7 @@ private fun LazyListScope.configuredMetaSectionItems(
                 horizontalPadding = contentHorizontalPadding,
                 contentMaxWidth = contentMaxWidth,
             ) {
-                AnimeCommunityCommentsSection(meta = meta)
+                DantotsuCommentsSection(meta = meta)
             }
         }
         return
