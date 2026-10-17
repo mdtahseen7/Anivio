@@ -57,6 +57,7 @@ import com.nuvio.app.features.anilist.AniListAuthStorage
 import com.nuvio.app.features.anilist.AniListCacheStorage
 import com.nuvio.app.features.mal.MalAuthStorage
 import com.nuvio.app.features.mal.MalCacheStorage
+import com.nuvio.app.features.profile.ProfileShareSettingsStorage
 import com.nuvio.app.features.discord.DiscordAuthStorage
 import com.nuvio.app.features.discord.DiscordBootstrap
 import com.nuvio.app.features.mal.MalTrackingBootstrap
@@ -111,6 +112,7 @@ open class MainActivity : AppCompatActivity() {
         ProfileStorage.initialize(applicationContext)
         com.nuvio.app.features.profile.ProfileStatsStorage.initialize(applicationContext)
         com.nuvio.app.features.profile.ProfileShare.initialize(applicationContext)
+        ProfileShareSettingsStorage.initialize(applicationContext)
         AvatarStorage.initialize(applicationContext)
         ProfilePinCacheStorage.initialize(applicationContext)
         MemberAssetStorage.initialize(applicationContext)

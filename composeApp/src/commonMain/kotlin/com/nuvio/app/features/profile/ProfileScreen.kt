@@ -52,6 +52,8 @@ import com.nuvio.app.core.ui.NuvioScreenHeader
 import com.nuvio.app.core.ui.NuvioSurfaceCard
 import com.nuvio.app.core.ui.nuvio
 import com.nuvio.app.features.anilist.AniListStatisticsRepository
+import com.nuvio.app.features.anilist.AniListAuthRepository
+import com.nuvio.app.features.mal.MalAuthSettings
 import com.nuvio.app.features.profile.components.AchievementBadge
 import com.nuvio.app.features.profile.components.AchievementDetail
 import com.nuvio.app.features.profile.components.ActivityHeatmap
@@ -83,9 +85,21 @@ fun ProfileScreen(
     val uiState by ProfileStatsRepository.uiState.collectAsStateWithLifecycle()
     val profileState by ProfileRepository.state.collectAsStateWithLifecycle()
     val avatars by AvatarRepository.avatars.collectAsStateWithLifecycle()
+    val shareSettings by remember {
+        ProfileShareSettingsRepository.ensureLoaded()
+        ProfileShareSettingsRepository.settings
+    }.collectAsStateWithLifecycle()
+    val aniListAuth by remember {
+        AniListAuthRepository.ensureLoaded()
+        AniListAuthRepository.uiState
+    }.collectAsStateWithLifecycle()
+    val malAuth by MalAuthSettings.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         ProfileStatsRepository.start()
+        ProfileShareSettingsRepository.ensureLoaded()
+        MalAuthSettings.ensureLoaded()
+        AniListAuthRepository.ensureLoaded()
         AniListStatisticsRepository.refresh()
         AvatarRepository.refreshAvatars()
     }
@@ -253,7 +267,11 @@ fun ProfileScreen(
         ) {
             ProfileShareSheet(
                 stats = stats,
-                profileName = profileState.activeProfile?.name ?: "Anivio",
+                profile = profileState.activeProfile,
+                avatars = avatars,
+                aniListAuth = aniListAuth,
+                malAuth = malAuth,
+                settings = shareSettings,
                 onDismiss = { showShareCard = false },
             )
         }

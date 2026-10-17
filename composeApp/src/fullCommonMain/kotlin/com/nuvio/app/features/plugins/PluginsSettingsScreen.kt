@@ -1,18 +1,21 @@
 package com.nuvio.app.features.plugins
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.DragHandle
 import androidx.compose.material.icons.rounded.Extension
-import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.HorizontalDivider
@@ -21,6 +24,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -39,6 +43,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.core.ui.NuvioIconActionButton
 import com.nuvio.app.core.ui.NuvioInfoBadge
 import com.nuvio.app.core.ui.NuvioInputField
+import com.nuvio.app.core.ui.NuvioModalBottomSheet
 import com.nuvio.app.core.ui.NuvioPrimaryButton
 import com.nuvio.app.core.ui.NuvioSectionLabel
 import com.nuvio.app.core.ui.NuvioSurfaceCard
@@ -74,6 +79,10 @@ import nuvio.composeapp.generated.resources.plugins_provider_no_description
 import nuvio.composeapp.generated.resources.plugins_provider_version
 import nuvio.composeapp.generated.resources.plugins_repo_fallback_label
 import nuvio.composeapp.generated.resources.plugins_repo_version
+import nuvio.composeapp.generated.resources.plugins_reorder_down
+import nuvio.composeapp.generated.resources.plugins_reorder_hint
+import nuvio.composeapp.generated.resources.plugins_reorder_title
+import nuvio.composeapp.generated.resources.plugins_reorder_up
 import nuvio.composeapp.generated.resources.plugins_section_add_repo
 import nuvio.composeapp.generated.resources.plugins_section_installed_repos
 import nuvio.composeapp.generated.resources.plugins_section_overview
@@ -108,6 +117,7 @@ fun PluginsSettingsPageContent(
 
     var configuringScraper by remember { mutableStateOf<PluginScraper?>(null) }
     var configuringLayout by remember { mutableStateOf<String?>(null) }
+    var reorderingScraperId by remember { mutableStateOf<String?>(null) }
 
     val sortedRepos = remember(uiState.repositories) {
         uiState.repositories.sortedBy { it.name.lowercase() }
@@ -436,16 +446,7 @@ fun PluginsSettingsPageContent(
                                 }
                             },
                             onToggle = { PluginRepository.toggleScraper(scraper.id, it) },
-                            onMoveUp = if (index > 0) {
-                                { PluginRepository.moveScraper(scraper.id, moveUp = true) }
-                            } else {
-                                null
-                            },
-                            onMoveDown = if (index < scrapers.lastIndex) {
-                                { PluginRepository.moveScraper(scraper.id, moveUp = false) }
-                            } else {
-                                null
-                            },
+                            onReorder = { reorderingScraperId = scraper.id },
                             onConfigure = if (scraper.hasSettings) {
                                 {
                                     coroutineScope.launch {
@@ -475,8 +476,63 @@ fun PluginsSettingsPageContent(
             }
         )
     }
+
+    val reorderingScraper = reorderingScraperId?.let { id ->
+        uiState.scrapers.firstOrNull { it.id == id }
+    }
+    reorderingScraper?.let { scraper ->
+        val repositoryScrapers = uiState.scrapers.filter { it.repositoryUrl == scraper.repositoryUrl }
+        val scraperIndex = repositoryScrapers.indexOfFirst { it.id == scraper.id }
+        val canMoveUp = scraperIndex > 0
+        val canMoveDown = scraperIndex >= 0 && scraperIndex < repositoryScrapers.lastIndex
+        val sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        NuvioModalBottomSheet(
+            onDismissRequest = { reorderingScraperId = null },
+            sheetState = sheetState,
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = stringResource(Res.string.plugins_reorder_title),
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                Text(
+                    text = scraper.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = stringResource(Res.string.plugins_reorder_hint),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                NuvioPrimaryButton(
+                    text = stringResource(Res.string.plugins_reorder_up),
+                    enabled = canMoveUp,
+                    onClick = {
+                        PluginRepository.moveScraper(scraper.id, moveUp = true)
+                        reorderingScraperId = null
+                    },
+                )
+                TextButton(
+                    onClick = {
+                        PluginRepository.moveScraper(scraper.id, moveUp = false)
+                        reorderingScraperId = null
+                    },
+                    enabled = canMoveDown,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(Res.string.plugins_reorder_down))
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+        }
+    }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ProviderRow(
     scraper: PluginScraper,
@@ -485,8 +541,7 @@ private fun ProviderRow(
     testEnabled: Boolean,
     onTest: () -> Unit,
     onToggle: (Boolean) -> Unit,
-    onMoveUp: (() -> Unit)?,
-    onMoveDown: (() -> Unit)?,
+    onReorder: () -> Unit,
     onConfigure: (() -> Unit)?,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -525,35 +580,20 @@ private fun ProviderRow(
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (onMoveUp != null || onMoveDown != null) {
-                    IconButton(
-                        onClick = { onMoveUp?.invoke() },
-                        enabled = onMoveUp != null,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.KeyboardArrowUp,
-                            contentDescription = "Move provider up",
-                            tint = if (onMoveUp != null) {
-                                MaterialTheme.colorScheme.onSurface
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
-                            },
-                        )
-                    }
-                    IconButton(
-                        onClick = { onMoveDown?.invoke() },
-                        enabled = onMoveDown != null,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.KeyboardArrowDown,
-                            contentDescription = "Move provider down",
-                            tint = if (onMoveDown != null) {
-                                MaterialTheme.colorScheme.onSurface
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
-                            },
-                        )
-                    }
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .combinedClickable(
+                            onClick = {},
+                            onLongClick = onReorder,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.DragHandle,
+                        contentDescription = stringResource(Res.string.plugins_reorder_hint),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
                 if (onConfigure != null) {
                     IconButton(onClick = onConfigure) {

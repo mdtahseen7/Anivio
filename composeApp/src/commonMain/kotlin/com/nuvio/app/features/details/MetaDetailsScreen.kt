@@ -83,6 +83,7 @@ import com.nuvio.app.core.ui.NuvioBackButton
 import com.nuvio.app.core.ui.NuvioCardDepthSurface
 import com.nuvio.app.core.ui.NuvioPosterZoomActionOverlay
 import com.nuvio.app.core.ui.NuvioToastController
+import com.nuvio.app.core.ui.PlatformBackHandler
 import com.nuvio.app.core.ui.PosterZoomAnchor
 import com.nuvio.app.core.ui.PosterZoomAnchorHolder
 import com.nuvio.app.core.ui.PosterZoomOverlayAction
@@ -97,7 +98,9 @@ import com.nuvio.app.features.details.components.MangaReaderHost
 import com.nuvio.app.features.details.components.MangaReaderOverlay
 import com.nuvio.app.features.details.components.DetailAdditionalInfoSection
 import com.nuvio.app.features.details.components.DetailCastSection
-import com.nuvio.app.features.details.components.DetailCommentsSection
+import com.nuvio.app.features.details.components.DetailContentTab
+import com.nuvio.app.features.details.components.DetailContentTabBar
+import com.nuvio.app.features.details.components.AnimeCommunityCommentsSection
 import com.nuvio.app.features.details.components.DetailFloatingHeader
 import com.nuvio.app.features.details.components.DetailHero
 import com.nuvio.app.features.details.components.DetailMetaInfo
@@ -228,6 +231,12 @@ fun MetaDetailsScreen(
     var episodeImdbRatings by remember(type, id) { mutableStateOf<Map<Pair<Int, Int>, Double>>(emptyMap()) }
     var deferredMetaWorkAllowed by remember(type, id) { mutableStateOf(false) }
     var showDownloadPicker by remember(type, id) { mutableStateOf(false) }
+    var detailContentTab by remember(type, id) { mutableStateOf(DetailContentTab.INFO) }
+
+    PlatformBackHandler(
+        enabled = detailContentTab == DetailContentTab.COMMENTS,
+        onBack = { detailContentTab = DetailContentTab.INFO },
+    )
 
     LaunchedEffect(
         displayedMeta?.id,
@@ -1120,6 +1129,8 @@ fun MetaDetailsScreen(
                                     onOpenMeta = onOpenMeta,
                                     onCastClick = onCastClick,
                                     onCompanyClick = onCompanyClick,
+                                    contentTab = detailContentTab,
+                                    onContentTabSelected = { detailContentTab = it },
                                     sharedTransitionScope = sharedTransitionScope,
                                     animatedVisibilityScope = animatedVisibilityScope,
                                 )
@@ -1159,7 +1170,13 @@ fun MetaDetailsScreen(
                             isSaved = isSaved,
                             isHeroCollapsed = isHeroCollapsed,
                             backgroundColor = dominantBackdropColor.takeIf { dominantColorEnabled },
-                            onBack = onBackFromDetails,
+                            onBack = {
+                                if (detailContentTab == DetailContentTab.COMMENTS) {
+                                    detailContentTab = DetailContentTab.INFO
+                                } else {
+                                    onBackFromDetails()
+                                }
+                            },
                             onToggleSaved = toggleSaved,
                             isNotifySubscribed = isNotifySubscribed,
                             onNotifyClick = toggleEpisodeNotifications,
@@ -1748,6 +1765,8 @@ private fun LazyListScope.configuredMetaSectionItems(
     onOpenMeta: ((MetaPreview) -> Unit)?,
     onCastClick: ((MetaPerson, String?) -> Unit)?,
     onCompanyClick: ((MetaCompany, String) -> Unit)?,
+    contentTab: DetailContentTab,
+    onContentTabSelected: (DetailContentTab) -> Unit,
     sharedTransitionScope: SharedTransitionScope?,
     animatedVisibilityScope: AnimatedVisibilityScope?,
 ) {
@@ -1813,11 +1832,48 @@ private fun LazyListScope.configuredMetaSectionItems(
                     onOpenMeta = onOpenMeta,
                     onCastClick = onCastClick,
                     onCompanyClick = onCompanyClick,
+                    contentTab = contentTab,
+                    onContentTabSelected = onContentTabSelected,
                     sharedTransitionScope = sharedTransitionScope,
                     animatedVisibilityScope = animatedVisibilityScope,
                 )
             }
         }
+    }
+
+    fun addContentTabItem() {
+        item(key = "detail-content-tab-bar") {
+            DetailSectionContainer(
+                horizontalPadding = contentHorizontalPadding,
+                contentMaxWidth = contentMaxWidth,
+            ) {
+                DetailContentTabBar(
+                    selectedTab = contentTab,
+                    onTabSelected = onContentTabSelected,
+                )
+            }
+        }
+    }
+
+    if (contentTab == DetailContentTab.COMMENTS) {
+        // Keep the hero and quick actions visible while replacing everything below them.
+        enabledItems.firstOrNull { it.key == MetaScreenSectionKey.ACTIONS }?.let { action ->
+            addSectionItem(
+                key = "detail-section-actions-comments-tab",
+                sectionItems = listOf(action),
+                forceTabLayout = false,
+            )
+        }
+        addContentTabItem()
+        item(key = "detail-community-comments") {
+            DetailSectionContainer(
+                horizontalPadding = contentHorizontalPadding,
+                contentMaxWidth = contentMaxWidth,
+            ) {
+                AnimeCommunityCommentsSection(meta = meta)
+            }
+        }
+        return
     }
 
     if (!settings.tabLayout) {
@@ -1829,6 +1885,9 @@ private fun LazyListScope.configuredMetaSectionItems(
                     sectionItems = listOf(section),
                     forceTabLayout = false,
                 )
+                if (section.key == MetaScreenSectionKey.ACTIONS) {
+                    addContentTabItem()
+                }
             }
         return
     }
@@ -1843,6 +1902,9 @@ private fun LazyListScope.configuredMetaSectionItems(
                     sectionItems = listOf(section),
                     forceTabLayout = true,
                 )
+                if (section.key == MetaScreenSectionKey.ACTIONS) {
+                    addContentTabItem()
+                }
             }
         } else if (groupId !in processedGroups) {
             processedGroups.add(groupId)
@@ -1905,7 +1967,8 @@ private fun metaSectionHasContent(
         MetaScreenSectionKey.OVERVIEW -> true
         MetaScreenSectionKey.PRODUCTION -> hasProductionSection
         MetaScreenSectionKey.CAST -> meta.cast.isNotEmpty()
-        MetaScreenSectionKey.COMMENTS -> meta.animeReviews.isNotEmpty()
+        // Community comments are presented through the dedicated tab below quick actions.
+        MetaScreenSectionKey.COMMENTS -> false
         MetaScreenSectionKey.TRAILERS -> hasTrailersSection
         MetaScreenSectionKey.EPISODES -> hasEpisodes
         MetaScreenSectionKey.DETAILS -> hasAdditionalInfoSection
@@ -1952,6 +2015,8 @@ private fun ConfiguredMetaSections(
     onOpenMeta: ((MetaPreview) -> Unit)?,
     onCastClick: ((MetaPerson, String?) -> Unit)?,
     onCompanyClick: ((MetaCompany, String) -> Unit)?,
+    contentTab: DetailContentTab,
+    onContentTabSelected: (DetailContentTab) -> Unit,
     sharedTransitionScope: SharedTransitionScope?,
     animatedVisibilityScope: AnimatedVisibilityScope?,
 ) {
@@ -1964,7 +2029,7 @@ private fun ConfiguredMetaSections(
             MetaScreenSectionKey.OVERVIEW -> true
             MetaScreenSectionKey.PRODUCTION -> hasProductionSection
             MetaScreenSectionKey.CAST -> meta.cast.isNotEmpty()
-            MetaScreenSectionKey.COMMENTS -> meta.animeReviews.isNotEmpty()
+            MetaScreenSectionKey.COMMENTS -> false
             MetaScreenSectionKey.TRAILERS -> hasTrailersSection
             MetaScreenSectionKey.EPISODES -> hasEpisodes
             MetaScreenSectionKey.DETAILS -> hasAdditionalInfoSection
@@ -2052,13 +2117,7 @@ private fun ConfiguredMetaSections(
                 )
             }
             MetaScreenSectionKey.COMMENTS -> {
-                if (meta.animeReviews.isNotEmpty()) {
-                    DetailCommentsSection(
-                        reviews = meta.animeReviews,
-                        showHeader = showHeader,
-                        horizontalScrollPadding = horizontalScrollPadding,
-                    )
-                }
+                // The full community surface is rendered as its own tab below the actions.
             }
             MetaScreenSectionKey.TRAILERS -> {
                 if (hasTrailersSection) {

@@ -24,14 +24,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.FilterChip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -40,15 +44,35 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil3.compose.AsyncImage
 import com.nuvio.app.core.ui.NuvioPrimaryButton
+import com.nuvio.app.core.ui.NuvioSurfaceCard
 import com.nuvio.app.core.ui.nuvio
+import com.nuvio.app.features.anilist.AniListAuthUiState
+import com.nuvio.app.features.mal.MalAuthUiState
+import com.nuvio.app.features.profiles.AvatarCatalogItem
+import com.nuvio.app.features.profiles.NuvioProfile
+import com.nuvio.app.features.profiles.profileAvatarImageUrl
 import com.nuvio.app.features.profile.components.LevelRing
 import kotlinx.coroutines.launch
+import nuvio.composeapp.generated.resources.Res
+import nuvio.composeapp.generated.resources.profile_share_anilist_avatar
+import nuvio.composeapp.generated.resources.profile_share_anilist_background
+import nuvio.composeapp.generated.resources.profile_share_anilist_username
+import nuvio.composeapp.generated.resources.profile_share_avatar
+import nuvio.composeapp.generated.resources.profile_share_avatar_anivio
+import nuvio.composeapp.generated.resources.profile_share_avatar_hidden
+import nuvio.composeapp.generated.resources.profile_share_background_opacity
+import nuvio.composeapp.generated.resources.profile_share_mal_username
+import nuvio.composeapp.generated.resources.profile_share_show_rank
+import nuvio.composeapp.generated.resources.profile_share_show_stats
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Bottom-sheet content showing a polished recap card plus a Share button. The card is rendered into
@@ -57,7 +81,11 @@ import kotlinx.coroutines.launch
 @Composable
 fun ProfileShareSheet(
     stats: ProfileStats,
-    profileName: String,
+    profile: NuvioProfile?,
+    avatars: List<AvatarCatalogItem>,
+    aniListAuth: AniListAuthUiState,
+    malAuth: MalAuthUiState,
+    settings: ProfileShareSettings,
     onDismiss: () -> Unit,
 ) {
     val tokens = MaterialTheme.nuvio
@@ -85,10 +113,22 @@ fun ProfileShareSheet(
                     drawLayer(graphicsLayer)
                 },
         ) {
-            ShareCard(stats = stats, profileName = profileName)
+            ShareCard(
+                stats = stats,
+                profile = profile,
+                avatars = avatars,
+                aniListAuth = aniListAuth,
+                malAuth = malAuth,
+                settings = settings,
+            )
         }
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(14.dp))
+        ShareCardSettings(
+            settings = settings,
+            onSettingsChange = ProfileShareSettingsRepository::update,
+        )
+        Spacer(Modifier.height(16.dp))
         NuvioPrimaryButton(
             text = "Share",
             onClick = {
@@ -112,58 +152,135 @@ fun ProfileShareSheet(
 
 /** The actual visual recap card captured for sharing. */
 @Composable
-private fun ShareCard(stats: ProfileStats, profileName: String) {
+private fun ShareCard(
+    stats: ProfileStats,
+    profile: NuvioProfile?,
+    avatars: List<AvatarCatalogItem>,
+    aniListAuth: AniListAuthUiState,
+    malAuth: MalAuthUiState,
+    settings: ProfileShareSettings,
+) {
     val tokens = MaterialTheme.nuvio
-    Column(
+    val catalogAvatar = profile?.avatarId?.let { id -> avatars.firstOrNull { it.id == id } }
+    val anivioAvatarUrl = profile?.let { profileAvatarImageUrl(it, catalogAvatar) }
+    val avatarUrl = when (settings.avatarSource) {
+        ShareAvatarSource.ANIVIO -> anivioAvatarUrl
+        ShareAvatarSource.ANILIST -> aniListAuth.avatarUrl
+        ShareAvatarSource.HIDDEN -> null
+    }
+    val profileName = profile?.name?.takeIf { it.isNotBlank() } ?: "Anivio"
+    val hasAnilistBanner = settings.showAniListBackground && !aniListAuth.bannerUrl.isNullOrBlank()
+
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(24.dp))
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        tokens.colors.accent.copy(alpha = 0.28f),
-                        tokens.colors.surfaceCard,
-                        tokens.colors.background,
-                    ),
-                ),
-            )
-            .padding(24.dp),
+            .background(tokens.colors.background),
     ) {
-        Text("ANIVIO", color = tokens.colors.accent, fontWeight = FontWeight.Black, fontSize = 14.sp)
-        Spacer(Modifier.height(16.dp))
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            LevelRing(progress = stats.level.progress, ringSize = 72.dp, stroke = 6.dp) {
-                Text(
-                    "${stats.level.level}",
-                    color = tokens.colors.textPrimary,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 24.sp,
-                )
-            }
-            Column {
-                Text(profileName, color = tokens.colors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 22.sp)
-                Text(stats.level.title, color = tokens.colors.accent, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                Text(stats.habit.label, color = tokens.colors.textSecondary, fontSize = 12.sp)
-            }
+        if (hasAnilistBanner) {
+            AsyncImage(
+                model = aniListAuth.bannerUrl,
+                contentDescription = null,
+                modifier = Modifier.matchParentSize(),
+                contentScale = ContentScale.Crop,
+                alpha = settings.backgroundOpacity,
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                tokens.colors.accent.copy(alpha = 0.34f),
+                                tokens.colors.surfaceCard,
+                                tokens.colors.background,
+                            ),
+                        ),
+                    ),
+            )
         }
-        Spacer(Modifier.height(20.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            ShareStat("${stats.totals.episodesWatched}", "episodes")
-            ShareStat("${stats.totals.seriesCompleted}", "completed")
-            ShareStat("${stats.streak.longestDays}", "best streak")
-            ShareStat("${stats.achievements.count { it.unlocked }}", "badges")
-        }
-        Spacer(Modifier.height(16.dp))
-        val days = stats.totals.minutesWatched / 1440.0
-        if (days >= 0.1) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Rounded.LocalFireDepartment, null, tint = Color(0xFFFB923C), modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    "${oneDecimal(days)} days watched",
-                    color = tokens.colors.textSecondary,
-                    fontSize = 12.sp,
-                )
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .background(Color.Black.copy(alpha = 0.24f)),
+        )
+        Column(modifier = Modifier.padding(24.dp)) {
+            Text("ANIVIO", color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp)
+            Spacer(Modifier.height(16.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                LevelRing(progress = stats.level.progress, ringSize = 72.dp, stroke = 6.dp) {
+                    Text(
+                        "${stats.level.level}",
+                        color = Color.White,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 24.sp,
+                    )
+                }
+                if (avatarUrl != null || settings.avatarSource != ShareAvatarSource.HIDDEN) {
+                    Box(
+                        modifier = Modifier
+                            .size(58.dp)
+                            .clip(CircleShape)
+                            .background(tokens.colors.surfaceCard.copy(alpha = 0.88f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (avatarUrl != null) {
+                            AsyncImage(
+                                model = avatarUrl,
+                                contentDescription = null,
+                                modifier = Modifier.matchParentSize().clip(CircleShape),
+                                contentScale = ContentScale.Crop,
+                            )
+                        } else {
+                            Text(
+                                text = profileName.take(1).uppercase(),
+                                color = Color.White,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 24.sp,
+                            )
+                        }
+                    }
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(profileName, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 22.sp)
+                    if (settings.showRank) {
+                        Text(stats.level.title, color = tokens.colors.accent, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    }
+                    Text(stats.habit.label, color = Color.White.copy(alpha = 0.78f), fontSize = 12.sp)
+                    if (settings.showAniListUsername) {
+                        aniListAuth.username?.takeIf { it.isNotBlank() }?.let {
+                            Text("AniList · $it", color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp)
+                        }
+                    }
+                    if (settings.showMalUsername) {
+                        malAuth.username?.takeIf { it.isNotBlank() }?.let {
+                            Text("MAL · $it", color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+            if (settings.showStats) {
+                Spacer(Modifier.height(20.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    ShareStat("${stats.totals.episodesWatched}", "episodes")
+                    ShareStat("${stats.totals.seriesCompleted}", "completed")
+                    ShareStat("${stats.streak.longestDays}", "best streak")
+                    ShareStat("${stats.achievements.count { it.unlocked }}", "badges")
+                }
+                Spacer(Modifier.height(16.dp))
+                val days = stats.totals.minutesWatched / 1440.0
+                if (days >= 0.1) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.LocalFireDepartment, null, tint = Color(0xFFFB923C), modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "${oneDecimal(days)} days watched",
+                            color = Color.White.copy(alpha = 0.78f),
+                            fontSize = 12.sp,
+                        )
+                    }
+                }
             }
         }
     }
@@ -175,6 +292,98 @@ private fun ShareStat(value: String, label: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(value, color = tokens.colors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
         Text(label, color = tokens.colors.textMuted, fontSize = 10.sp)
+    }
+}
+
+@Composable
+private fun ShareCardSettings(
+    settings: ProfileShareSettings,
+    onSettingsChange: ((ProfileShareSettings) -> ProfileShareSettings) -> Unit,
+) {
+    NuvioSurfaceCard {
+        Text(
+            text = "Customize share card",
+            style = MaterialTheme.typography.titleMedium,
+        )
+        Spacer(Modifier.height(10.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            FilterChip(
+                selected = settings.showAniListBackground,
+                onClick = { onSettingsChange { it.copy(showAniListBackground = !it.showAniListBackground) } },
+                label = { Text(stringResource(Res.string.profile_share_anilist_background)) },
+            )
+            FilterChip(
+                selected = settings.showStats,
+                onClick = { onSettingsChange { it.copy(showStats = !it.showStats) } },
+                label = { Text(stringResource(Res.string.profile_share_show_stats)) },
+            )
+        }
+        ShareSwitch(
+            label = stringResource(Res.string.profile_share_show_rank),
+            checked = settings.showRank,
+            onCheckedChange = { checked -> onSettingsChange { it.copy(showRank = checked) } },
+        )
+        ShareSwitch(
+            label = stringResource(Res.string.profile_share_anilist_username),
+            checked = settings.showAniListUsername,
+            onCheckedChange = { checked -> onSettingsChange { it.copy(showAniListUsername = checked) } },
+        )
+        ShareSwitch(
+            label = stringResource(Res.string.profile_share_mal_username),
+            checked = settings.showMalUsername,
+            onCheckedChange = { checked -> onSettingsChange { it.copy(showMalUsername = checked) } },
+        )
+        Text(
+            text = stringResource(Res.string.profile_share_avatar),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = settings.avatarSource == ShareAvatarSource.ANIVIO,
+                onClick = { onSettingsChange { it.copy(avatarSource = ShareAvatarSource.ANIVIO) } },
+                label = { Text(stringResource(Res.string.profile_share_avatar_anivio)) },
+            )
+            FilterChip(
+                selected = settings.avatarSource == ShareAvatarSource.ANILIST,
+                onClick = { onSettingsChange { it.copy(avatarSource = ShareAvatarSource.ANILIST) } },
+                label = { Text(stringResource(Res.string.profile_share_anilist_avatar)) },
+            )
+            FilterChip(
+                selected = settings.avatarSource == ShareAvatarSource.HIDDEN,
+                onClick = { onSettingsChange { it.copy(avatarSource = ShareAvatarSource.HIDDEN) } },
+                label = { Text(stringResource(Res.string.profile_share_avatar_hidden)) },
+            )
+        }
+        Text(
+            text = stringResource(Res.string.profile_share_background_opacity),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Slider(
+            value = settings.backgroundOpacity,
+            onValueChange = { value -> onSettingsChange { it.copy(backgroundOpacity = value) } },
+            valueRange = 0f..1f,
+        )
+    }
+}
+
+@Composable
+private fun ShareSwitch(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium)
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 
