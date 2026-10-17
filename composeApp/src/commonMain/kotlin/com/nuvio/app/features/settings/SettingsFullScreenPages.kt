@@ -147,47 +147,14 @@ fun ContinueWatchingSettingsScreen(
 fun AddonsSettingsScreen(
     onBack: () -> Unit,
 ) {
-    LaunchedEffect(Unit) {
-        AddonRepository.initialize()
-    }
-
-    NuvioScreen(
-        modifier = Modifier.fillMaxSize(),
-    ) {
-        stickyHeader {
-            NuvioScreenHeader(
-                title = stringResource(Res.string.compose_settings_page_addons),
-                onBack = onBack,
-            )
-        }
-        addonsSettingsContent()
-    }
+    ContentSourcesSettingsScreen(onBack = onBack)
 }
 
 @Composable
 fun PluginsSettingsScreen(
     onBack: () -> Unit,
 ) {
-    if (!AppFeaturePolicy.pluginsEnabled) {
-        AddonsSettingsScreen(onBack = onBack)
-        return
-    }
-
-    LaunchedEffect(Unit) {
-        PluginRepository.initialize()
-    }
-
-    NuvioScreen(
-        modifier = Modifier.fillMaxSize(),
-    ) {
-        stickyHeader {
-            NuvioScreenHeader(
-                title = stringResource(Res.string.compose_settings_page_plugins),
-                onBack = onBack,
-            )
-        }
-        pluginsSettingsContent()
-    }
+    ContentSourcesSettingsScreen(onBack = onBack)
 }
 
 @Composable

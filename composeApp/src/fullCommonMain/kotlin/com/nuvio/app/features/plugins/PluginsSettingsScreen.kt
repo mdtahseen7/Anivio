@@ -281,6 +281,28 @@ fun PluginsSettingsPageContent(
         }
 
         NuvioSectionLabel(stringResource(Res.string.plugins_section_installed_repos))
+        NuvioSurfaceCard {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Update all plugins", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Refresh every installed repository and keep the current provider selection.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                NuvioIconActionButton(
+                    icon = Icons.Rounded.Refresh,
+                    contentDescription = "Update all plugins",
+                    tint = MaterialTheme.colorScheme.primary,
+                    onClick = { PluginRepository.refreshAll() },
+                )
+            }
+        }
         if (sortedRepos.isEmpty()) {
             NuvioSurfaceCard {
                 Text(

@@ -241,6 +241,11 @@ private fun MangaBulkDownloadRow(
             }
         }
         when (download?.status) {
+            DownloadStatus.Queued -> Text(
+                text = "Queued",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             DownloadStatus.Completed -> Icon(
                 imageVector = Icons.Rounded.DownloadDone,
                 contentDescription = "Downloaded",

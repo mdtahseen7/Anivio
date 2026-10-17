@@ -4,8 +4,10 @@ import com.nuvio.app.features.plugins.MangaPluginChapter
 import com.nuvio.app.features.plugins.MangaPluginPage
 import com.nuvio.app.features.plugins.PluginRepository
 import com.nuvio.app.features.plugins.PluginScraper
+import com.nuvio.app.features.profiles.ProfileRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -22,6 +24,7 @@ import kotlinx.serialization.json.Json
 
 /** Owns persisted manga chapter downloads independently from video downloads. */
 object MangaDownloadsRepository {
+    private const val MAX_CONCURRENT_DOWNLOADS = 2
     private val _uiState = MutableStateFlow(MangaDownloadsUiState())
     val uiState: StateFlow<MangaDownloadsUiState> = _uiState.asStateFlow()
 
@@ -83,20 +86,21 @@ object MangaDownloadsRepository {
             chapterId = chapter.id,
             chapterNumber = chapter.number,
             chapterTitle = chapter.title,
-            status = DownloadStatus.Downloading,
+            status = DownloadStatus.Queued,
             createdAtEpochMs = now,
             updatedAtEpochMs = now,
         )
         publish(_uiState.value.items.filterNot { it.logicalContentKey == logicalKey }.let { listOf(item) + it })
         persist()
-        startDownload(item, provider)
+        pumpQueue()
     }
 
     fun pauseDownload(downloadId: String) {
         ensureLoaded()
         val item = _uiState.value.items.firstOrNull { it.id == downloadId } ?: return
-        if (item.status != DownloadStatus.Downloading) return
+        if (item.status != DownloadStatus.Downloading && item.status != DownloadStatus.Queued) return
         activeJobs.remove(downloadId)?.cancel()
+        DownloadBackgroundExecution.cancel(ProfileRepository.activeProfileId, downloadId, DownloadWorkKind.MANGA)
         mutateItem(downloadId) { current ->
             current.copy(status = DownloadStatus.Paused, updatedAtEpochMs = DownloadsClock.nowEpochMs())
         }
@@ -118,21 +122,66 @@ object MangaDownloadsRepository {
             return
         }
         val resumed = item.copy(
-            status = DownloadStatus.Downloading,
+            status = DownloadStatus.Queued,
             errorMessage = null,
             updatedAtEpochMs = DownloadsClock.nowEpochMs(),
         )
         replaceItem(resumed)
         persist()
-        startDownload(resumed, provider)
+        pumpQueue()
     }
 
     fun retryDownload(downloadId: String) = resumeDownload(downloadId)
+
+    internal fun runDownloadForWorker(downloadId: String): Boolean {
+        ensureLoaded()
+        val item = _uiState.value.items.firstOrNull { it.id == downloadId } ?: return false
+        if (item.status == DownloadStatus.Completed) return true
+        val provider = findProvider(item.providerId) ?: return false
+        mutateItem(downloadId) { current ->
+            current.copy(status = DownloadStatus.Downloading, errorMessage = null)
+        }
+        if (activeJobs[downloadId] == null) {
+            val active = _uiState.value.items.firstOrNull { it.id == downloadId } ?: return false
+            startDownload(active, provider)
+        }
+        return true
+    }
+
+    internal fun statusForWorker(downloadId: String): DownloadStatus? {
+        ensureLoaded()
+        return _uiState.value.items.firstOrNull { it.id == downloadId }?.status
+    }
+
+    fun pauseActiveDownloads() {
+        ensureLoaded()
+        _uiState.value.items
+            .filter { it.status == DownloadStatus.Downloading || it.status == DownloadStatus.Queued }
+            .map { it.id }
+            .forEach(::pauseDownload)
+    }
+
+    fun resumePausedDownloads() {
+        ensureLoaded()
+        _uiState.value.items
+            .filter { it.status == DownloadStatus.Paused }
+            .map { it.id }
+            .forEach(::resumeDownload)
+    }
+
+    fun retryFailedDownloads() {
+        ensureLoaded()
+        _uiState.value.items
+            .filter { it.status == DownloadStatus.Failed }
+            .map { it.id }
+            .forEach(::retryDownload)
+    }
 
     fun cancelDownload(downloadId: String) {
         ensureLoaded()
         val item = _uiState.value.items.firstOrNull { it.id == downloadId } ?: return
         activeJobs.remove(downloadId)?.cancel()
+        DownloadBackgroundExecution.cancel(ProfileRepository.activeProfileId, downloadId, DownloadWorkKind.MANGA)
         removeLocalPages(item)
         publish(_uiState.value.items.filterNot { it.id == downloadId })
         persist()
@@ -148,7 +197,7 @@ object MangaDownloadsRepository {
     }
 
     private fun startDownload(item: MangaDownloadItem, provider: PluginScraper) {
-        val job = scope.launch {
+        val job = scope.launch(start = CoroutineStart.LAZY) {
             try {
                 val remotePages = PluginRepository.getMangaChapterPages(provider, item.chapterId)
                     .getOrElse { error(it.message ?: "Unable to load manga pages.") }
@@ -183,7 +232,7 @@ object MangaDownloadsRepository {
                     val localFileUri = DownloadsPlatformDownloader.saveAuxiliaryFile(fileName, bytes)
                         ?: error("Unable to save manga page ${index + 1}.")
                     completedPages.removeAll { it.pageIndex == index }
-                    completedPages += MangaDownloadPage(index, fileName, localFileUri)
+                    completedPages += MangaDownloadPage(index, fileName, localFileUri, bytes.size.toLong())
                     completedPages.sortBy(MangaDownloadPage::pageIndex)
                     mutateItem(item.id) { current ->
                         current.copy(
@@ -220,9 +269,11 @@ object MangaDownloadsRepository {
                 }
             } finally {
                 activeJobs.remove(item.id)
+                pumpQueue()
             }
         }
         activeJobs[item.id] = job
+        job.start()
     }
 
     private fun findProvider(providerId: String): PluginScraper? {
@@ -236,13 +287,59 @@ object MangaDownloadsRepository {
         val loaded = if (payload.isBlank()) emptyList() else MangaDownloadsCodec.decodeItems(payload)
         val normalized = loaded.map { item ->
             if (item.status == DownloadStatus.Downloading) {
-                item.copy(status = DownloadStatus.Paused, errorMessage = null)
+                item.copy(status = DownloadStatus.Queued, errorMessage = null)
             } else {
                 item
             }
         }
         _uiState.value = MangaDownloadsUiState(normalized)
         if (normalized != loaded) persist()
+        pumpQueue()
+    }
+
+    private fun pumpQueue() {
+        if (!hasLoaded) return
+        if (DownloadBackgroundExecution.isSupported) {
+            _uiState.value.items
+                .filter { it.status == DownloadStatus.Queued }
+                .forEach { queued ->
+                    DownloadBackgroundExecution.schedule(
+                        profileId = ProfileRepository.activeProfileId,
+                        downloadId = queued.id,
+                        kind = DownloadWorkKind.MANGA,
+                    )
+                }
+            return
+        }
+        val availableSlots = (MAX_CONCURRENT_DOWNLOADS - activeJobs.size).coerceAtLeast(0)
+        if (availableSlots == 0) return
+
+        _uiState.value.items
+            .filter { it.status == DownloadStatus.Queued }
+            .sortedWith(compareBy<MangaDownloadItem> { it.createdAtEpochMs }.thenBy { it.id })
+            .take(availableSlots)
+            .forEach { queued ->
+                val provider = findProvider(queued.providerId)
+                if (provider == null) {
+                    mutateItem(queued.id) { current ->
+                        current.copy(
+                            status = DownloadStatus.Failed,
+                            errorMessage = "The manga provider is no longer enabled.",
+                            updatedAtEpochMs = DownloadsClock.nowEpochMs(),
+                        )
+                    }
+                } else {
+                    mutateItem(queued.id) { current ->
+                        current.copy(
+                            status = DownloadStatus.Downloading,
+                            errorMessage = null,
+                            updatedAtEpochMs = DownloadsClock.nowEpochMs(),
+                        )
+                    }
+                    val active = _uiState.value.items.firstOrNull { it.id == queued.id } ?: return@forEach
+                    startDownload(active, provider)
+                }
+            }
     }
 
     private fun mutateItem(id: String, transform: (MangaDownloadItem) -> MangaDownloadItem) {

@@ -88,14 +88,30 @@ internal fun MangaChaptersSection(meta: MetaDetails) {
     }
 
     fun load(provider: PluginScraper?) {
-        if (provider == null) return
+        val initialProvider = provider ?: return
         scope.launch {
             loading = true
-            chapters = PluginRepository.getMangaChapters(
-                scraper = provider,
-                mangaId = parseAniListMediaId(meta.id)?.toString().orEmpty(),
-                title = meta.name,
-            ).getOrDefault(emptyList())
+            val mangaId = parseAniListMediaId(meta.id)?.toString().orEmpty()
+            val candidates = if (selectedProviderId == null) {
+                listOf(initialProvider) + providers.filterNot { it.id == initialProvider.id }
+            } else {
+                listOf(initialProvider)
+            }
+            var resolvedProvider = initialProvider
+            var resolvedChapters = emptyList<MangaPluginChapter>()
+            for (candidate in candidates) {
+                val result = PluginRepository.getMangaChapters(candidate, mangaId, meta.name)
+                val next = result.getOrDefault(emptyList())
+                if (next.isNotEmpty()) {
+                    resolvedProvider = candidate
+                    resolvedChapters = next
+                    break
+                }
+            }
+            if (resolvedProvider.id != initialProvider.id && selectedProviderId == null) {
+                selectedProviderId = resolvedProvider.id
+            }
+            chapters = resolvedChapters
             loading = false
         }
     }
@@ -348,6 +364,11 @@ private fun MangaChapterRow(
             }
         }
         when (download?.status) {
+            DownloadStatus.Queued -> {
+                IconButton(onClick = { onPauseDownload(download.id) }) {
+                    Icon(Icons.Rounded.Pause, contentDescription = "Pause download")
+                }
+            }
             DownloadStatus.Downloading -> {
                 IconButton(onClick = { onPauseDownload(download.id) }) {
                     Icon(Icons.Rounded.Pause, contentDescription = "Pause download")

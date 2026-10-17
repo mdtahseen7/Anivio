@@ -148,6 +148,7 @@ fun DownloadsScreen(
             if (selectedMediaTab == 0) {
             downloadsRootContent(
                 uiState = uiState,
+                mangaUiState = mangaUiState,
                 defaultServerName = downloadSettings.defaultServerAddonName,
                 onPickDefaultServer = { showServerPicker = true },
                 onOpenDownload = onOpenDownload,
@@ -159,6 +160,7 @@ fun DownloadsScreen(
             } else {
                 downloadsMangaContent(
                     uiState = mangaUiState,
+                    animeUiState = uiState,
                     onOpenDownload = onOpenMangaDownload,
                     onDeleteDownload = { mangaPendingDeletionId = it },
                 )
@@ -277,12 +279,30 @@ private fun DefaultDownloadServerSheet(
 
 private fun LazyListScope.downloadsRootContent(
     uiState: DownloadsUiState,
+    mangaUiState: MangaDownloadsUiState,
     defaultServerName: String?,
     onPickDefaultServer: () -> Unit,
     onOpenDownload: (DownloadItem) -> Unit,
     onOpenShow: (showId: String, title: String) -> Unit,
     onDeleteDownload: (String) -> Unit,
 ) {
+    item {
+        DownloadsManagementBar(
+            summary = mergeStorageSummaries(uiState.storageSummary(), mangaUiState.storageSummary()),
+            onPauseAll = {
+                DownloadsRepository.pauseActiveDownloads()
+                MangaDownloadsRepository.pauseActiveDownloads()
+            },
+            onResumeAll = {
+                DownloadsRepository.resumePausedDownloads()
+                MangaDownloadsRepository.resumePausedDownloads()
+            },
+            onRetryAll = {
+                DownloadsRepository.retryFailedDownloads()
+                MangaDownloadsRepository.retryFailedDownloads()
+            },
+        )
+    }
     item {
         DefaultServerRow(
             serverName = defaultServerName,
@@ -467,9 +487,27 @@ private fun DownloadsMediaTabs(
 
 private fun LazyListScope.downloadsMangaContent(
     uiState: MangaDownloadsUiState,
+    animeUiState: DownloadsUiState,
     onOpenDownload: (MangaDownloadItem) -> Unit,
     onDeleteDownload: (String) -> Unit,
 ) {
+    item {
+        DownloadsManagementBar(
+            summary = mergeStorageSummaries(animeUiState.storageSummary(), uiState.storageSummary()),
+            onPauseAll = {
+                DownloadsRepository.pauseActiveDownloads()
+                MangaDownloadsRepository.pauseActiveDownloads()
+            },
+            onResumeAll = {
+                DownloadsRepository.resumePausedDownloads()
+                MangaDownloadsRepository.resumePausedDownloads()
+            },
+            onRetryAll = {
+                DownloadsRepository.retryFailedDownloads()
+                MangaDownloadsRepository.retryFailedDownloads()
+            },
+        )
+    }
     val items = uiState.items.sortedWith(
         compareBy<MangaDownloadItem> { it.title.lowercase() }
             .thenBy { it.chapterNumber.toDoubleOrNull() ?: Double.MAX_VALUE }
@@ -504,6 +542,67 @@ private fun LazyListScope.downloadsMangaContent(
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+        }
+    }
+}
+
+private fun mergeStorageSummaries(
+    anime: DownloadsStorageSummary,
+    manga: DownloadsStorageSummary,
+): DownloadsStorageSummary = DownloadsStorageSummary(
+    queuedCount = anime.queuedCount + manga.queuedCount,
+    activeCount = anime.activeCount + manga.activeCount,
+    pausedCount = anime.pausedCount + manga.pausedCount,
+    completedCount = anime.completedCount + manga.completedCount,
+    failedCount = anime.failedCount + manga.failedCount,
+    bytes = anime.bytes + manga.bytes,
+)
+
+@Composable
+private fun DownloadsManagementBar(
+    summary: DownloadsStorageSummary,
+    onPauseAll: () -> Unit,
+    onResumeAll: () -> Unit,
+    onRetryAll: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Text(
+                text = "${summary.activeCount} active • ${summary.queuedCount} queued • " +
+                    "${summary.completedCount} completed • ${formatBytes(summary.bytes)} stored",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(
+                    onClick = onPauseAll,
+                    enabled = summary.activeCount > 0 || summary.queuedCount > 0,
+                ) {
+                    Icon(Icons.Rounded.Pause, contentDescription = "Pause all downloads")
+                }
+                IconButton(
+                    onClick = onResumeAll,
+                    enabled = summary.pausedCount > 0,
+                ) {
+                    Icon(Icons.Rounded.PlayArrow, contentDescription = "Resume paused downloads")
+                }
+                IconButton(
+                    onClick = onRetryAll,
+                    enabled = summary.failedCount > 0,
+                ) {
+                    Icon(Icons.Rounded.Refresh, contentDescription = "Retry failed downloads")
+                }
             }
         }
     }
@@ -590,6 +689,9 @@ private fun MangaDownloadRow(
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     when (item.status) {
+                        DownloadStatus.Queued -> IconButton(onClick = onPause) {
+                            Icon(Icons.Rounded.Pause, contentDescription = stringResource(Res.string.compose_action_pause))
+                        }
                         DownloadStatus.Downloading -> IconButton(onClick = onPause) {
                             Icon(Icons.Rounded.Pause, contentDescription = stringResource(Res.string.compose_action_pause))
                         }
@@ -626,6 +728,7 @@ private fun MangaDownloadRow(
 }
 
 private fun mangaDownloadStatusText(item: MangaDownloadItem): String = when (item.status) {
+    DownloadStatus.Queued -> "Queued • ${item.downloadedPages}/${item.totalPages} pages"
     DownloadStatus.Downloading -> "Downloading pages ${item.downloadedPages}/${item.totalPages}"
     DownloadStatus.Paused -> "Paused • ${item.downloadedPages}/${item.totalPages} pages"
     DownloadStatus.Completed -> "Downloaded ${item.totalPages} pages"
@@ -804,6 +907,14 @@ private fun DownloadRow(
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     when (item.status) {
+                        DownloadStatus.Queued -> {
+                            IconButton(onClick = onPause) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Pause,
+                                    contentDescription = stringResource(Res.string.compose_action_pause),
+                                )
+                            }
+                        }
                         DownloadStatus.Downloading -> {
                             IconButton(onClick = onPause) {
                                 Icon(
@@ -965,6 +1076,7 @@ private fun statusText(item: DownloadItem): String {
     }
 
     return when (item.status) {
+        DownloadStatus.Queued -> "Queued • ${formatBytes(item.downloadedBytes)}"
         DownloadStatus.Downloading -> stringResource(Res.string.downloads_status_downloading, size)
         DownloadStatus.Paused -> stringResource(Res.string.downloads_status_paused, size)
         DownloadStatus.Completed -> stringResource(

@@ -2,7 +2,9 @@ package com.nuvio.app.features.details.components
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +26,8 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Bookmark
+import androidx.compose.material.icons.rounded.BookmarkBorder
 import androidx.compose.material.icons.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.MoreVert
@@ -70,6 +74,7 @@ import com.nuvio.app.core.ui.PlatformBackHandler
 import com.nuvio.app.features.anilist.recordAniListMangaChapterRead
 import com.nuvio.app.features.details.MangaReaderSettingsRepository
 import com.nuvio.app.features.details.MangaReadingMode
+import com.nuvio.app.features.details.MangaReaderBookmark
 import com.nuvio.app.features.details.MangaReaderProgressRepository
 import com.nuvio.app.features.details.mangaReaderProgressKey
 import com.nuvio.app.features.plugins.MangaPluginChapter
@@ -80,6 +85,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
+import coil3.compose.LocalPlatformContext
+import coil3.network.NetworkHeaders
+import coil3.network.httpHeaders
+import coil3.request.ImageRequest
+import com.nuvio.app.features.player.EnterImmersivePlayerMode
 
 private const val CONTROLS_AUTO_HIDE_MS = 3000L
 private const val READER_SHEET_SCRIM = 0xFF16181D
@@ -114,7 +126,9 @@ internal fun MangaReaderHost(request: MangaReaderRequest) {
             return@LaunchedEffect
         }
         loadingPages = true
-        pages = PluginRepository.getMangaChapterPages(provider, request.chapter.id).getOrDefault(emptyList())
+        pages = PluginRepository.getMangaChapterPages(provider, request.chapter.id)
+            .getOrDefault(emptyList())
+            .filter { it.url.isNotBlank() }
         loadingPages = false
     }
     PlatformBackHandler(enabled = true, onBack = MangaReaderOverlay::close)
@@ -154,10 +168,14 @@ internal fun MangaReaderDialog(
     onChapterCompleted: (MangaPluginChapter) -> Unit,
 ) {
     MangaReaderSettingsRepository.ensureLoaded()
+    // Reuse the existing platform immersive abstraction. Android hides system bars;
+    // iOS keeps the reader active while this overlay is mounted.
+    EnterImmersivePlayerMode(keepScreenAwake = false)
     val readerSettings by MangaReaderSettingsRepository.uiState.collectAsStateWithLifecycle()
     val mode = readerSettings.readingMode
     val isPager = mode != MangaReadingMode.WEBTOON
 
+    val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     val pagerState = rememberPagerState(pageCount = { pages.size })
     var controlsVisible by remember { mutableStateOf(true) }
@@ -168,6 +186,7 @@ internal fun MangaReaderDialog(
     var positionRestored by remember(progressKey) { mutableStateOf(false) }
     var restoredMode by remember(progressKey) { mutableStateOf<MangaReadingMode?>(null) }
     var completionReported by remember(progressKey) { mutableStateOf(false) }
+    var bookmarkRevision by remember(progressKey) { mutableStateOf(0) }
     val latestPositionRestored by androidx.compose.runtime.rememberUpdatedState(positionRestored)
 
     fun currentPosition(forMode: MangaReadingMode = mode): Pair<Int, Int> = if (forMode == MangaReadingMode.WEBTOON) {
@@ -229,6 +248,14 @@ internal fun MangaReaderDialog(
     } else {
         (listState.firstVisibleItemIndex + 1).coerceAtMost(pages.size.coerceAtLeast(1))
     }
+    val currentOffset = if (isPager) 0 else listState.firstVisibleItemScrollOffset
+    val webtoonAtEnd = if (isPager || pages.isEmpty()) {
+        false
+    } else {
+        val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()
+        last != null && last.size > 0 && last.index == pages.lastIndex &&
+            last.offset + last.size <= listState.layoutInfo.viewportEndOffset
+    }
     LaunchedEffect(controlsVisible, currentPage, chapter.id, pages.size) {
         if (!controlsVisible) return@LaunchedEffect
         delay(CONTROLS_AUTO_HIDE_MS)
@@ -242,10 +269,52 @@ internal fun MangaReaderDialog(
         onChapterCompleted(chapter)
     }
 
-    LaunchedEffect(currentPage, pages.size, progressKey, positionRestored) {
-        if (positionRestored && pages.isNotEmpty() && currentPage == pages.size) {
+    LaunchedEffect(currentPage, webtoonAtEnd, pages.size, progressKey, positionRestored) {
+        if (positionRestored && pages.isNotEmpty() && (isPager && currentPage == pages.size || !isPager && webtoonAtEnd)) {
             reportChapterCompletedOnce()
         }
+    }
+
+    fun toggleCurrentBookmark() {
+        MangaReaderProgressRepository.toggleBookmark(progressKey, currentPage - 1, currentOffset)
+        bookmarkRevision++
+        controlsVisible = true
+    }
+
+    fun handlePageTap(fraction: Float) {
+        if (isPager) {
+            val advance = if (mode == MangaReadingMode.RIGHT_TO_LEFT) fraction < 0.30f else fraction > 0.70f
+            when {
+                fraction < 0.30f || fraction > 0.70f -> scope.launch {
+                    val target = if (advance) pagerState.currentPage + 1 else pagerState.currentPage - 1
+                    pagerState.animateScrollToPage(target.coerceIn(0, pages.lastIndex))
+                    controlsVisible = true
+                }
+                else -> {
+                    controlsVisible = !controlsVisible
+                }
+            }
+        } else {
+            val viewport = (listState.layoutInfo.viewportEndOffset - listState.layoutInfo.viewportStartOffset)
+                .coerceAtLeast(1)
+            when {
+                fraction < 0.25f -> scope.launch {
+                    listState.animateScrollBy(-viewport * 0.85f)
+                    controlsVisible = true
+                }
+                fraction > 0.75f -> scope.launch {
+                    listState.animateScrollBy(viewport * 0.85f)
+                    controlsVisible = true
+                }
+                else -> controlsVisible = !controlsVisible
+            }
+        }
+    }
+    val bookmarkCount = remember(progressKey, bookmarkRevision, currentPage, currentOffset) {
+        MangaReaderProgressRepository.bookmarksFor(progressKey).size
+    }
+    val currentBookmarked = remember(progressKey, bookmarkRevision, currentPage, currentOffset) {
+        MangaReaderProgressRepository.isBookmarked(progressKey, currentPage - 1, currentOffset)
     }
 
     val chapterIndex = chapters.indexOfFirst { it.id == chapter.id }
@@ -285,8 +354,8 @@ internal fun MangaReaderDialog(
                         key = { index -> "${pages[index].url}-$index" },
                     ) { index ->
                         ZoomableMangaPage(
-                            url = pages[index].url,
-                            onTap = { controlsVisible = !controlsVisible },
+                            page = pages[index],
+                            onTap = ::handlePageTap,
                             onZoomChanged = { zoomed ->
                                 if (zoomed) {
                                     if (index !in zoomedPages) zoomedPages.add(index)
@@ -303,8 +372,8 @@ internal fun MangaReaderDialog(
                     ) {
                         itemsIndexed(pages, key = { index, page -> "${page.url}-$index" }) { index, page ->
                             ZoomableMangaPage(
-                                url = page.url,
-                                onTap = { controlsVisible = !controlsVisible },
+                                page = page,
+                                onTap = ::handlePageTap,
                                 onZoomChanged = { zoomed ->
                                     if (zoomed) {
                                         if (index !in zoomedPages) zoomedPages.add(index)
@@ -330,6 +399,9 @@ internal fun MangaReaderDialog(
                         onDismiss = onDismiss,
                         onSelectChapter = ::goToChapter,
                         onSettings = { settingsOpen = true },
+                        bookmarked = currentBookmarked,
+                        bookmarkCount = bookmarkCount,
+                        onToggleBookmark = ::toggleCurrentBookmark,
                     )
                 }
 
@@ -350,7 +422,22 @@ internal fun MangaReaderDialog(
             }
 
     if (settingsOpen) {
-        ReaderSettingsSheet(onDismiss = { settingsOpen = false })
+        ReaderSettingsSheet(
+            bookmarks = MangaReaderProgressRepository.bookmarksFor(progressKey),
+            onDismiss = { settingsOpen = false },
+            onSelectBookmark = { bookmark ->
+                if (pages.isNotEmpty()) {
+                    scope.launch {
+                        if (isPager) pagerState.animateScrollToPage(bookmark.pageIndex.coerceIn(0, pages.lastIndex))
+                        else listState.animateScrollToItem(
+                            bookmark.pageIndex.coerceIn(0, pages.lastIndex),
+                            bookmark.webtoonOffset,
+                        )
+                        settingsOpen = false
+                    }
+                }
+            },
+        )
     }
 }
 
@@ -360,13 +447,17 @@ internal fun MangaReaderDialog(
  */
 @Composable
 private fun ZoomableMangaPage(
-    url: String,
-    onTap: () -> Unit,
+    page: MangaPluginPage,
+    onTap: (Float) -> Unit,
     onZoomChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val url = page.url
+    val platformContext = LocalPlatformContext.current
     var scale by remember(url) { mutableStateOf(MIN_ZOOM) }
     var offset by remember(url) { mutableStateOf(Offset.Zero) }
+    var size by remember(url) { mutableStateOf(IntSize.Zero) }
+    var retryAttempt by remember(url) { mutableStateOf(0) }
 
     fun applyZoom(next: Float) {
         val clamped = next.coerceIn(MIN_ZOOM, MAX_ZOOM)
@@ -381,10 +472,27 @@ private fun ZoomableMangaPage(
         offset = if (next <= MIN_ZOOM) Offset.Zero else offset + panChange
         onZoomChanged(next > MIN_ZOOM)
     }
+    val imageRequest = remember(url, page.headers, retryAttempt) {
+        ImageRequest.Builder(platformContext)
+            .data(url)
+            .httpHeaders(
+                NetworkHeaders.Builder().apply {
+                    page.headers.forEach { (name, value) ->
+                        if (name.isNotBlank() && value.isNotBlank()) set(name, value)
+                    }
+                }.build(),
+            )
+            // Keep provider headers in the cache identity so a cached anonymous response
+            // cannot mask an authenticated image request.
+            .memoryCacheKey("manga:$url:${page.headers.toSortedMap()}:$retryAttempt")
+            .diskCacheKey("manga:$url:${page.headers.toSortedMap()}:$retryAttempt")
+            .build()
+    }
     AsyncImage(
-        model = url,
+        model = imageRequest,
         contentDescription = null,
         modifier = modifier
+            .onSizeChanged { size = it }
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -400,11 +508,14 @@ private fun ZoomableMangaPage(
             )
             .pointerInput(url) {
                 detectTapGestures(
-                    onTap = { onTap() },
+                    onTap = {
+                        if (size.width > 0) onTap((it.x / size.width).coerceIn(0f, 1f))
+                    },
                     onDoubleTap = { if (scale > MIN_ZOOM) applyZoom(MIN_ZOOM) else applyZoom(DOUBLE_TAP_ZOOM) },
                 )
             },
         contentScale = ContentScale.FillWidth,
+        onError = { if (retryAttempt < 2) retryAttempt++ },
     )
 }
 
@@ -424,6 +535,9 @@ private fun ReaderTopBar(
     onDismiss: () -> Unit,
     onSelectChapter: (MangaPluginChapter) -> Unit,
     onSettings: () -> Unit,
+    bookmarked: Boolean,
+    bookmarkCount: Int,
+    onToggleBookmark: () -> Unit,
 ) {
     var chapterMenuOpen by remember { mutableStateOf(false) }
     Box(
@@ -476,8 +590,15 @@ private fun ReaderTopBar(
                 style = MaterialTheme.typography.labelMedium,
                 modifier = Modifier.padding(end = 4.dp),
             )
+            IconButton(onClick = onToggleBookmark) {
+                Icon(
+                    imageVector = if (bookmarked) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder,
+                    contentDescription = if (bookmarked) "Remove bookmark" else "Bookmark page",
+                    tint = if (bookmarked) MaterialTheme.colorScheme.primary else Color.White,
+                )
+            }
             IconButton(onClick = onSettings) {
-                Icon(Icons.Rounded.MoreVert, "Reader settings", tint = Color.White)
+                Icon(Icons.Rounded.MoreVert, "Reader settings${if (bookmarkCount > 0) ", $bookmarkCount bookmarks" else ""}", tint = Color.White)
             }
         }
     }
@@ -617,7 +738,11 @@ internal fun ChapterPickerDropdown(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ReaderSettingsSheet(onDismiss: () -> Unit) {
+private fun ReaderSettingsSheet(
+    bookmarks: List<MangaReaderBookmark>,
+    onDismiss: () -> Unit,
+    onSelectBookmark: (MangaReaderBookmark) -> Unit,
+) {
     val readerSettings by MangaReaderSettingsRepository.uiState.collectAsStateWithLifecycle()
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -656,6 +781,38 @@ private fun ReaderSettingsSheet(onDismiss: () -> Unit) {
                             text = mode.description,
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.6f),
+                        )
+                    }
+                }
+            }
+            Text(
+                "Bookmarks",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+            if (bookmarks.isEmpty()) {
+                Text(
+                    "Bookmark a page with the ribbon button while reading.",
+                    color = Color.White.copy(alpha = 0.6f),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            } else {
+                bookmarks.forEach { bookmark ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelectBookmark(bookmark) }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Icon(Icons.Rounded.Bookmark, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Text(
+                            text = "Page ${bookmark.pageIndex + 1}${if (bookmark.webtoonOffset > 0) " · offset ${bookmark.webtoonOffset}" else ""}",
+                            color = Color.White,
+                            style = MaterialTheme.typography.bodyLarge,
                         )
                     }
                 }

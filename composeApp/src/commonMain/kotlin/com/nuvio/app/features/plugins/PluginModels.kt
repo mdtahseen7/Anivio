@@ -116,6 +116,30 @@ data class PluginsUiState(
     val scrapers: List<PluginScraper> = emptyList(),
 )
 
+@Serializable
+data class PluginSetupBackup(
+    val version: Int = 1,
+    val pluginsEnabled: Boolean = true,
+    val groupStreamsByRepository: Boolean = false,
+    val repositories: List<PluginRepositoryBackup> = emptyList(),
+    val scrapers: List<PluginScraperBackup> = emptyList(),
+)
+
+@Serializable
+data class PluginRepositoryBackup(
+    val manifestUrl: String,
+    val name: String = "",
+    val version: String? = null,
+)
+
+@Serializable
+data class PluginScraperBackup(
+    val id: String,
+    val repositoryUrl: String,
+    val enabled: Boolean,
+    val order: Int,
+)
+
 sealed interface AddPluginRepositoryResult {
     data class Success(val repository: PluginRepositoryItem) : AddPluginRepositoryResult
     data class Error(val message: String) : AddPluginRepositoryResult
