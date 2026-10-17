@@ -1,40 +1,26 @@
 package com.nuvio.app.features.details.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChatBubbleOutline
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.nuvio.app.features.details.MetaDetails
 import com.nuvio.app.features.anilist.parseAniListMediaId
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.detail_comments_title
-import nuvio.composeapp.generated.resources.detail_tab_info
-import nuvio.composeapp.generated.resources.detail_tab_comments
 import org.jetbrains.compose.resources.stringResource
 
 enum class DetailContentTab {
@@ -96,75 +82,6 @@ data class AnimeCommunityColorScheme(
     val primaryText: String,
     val secondaryText: String,
 )
-
-@Composable
-fun DetailContentTabBar(
-    selectedTab: DetailContentTab,
-    onTabSelected: (DetailContentTab) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.46f),
-        shape = RoundedCornerShape(18.dp),
-    ) {
-        Row(
-            modifier = Modifier.padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            DetailContentTabButton(
-                label = stringResource(Res.string.detail_tab_info),
-                icon = Icons.Default.Info,
-                selected = selectedTab == DetailContentTab.INFO,
-                onClick = { onTabSelected(DetailContentTab.INFO) },
-                modifier = Modifier.weight(1f),
-            )
-            DetailContentTabButton(
-                label = stringResource(Res.string.detail_tab_comments),
-                icon = Icons.Default.ChatBubbleOutline,
-                selected = selectedTab == DetailContentTab.COMMENTS,
-                onClick = { onTabSelected(DetailContentTab.COMMENTS) },
-                modifier = Modifier.weight(1f),
-            )
-        }
-    }
-}
-
-@Composable
-private fun DetailContentTabButton(
-    label: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        modifier = modifier
-            .height(44.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .clickable(role = Role.Tab, onClick = onClick),
-        color = if (selected) {
-            MaterialTheme.colorScheme.onBackground
-        } else {
-            Color.Transparent
-        },
-        contentColor = if (selected) {
-            MaterialTheme.colorScheme.background
-        } else {
-            MaterialTheme.colorScheme.onSurfaceVariant
-        },
-    ) {
-        Row(
-            modifier = Modifier.fillMaxSize(),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(modifier = Modifier.size(8.dp))
-            Text(text = label, style = MaterialTheme.typography.labelLarge)
-        }
-    }
-}
 
 @Composable
 fun AnimeCommunityCommentsSection(

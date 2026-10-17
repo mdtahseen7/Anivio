@@ -63,6 +63,7 @@ internal object DantotsuCommentsApi {
     private const val BASE_URL = "https://api.dantotsu.app"
     private const val TOKEN_CACHE_WINDOW_MS = 6 * 24 * 60 * 60 * 1000L
     private const val USER_AGENT = "Anivio"
+    private const val APP_AUTH = "6*45Qp%W2RS@t38jkXoSKY588Ynj%n"
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
 
     private var cachedSession: DantotsuAuthSession? = null
@@ -76,14 +77,14 @@ internal object DantotsuCommentsApi {
     ): DantotsuCommentPage = requestWithReauth { token ->
         val response = raw(
             method = "GET",
-            path = "/comments/$mediaId?page=$page&sort=${sort.apiValue}",
+            path = "/comments/$mediaId/${page + 1}?sort=${sort.apiValue}",
             token = token,
         )
         response.requireSuccess().toCommentPage()
     }
 
     suspend fun replies(commentId: Int): List<DantotsuComment> = requestWithReauth { token ->
-        raw("GET", "/comments/parent/$commentId", token = token)
+        raw("GET", "/comments/parent/$commentId/1", token = token)
             .requireSuccess()
             .toCommentPage().comments
     }
@@ -173,8 +174,8 @@ internal object DantotsuCommentsApi {
         val response = raw(
             method = "POST",
             path = "/authenticate",
-            body = "{\"token\":${JsonPrimitive(aniListToken)}}",
-            contentType = "application/json",
+            body = form(listOf("token" to aniListToken)),
+            contentType = "application/x-www-form-urlencoded",
             token = null,
         )
         if (response.status == 401) throw DantotsuCommentsException("AniList authentication was rejected.")
@@ -195,7 +196,8 @@ internal object DantotsuCommentsApi {
         val headers = buildMap {
             put("Accept", "application/json")
             put("User-Agent", USER_AGENT)
-            token?.let { put("Authorization", "Bearer $it") }
+            put("appauth", APP_AUTH)
+            token?.let { put("Authorization", it) }
             contentType?.let { put("Content-Type", it) }
         }
         return httpRequestRaw(
@@ -247,42 +249,46 @@ internal object DantotsuCommentsApi {
     }
 
     private fun JsonObject.toComment(): DantotsuComment? {
-        val id = int("commentId") ?: int("id") ?: return null
+        val id = int("commentId", "comment_id", "id") ?: return null
         return DantotsuComment(
             id = id,
-            userId = string("userId").orEmpty(),
-            mediaId = int("mediaId") ?: 0,
-            parentCommentId = int("parentCommentId"),
+            userId = string("userId", "user_id").orEmpty(),
+            mediaId = int("mediaId", "media_id") ?: 0,
+            parentCommentId = int("parentCommentId", "parent_comment_id"),
             content = string("content").orEmpty(),
             timestamp = string("timestamp").orEmpty(),
             deleted = bool("deleted"),
             tag = int("tag"),
             upvotes = int("upvotes") ?: 0,
             downvotes = int("downvotes") ?: 0,
-            userVoteType = int("userVoteType"),
-            totalVotes = int("totalVotes") ?: 0,
-            replyCount = int("replyCount") ?: 0,
+            userVoteType = int("userVoteType", "user_vote_type"),
+            totalVotes = int("totalVotes", "total_votes") ?: 0,
+            replyCount = int("replyCount", "reply_count") ?: 0,
             username = string("username").orEmpty(),
-            profilePictureUrl = string("profilePictureUrl"),
-            isAdmin = bool("isAdmin"),
-            isMod = bool("isMod"),
+            profilePictureUrl = string("profilePictureUrl", "profile_picture_url"),
+            isAdmin = bool("isAdmin", "is_admin"),
+            isMod = bool("isMod", "is_mod"),
         )
     }
 
     private fun JsonObject.toUser(): DantotsuUser = DantotsuUser(
-        id = string("id").orEmpty(),
+        id = string("id", "user_id").orEmpty(),
         username = string("username").orEmpty(),
-        profilePictureUrl = string("profilePictureUrl"),
-        isBanned = bool("isBanned"),
-        isAdmin = bool("isAdmin"),
-        isMod = bool("isMod"),
-        totalVotes = int("totalVotes") ?: 0,
+        profilePictureUrl = string("profilePictureUrl", "profile_picture_url"),
+        isBanned = bool("isBanned", "is_banned"),
+        isAdmin = bool("isAdmin", "is_admin"),
+        isMod = bool("isMod", "is_mod"),
+        totalVotes = int("totalVotes", "total_votes") ?: 0,
     )
 
-    private fun JsonObject.string(key: String): String? = this[key]?.jsonPrimitive?.contentOrNull
-    private fun JsonObject.int(key: String): Int? = this[key]?.jsonPrimitive?.intOrNull
-    private fun JsonObject.bool(key: String): Boolean {
-        val primitive = this[key]?.jsonPrimitive ?: return false
+    private fun JsonObject.string(vararg keys: String): String? =
+        keys.firstNotNullOfOrNull { key -> this[key]?.jsonPrimitive?.contentOrNull }
+
+    private fun JsonObject.int(vararg keys: String): Int? =
+        keys.firstNotNullOfOrNull { key -> this[key]?.jsonPrimitive?.intOrNull }
+
+    private fun JsonObject.bool(vararg keys: String): Boolean {
+        val primitive = keys.firstNotNullOfOrNull { key -> this[key]?.jsonPrimitive } ?: return false
         return primitive.booleanOrNull ?: primitive.intOrNull?.let { it != 0 } ?: false
     }
 

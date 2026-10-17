@@ -21,6 +21,7 @@ data class DantotsuCommentsUiState(
     val isPosting: Boolean = false,
     val errorMessage: String? = null,
     val signedInUser: DantotsuUser? = null,
+    val replyingTo: DantotsuComment? = null,
 )
 
 object DantotsuCommentsRepository {
@@ -191,6 +192,10 @@ object DantotsuCommentsRepository {
     }
 
     fun clearError() = _uiState.update { it.copy(errorMessage = null) }
+
+    fun setReplyingTo(comment: DantotsuComment?) {
+        _uiState.update { it.copy(replyingTo = comment) }
+    }
 
     private fun updateComment(id: Int, transform: (DantotsuComment) -> DantotsuComment) {
         _uiState.update { state ->

@@ -1,6 +1,7 @@
 ﻿package com.nuvio.app.features.details
 
 import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
@@ -8,6 +9,10 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -22,6 +27,8 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -34,14 +41,18 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CheckCircleOutline
+import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlaylistAddCheckCircle
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.SmallFloatingActionButton
 import com.nuvio.app.core.ui.NuvioLoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -99,7 +110,7 @@ import com.nuvio.app.features.details.components.MangaReaderOverlay
 import com.nuvio.app.features.details.components.DetailAdditionalInfoSection
 import com.nuvio.app.features.details.components.DetailCastSection
 import com.nuvio.app.features.details.components.DetailContentTab
-import com.nuvio.app.features.details.components.DetailContentTabBar
+import com.nuvio.app.features.details.components.DantotsuCommentsComposer
 import com.nuvio.app.features.details.components.DantotsuCommentsSection
 import com.nuvio.app.features.details.components.DetailFloatingHeader
 import com.nuvio.app.features.details.components.DetailHero
@@ -950,6 +961,9 @@ fun MetaDetailsScreen(
                             (listState.firstVisibleItemIndex > 0 || detailScrollOffsetPx() > thresholdPx)
                     }
                 }
+                val isDetailScrolling by remember(listState) {
+                    derivedStateOf { listState.isScrollInProgress }
+                }
                 val heroTrailerSourceUrl = heroTrailerPlaybackSource
                     ?.videoUrl
                     ?.takeIf { it.isNotBlank() && heroTrailerPlaybackEnabled && !heroTrailerFinished && !isLeavingDetails }
@@ -1130,13 +1144,18 @@ fun MetaDetailsScreen(
                                     onCastClick = onCastClick,
                                     onCompanyClick = onCompanyClick,
                                     contentTab = detailContentTab,
-                                    onContentTabSelected = { detailContentTab = it },
                                     sharedTransitionScope = sharedTransitionScope,
                                     animatedVisibilityScope = animatedVisibilityScope,
                                 )
 
                                 item(key = "detail-bottom-spacer") {
-                                    Spacer(modifier = Modifier.height(nuvioSafeBottomPadding(32.dp)))
+                                    Spacer(
+                                        modifier = Modifier.height(
+                                            nuvioSafeBottomPadding(
+                                                if (detailContentTab == DetailContentTab.COMMENTS) 176.dp else 32.dp,
+                                            ),
+                                        ),
+                                    )
                                 }
                             }
 
@@ -1181,6 +1200,58 @@ fun MetaDetailsScreen(
                             isNotifySubscribed = isNotifySubscribed,
                             onNotifyClick = toggleEpisodeNotifications,
                         )
+
+                        if (detailContentTab == DetailContentTab.COMMENTS) {
+                            DantotsuCommentsComposer(
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .fillMaxWidth()
+                                    .padding(horizontal = contentHorizontalPadding)
+                                    .imePadding()
+                                    .navigationBarsPadding()
+                                    .zIndex(2f),
+                            )
+                        }
+
+                        AnimatedVisibility(
+                            visible = !isDetailScrolling,
+                            enter = fadeIn(animationSpec = tween(180)) + scaleIn(animationSpec = tween(180)),
+                            exit = fadeOut(animationSpec = tween(120)) + scaleOut(animationSpec = tween(120)),
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(
+                                    end = contentHorizontalPadding,
+                                    bottom = nuvioSafeBottomPadding(
+                                        if (detailContentTab == DetailContentTab.COMMENTS) 156.dp else 16.dp,
+                                    ),
+                                )
+                                .zIndex(2f),
+                        ) {
+                            SmallFloatingActionButton(
+                                onClick = {
+                                    detailContentTab = if (detailContentTab == DetailContentTab.INFO) {
+                                        DetailContentTab.COMMENTS
+                                    } else {
+                                        DetailContentTab.INFO
+                                    }
+                                },
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            ) {
+                                Icon(
+                                    imageVector = if (detailContentTab == DetailContentTab.INFO) {
+                                        Icons.Default.ChatBubbleOutline
+                                    } else {
+                                        Icons.Default.Info
+                                    },
+                                    contentDescription = if (detailContentTab == DetailContentTab.INFO) {
+                                        "Open comments"
+                                    } else {
+                                        "Open info"
+                                    },
+                                )
+                            }
+                        }
 
                         // Fullscreen manga reader: one overlay at the root, above
                         // everything. Never inline in a lazy item, never a Dialog.
@@ -1766,7 +1837,6 @@ private fun LazyListScope.configuredMetaSectionItems(
     onCastClick: ((MetaPerson, String?) -> Unit)?,
     onCompanyClick: ((MetaCompany, String) -> Unit)?,
     contentTab: DetailContentTab,
-    onContentTabSelected: (DetailContentTab) -> Unit,
     sharedTransitionScope: SharedTransitionScope?,
     animatedVisibilityScope: AnimatedVisibilityScope?,
 ) {
@@ -1833,23 +1903,8 @@ private fun LazyListScope.configuredMetaSectionItems(
                     onCastClick = onCastClick,
                     onCompanyClick = onCompanyClick,
                     contentTab = contentTab,
-                    onContentTabSelected = onContentTabSelected,
                     sharedTransitionScope = sharedTransitionScope,
                     animatedVisibilityScope = animatedVisibilityScope,
-                )
-            }
-        }
-    }
-
-    fun addContentTabItem() {
-        item(key = "detail-content-tab-bar") {
-            DetailSectionContainer(
-                horizontalPadding = contentHorizontalPadding,
-                contentMaxWidth = contentMaxWidth,
-            ) {
-                DetailContentTabBar(
-                    selectedTab = contentTab,
-                    onTabSelected = onContentTabSelected,
                 )
             }
         }
@@ -1864,7 +1919,6 @@ private fun LazyListScope.configuredMetaSectionItems(
                 forceTabLayout = false,
             )
         }
-        addContentTabItem()
         item(key = "detail-community-comments") {
             DetailSectionContainer(
                 horizontalPadding = contentHorizontalPadding,
@@ -1885,9 +1939,6 @@ private fun LazyListScope.configuredMetaSectionItems(
                     sectionItems = listOf(section),
                     forceTabLayout = false,
                 )
-                if (section.key == MetaScreenSectionKey.ACTIONS) {
-                    addContentTabItem()
-                }
             }
         return
     }
@@ -1902,9 +1953,6 @@ private fun LazyListScope.configuredMetaSectionItems(
                     sectionItems = listOf(section),
                     forceTabLayout = true,
                 )
-                if (section.key == MetaScreenSectionKey.ACTIONS) {
-                    addContentTabItem()
-                }
             }
         } else if (groupId !in processedGroups) {
             processedGroups.add(groupId)
@@ -2016,7 +2064,6 @@ private fun ConfiguredMetaSections(
     onCastClick: ((MetaPerson, String?) -> Unit)?,
     onCompanyClick: ((MetaCompany, String) -> Unit)?,
     contentTab: DetailContentTab,
-    onContentTabSelected: (DetailContentTab) -> Unit,
     sharedTransitionScope: SharedTransitionScope?,
     animatedVisibilityScope: AnimatedVisibilityScope?,
 ) {
