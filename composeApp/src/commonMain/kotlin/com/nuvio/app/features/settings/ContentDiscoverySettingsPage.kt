@@ -32,6 +32,7 @@ import nuvio.composeapp.generated.resources.compose_settings_page_plugins
 import nuvio.composeapp.generated.resources.settings_content_discovery_addons_description
 import nuvio.composeapp.generated.resources.settings_content_discovery_addons_description_appstore
 import nuvio.composeapp.generated.resources.settings_content_discovery_plugins_description
+import nuvio.composeapp.generated.resources.settings_content_discovery_sources_description
 import nuvio.composeapp.generated.resources.settings_content_discovery_section_sources
 import nuvio.composeapp.generated.resources.settings_cloudflare_section
 import nuvio.composeapp.generated.resources.settings_cloudflare_enable
@@ -95,25 +96,11 @@ internal fun LazyListScope.contentDiscoveryContent(
         ) {
             SettingsGroup(isTablet = isTablet) {
                 SettingsNavigationRow(
-                    title = stringResource(Res.string.compose_settings_page_addons),
-                    description = stringResource(
-                        if (AppFeaturePolicy.personalMediaAddonCopyEnabled) {
-                            Res.string.settings_content_discovery_addons_description_appstore
-                        } else {
-                            Res.string.settings_content_discovery_addons_description
-                        },
-                    ),
+                    title = "Content & Addons",
+                    description = stringResource(Res.string.settings_content_discovery_sources_description),
                     isTablet = isTablet,
                     onClick = onAddonsClick,
                 )
-                if (showPluginsEntry) {
-                    SettingsNavigationRow(
-                        title = stringResource(Res.string.compose_settings_page_plugins),
-                        description = stringResource(Res.string.settings_content_discovery_plugins_description),
-                        isTablet = isTablet,
-                        onClick = onPluginsClick,
-                    )
-                }
             }
         }
     }

@@ -2,6 +2,7 @@ package com.nuvio.app.features.downloads
 
 import com.nuvio.app.features.streams.StreamItem
 import com.nuvio.app.features.streams.StreamSubtitle
+import com.nuvio.app.features.profiles.ProfileRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -19,6 +20,7 @@ import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.getString
 
 object DownloadsRepository {
+    private const val MAX_CONCURRENT_DOWNLOADS = 2
     private val _uiState = MutableStateFlow(DownloadsUiState())
     val uiState: StateFlow<DownloadsUiState> = _uiState.asStateFlow()
 
@@ -37,6 +39,8 @@ object DownloadsRepository {
     }
 
     fun onProfileChanged() {
+        activeHandles.values.forEach(DownloadsTaskHandle::cancel)
+        activeHandles.clear()
         loadFromDisk()
     }
 
@@ -245,7 +249,7 @@ object DownloadsRepository {
             sourceResponseHeaders = sanitizeResponseHeaders(stream.behaviorHints.proxyHeaders?.response),
             localFileUri = null,
             fileName = fileName,
-            status = DownloadStatus.Downloading,
+            status = DownloadStatus.Queued,
             downloadedBytes = 0L,
             totalBytes = null,
             errorMessage = null,
@@ -256,7 +260,7 @@ object DownloadsRepository {
         currentItems.add(0, item)
         publish(currentItems)
         persist()
-        startDownload(item)
+        pumpQueue()
 
         return if (replacedExisting) {
             DownloadEnqueueResult.Replaced
@@ -268,9 +272,10 @@ object DownloadsRepository {
     fun pauseDownload(downloadId: String) {
         ensureLoaded()
         val item = _uiState.value.items.firstOrNull { it.id == downloadId } ?: return
-        if (item.status != DownloadStatus.Downloading) return
+        if (item.status != DownloadStatus.Downloading && item.status != DownloadStatus.Queued) return
 
         activeHandles.remove(downloadId)?.cancel()
+        DownloadBackgroundExecution.cancel(ProfileRepository.activeProfileId, downloadId, DownloadWorkKind.ANIME)
         mutateItem(downloadId) { current ->
             current.copy(
                 status = DownloadStatus.Paused,
@@ -283,9 +288,25 @@ object DownloadsRepository {
     fun pauseActiveDownloads() {
         ensureLoaded()
         _uiState.value.items
-            .filter { it.status == DownloadStatus.Downloading }
+            .filter { it.status == DownloadStatus.Downloading || it.status == DownloadStatus.Queued }
             .map { it.id }
             .forEach(::pauseDownload)
+    }
+
+    fun resumePausedDownloads() {
+        ensureLoaded()
+        _uiState.value.items
+            .filter { it.status == DownloadStatus.Paused }
+            .map { it.id }
+            .forEach(::resumeDownload)
+    }
+
+    fun retryFailedDownloads() {
+        ensureLoaded()
+        _uiState.value.items
+            .filter { it.status == DownloadStatus.Failed }
+            .map { it.id }
+            .forEach(::retryDownload)
     }
 
     fun resumeDownload(downloadId: String) {
@@ -294,7 +315,7 @@ object DownloadsRepository {
         if (item.status != DownloadStatus.Paused && item.status != DownloadStatus.Failed) return
 
         val reset = item.copy(
-            status = DownloadStatus.Downloading,
+            status = DownloadStatus.Queued,
             errorMessage = null,
             localFileUri = null,
             updatedAtEpochMs = DownloadsClock.nowEpochMs(),
@@ -302,11 +323,29 @@ object DownloadsRepository {
 
         replaceItem(reset)
         persist()
-        startDownload(reset)
+        pumpQueue()
     }
 
     fun retryDownload(downloadId: String) {
         resumeDownload(downloadId)
+    }
+
+    internal fun runDownloadForWorker(downloadId: String): Boolean {
+        ensureLoaded()
+        val item = _uiState.value.items.firstOrNull { it.id == downloadId } ?: return false
+        if (item.status == DownloadStatus.Completed) return true
+        if (item.status != DownloadStatus.Downloading) {
+            replaceItem(item.copy(status = DownloadStatus.Downloading, errorMessage = null))
+            persist()
+        }
+        val active = _uiState.value.items.firstOrNull { it.id == downloadId } ?: return false
+        if (activeHandles[downloadId] == null) startDownload(active)
+        return true
+    }
+
+    internal fun statusForWorker(downloadId: String): DownloadStatus? {
+        ensureLoaded()
+        return _uiState.value.items.firstOrNull { it.id == downloadId }?.status
     }
 
     fun cancelDownload(downloadId: String) {
@@ -314,6 +353,7 @@ object DownloadsRepository {
         val item = _uiState.value.items.firstOrNull { it.id == downloadId } ?: return
 
         activeHandles.remove(downloadId)?.cancel()
+        DownloadBackgroundExecution.cancel(ProfileRepository.activeProfileId, downloadId, DownloadWorkKind.ANIME)
         DownloadsPlatformDownloader.removeFile(playableLocalFileUri(item) ?: item.localFileUri)
         DownloadsPlatformDownloader.removePartialFile(item.fileName)
 
@@ -335,7 +375,7 @@ object DownloadsRepository {
             .map { item ->
                 val statusNormalized = if (item.status == DownloadStatus.Downloading) {
                     item.copy(
-                        status = DownloadStatus.Paused,
+                        status = DownloadStatus.Queued,
                         errorMessage = null,
                     )
                 } else {
@@ -354,6 +394,41 @@ object DownloadsRepository {
         if (shouldPersistNormalized) {
             persist()
         }
+        pumpQueue()
+    }
+
+    private fun pumpQueue() {
+        if (!hasLoaded) return
+        if (DownloadBackgroundExecution.isSupported) {
+            _uiState.value.items
+                .filter { it.status == DownloadStatus.Queued }
+                .forEach { queued ->
+                    DownloadBackgroundExecution.schedule(
+                        profileId = ProfileRepository.activeProfileId,
+                        downloadId = queued.id,
+                        kind = DownloadWorkKind.ANIME,
+                    )
+                }
+            return
+        }
+        val availableSlots = (MAX_CONCURRENT_DOWNLOADS - activeHandles.size).coerceAtLeast(0)
+        if (availableSlots == 0) return
+
+        _uiState.value.items
+            .filter { it.status == DownloadStatus.Queued }
+            .sortedWith(compareBy<DownloadItem> { it.createdAtEpochMs }.thenBy { it.id })
+            .take(availableSlots)
+            .forEach { queued ->
+                mutateItem(queued.id) { current ->
+                    current.copy(
+                        status = DownloadStatus.Downloading,
+                        updatedAtEpochMs = DownloadsClock.nowEpochMs(),
+                        errorMessage = null,
+                    )
+                }
+                val active = _uiState.value.items.firstOrNull { it.id == queued.id } ?: return@forEach
+                startDownload(active)
+            }
     }
 
     private fun startDownload(item: DownloadItem) {
@@ -401,6 +476,7 @@ object DownloadsRepository {
                         )
                     }
                 }
+                pumpQueue()
             },
             onFailure = { message ->
                 activeHandles.remove(item.id)
@@ -415,6 +491,7 @@ object DownloadsRepository {
                         )
                     }
                 }
+                pumpQueue()
             },
         )
 

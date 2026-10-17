@@ -56,6 +56,29 @@ object MangaReaderSettingsRepository {
         persist()
     }
 
+    fun exportPayload(): String {
+        ensureLoaded()
+        return json.encodeToString(
+            StoredMangaReaderSettings(readingMode = _uiState.value.readingMode),
+        )
+    }
+
+    fun replacePayload(payload: String): Boolean {
+        if (payload.isBlank()) {
+            hasLoaded = true
+            _uiState.value = MangaReaderSettingsUiState()
+            persist()
+            return true
+        }
+        val stored = runCatching {
+            json.decodeFromString<StoredMangaReaderSettings>(payload)
+        }.getOrNull() ?: return false
+        hasLoaded = true
+        _uiState.value = MangaReaderSettingsUiState(readingMode = stored.readingMode)
+        persist()
+        return true
+    }
+
     private fun loadFromDisk() {
         hasLoaded = true
 

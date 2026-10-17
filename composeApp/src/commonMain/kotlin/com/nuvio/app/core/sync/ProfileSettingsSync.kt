@@ -10,6 +10,8 @@ import com.nuvio.app.features.debrid.DebridSettingsRepository
 import com.nuvio.app.features.debrid.DebridSettingsStorage
 import com.nuvio.app.features.details.MetaScreenSettingsStorage
 import com.nuvio.app.features.details.MetaScreenSettingsRepository
+import com.nuvio.app.features.details.MangaReaderProgressRepository
+import com.nuvio.app.features.details.MangaReaderSettingsRepository
 import com.nuvio.app.features.home.HomeCatalogSettingsStorage
 import com.nuvio.app.features.library.LibraryDisplaySettingsStorage
 import com.nuvio.app.features.mdblist.MdbListMetadataService
@@ -191,6 +193,7 @@ object ProfileSettingsSync {
             ContinueWatchingPreferencesRepository.uiState.map { "continue_watching" },
             TrackingSettingsRepository.uiState.map { "tracking_settings" },
             EpisodeReleaseNotificationsRepository.uiState.map { "episode_release_alerts" },
+            MangaReaderProgressRepository.changes.map { "manga_reader_progress" },
         )
 
         observeJob = scope.launch {
@@ -256,6 +259,8 @@ object ProfileSettingsSync {
                 homeCatalogSettingsPayload = HomeCatalogSettingsStorage.loadPayload().orEmpty().trim(),
                 libraryDisplaySettingsPayload = LibraryDisplaySettingsStorage.loadPayload().orEmpty().trim(),
                 sentrySettingsPayload = SentrySettingsStorage.loadPayload().orEmpty().trim(),
+                mangaReaderProgressPayload = MangaReaderProgressRepository.exportPayload(),
+                mangaReaderSettingsPayload = MangaReaderSettingsRepository.exportPayload(),
             ),
         )
     }
@@ -330,6 +335,12 @@ object ProfileSettingsSync {
         HomeCatalogSettingsStorage.savePayload(blob.features.homeCatalogSettingsPayload)
         LibraryDisplaySettingsStorage.savePayload(blob.features.libraryDisplaySettingsPayload)
         SentrySettingsStorage.savePayload(blob.features.sentrySettingsPayload)
+        if (blob.features.mangaReaderProgressPayload.isNotBlank()) {
+            MangaReaderProgressRepository.replacePayload(blob.features.mangaReaderProgressPayload)
+        }
+        if (blob.features.mangaReaderSettingsPayload.isNotBlank()) {
+            MangaReaderSettingsRepository.replacePayload(blob.features.mangaReaderSettingsPayload)
+        }
     }
 
     private fun ensureRepositoriesLoaded() {
@@ -346,6 +357,8 @@ object ProfileSettingsSync {
         ContinueWatchingPreferencesRepository.ensureLoaded()
         TrackingSettingsRepository.ensureLoaded()
         EpisodeReleaseNotificationsRepository.ensureLoaded()
+        MangaReaderProgressRepository.ensureLoaded()
+        MangaReaderSettingsRepository.ensureLoaded()
     }
 
     private fun buildSignature(blob: MobileProfileSettingsBlob): String =
@@ -357,7 +370,7 @@ object ProfileSettingsSync {
 
 @Serializable
 private data class MobileProfileSettingsBlob(
-    val version: Int = 4,
+    val version: Int = 5,
     val features: MobileProfileSettingsFeatures = MobileProfileSettingsFeatures(),
 )
 
@@ -379,6 +392,8 @@ private data class MobileProfileSettingsFeatures(
     @SerialName("home_catalog_settings_payload") val homeCatalogSettingsPayload: String = "",
     @SerialName("library_display_settings_payload") val libraryDisplaySettingsPayload: String = "",
     @SerialName("sentry_settings_payload") val sentrySettingsPayload: String = "",
+    @SerialName("manga_reader_progress_payload") val mangaReaderProgressPayload: String = "",
+    @SerialName("manga_reader_settings_payload") val mangaReaderSettingsPayload: String = "",
 )
 
 @Serializable

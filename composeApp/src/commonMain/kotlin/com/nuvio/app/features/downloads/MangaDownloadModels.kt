@@ -7,6 +7,7 @@ data class MangaDownloadPage(
     val pageIndex: Int,
     val fileName: String,
     val localFileUri: String,
+    val sizeBytes: Long = 0L,
 )
 
 @Serializable
@@ -49,3 +50,12 @@ data class MangaDownloadsUiState(
     val completedItems: List<MangaDownloadItem>
         get() = items.filter { it.status == DownloadStatus.Completed }
 }
+
+internal fun MangaDownloadsUiState.storageSummary(): DownloadsStorageSummary = DownloadsStorageSummary(
+    queuedCount = items.count { it.status == DownloadStatus.Queued },
+    activeCount = items.count { it.status == DownloadStatus.Downloading },
+    pausedCount = items.count { it.status == DownloadStatus.Paused },
+    completedCount = items.count { it.status == DownloadStatus.Completed },
+    failedCount = items.count { it.status == DownloadStatus.Failed },
+    bytes = items.sumOf { item -> item.pages.sumOf { it.sizeBytes.coerceAtLeast(0L) } },
+)

@@ -11,6 +11,7 @@ import org.jetbrains.compose.resources.getString
 
 @Serializable
 enum class DownloadStatus {
+    Queued,
     Downloading,
     Paused,
     Completed,
@@ -91,6 +92,26 @@ data class DownloadsUiState(
     val completedItems: List<DownloadItem>
         get() = items.filter { it.status == DownloadStatus.Completed }
 }
+
+data class DownloadsStorageSummary(
+    val queuedCount: Int,
+    val activeCount: Int,
+    val pausedCount: Int,
+    val completedCount: Int,
+    val failedCount: Int,
+    val bytes: Long,
+)
+
+internal fun DownloadsUiState.storageSummary(): DownloadsStorageSummary = DownloadsStorageSummary(
+    queuedCount = items.count { it.status == DownloadStatus.Queued },
+    activeCount = items.count { it.status == DownloadStatus.Downloading },
+    pausedCount = items.count { it.status == DownloadStatus.Paused },
+    completedCount = items.count { it.status == DownloadStatus.Completed },
+    failedCount = items.count { it.status == DownloadStatus.Failed },
+    bytes = items.sumOf { item ->
+        (item.totalBytes ?: item.downloadedBytes).coerceAtLeast(0L)
+    },
+)
 
 enum class DownloadEnqueueResult {
     Started,

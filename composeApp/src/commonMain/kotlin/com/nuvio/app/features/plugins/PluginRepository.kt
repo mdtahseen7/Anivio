@@ -33,6 +33,10 @@ expect object PluginRepository {
 
     fun setGroupStreamsByRepository(enabled: Boolean)
 
+    fun exportSetupPayload(): String
+
+    fun restoreSetupPayload(payload: String): Boolean
+
     fun getEnabledScrapersForType(type: String): List<PluginScraper>
 
     fun getEnabledMangaScrapers(): List<PluginScraper>

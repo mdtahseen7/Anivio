@@ -43,6 +43,7 @@ internal actual object DownloadsLiveStatusPlatform {
 
         val activeItems = items.filter { item ->
             item.status == DownloadStatus.Downloading ||
+                item.status == DownloadStatus.Queued ||
                 item.status == DownloadStatus.Paused ||
                 item.status == DownloadStatus.Failed
         }
@@ -107,6 +108,21 @@ internal actual object DownloadsLiveStatusPlatform {
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
 
         when (item.status) {
+            DownloadStatus.Queued -> {
+                notificationBuilder
+                    .setOngoing(false)
+                    .setPriority(NotificationCompat.PRIORITY_LOW)
+                    .setProgress(0, 0, false)
+                    .addAction(
+                        0,
+                        runBlocking { getString(Res.string.compose_action_pause) },
+                        buildActionPendingIntent(
+                            context = context,
+                            action = DownloadsNotificationActionReceiver.actionPause,
+                            downloadId = item.id,
+                        ),
+                    )
+            }
             DownloadStatus.Downloading -> {
                 notificationBuilder
                     .setOngoing(true)
@@ -162,6 +178,7 @@ internal actual object DownloadsLiveStatusPlatform {
     private fun buildSubtitle(item: DownloadItem): String {
         val detail = item.displaySubtitle
         return when (item.status) {
+            DownloadStatus.Queued -> "Queued"
             DownloadStatus.Downloading -> {
                 val downloaded = formatBytes(item.downloadedBytes)
                 val total = item.totalBytes?.let(::formatBytes)

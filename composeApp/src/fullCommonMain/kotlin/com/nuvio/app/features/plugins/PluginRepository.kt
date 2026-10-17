@@ -25,6 +25,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
@@ -353,6 +354,61 @@ actual object PluginRepository {
         initialize()
         _uiState.update { it.copy(groupStreamsByRepository = enabled) }
         persist()
+    }
+
+    actual fun exportSetupPayload(): String {
+        initialize()
+        val state = _uiState.value
+        return json.encodeToString(
+            PluginSetupBackup(
+                pluginsEnabled = state.pluginsEnabled,
+                groupStreamsByRepository = state.groupStreamsByRepository,
+                repositories = state.repositories.map {
+                    PluginRepositoryBackup(it.manifestUrl, it.name, it.version)
+                },
+                scrapers = state.scrapers.mapIndexed { index, scraper ->
+                    PluginScraperBackup(
+                        id = scraper.id,
+                        repositoryUrl = scraper.repositoryUrl,
+                        enabled = scraper.enabled,
+                        order = index,
+                    )
+                },
+            ),
+        )
+    }
+
+    actual fun restoreSetupPayload(payload: String): Boolean {
+        val backup = runCatching { json.decodeFromString<PluginSetupBackup>(payload) }.getOrNull() ?: return false
+        if (backup.version != 1) return false
+        initialize()
+        val backupRepos = backup.repositories.map { it.manifestUrl }.toSet()
+        val enabledById = backup.scrapers.associate { it.id to it.enabled }
+        val orderById = backup.scrapers.associate { it.id to it.order }
+        _uiState.update { state ->
+            val repositories = backup.repositories.map { requested ->
+                state.repositories.firstOrNull { it.manifestUrl == requested.manifestUrl }
+                    ?: PluginRepositoryItem(
+                        manifestUrl = requested.manifestUrl,
+                        name = requested.name.ifBlank { requested.manifestUrl },
+                        version = requested.version,
+                        isRefreshing = true,
+                    )
+            }
+            val scrapers = state.scrapers
+                .filter { it.repositoryUrl in backupRepos }
+                .map { scraper -> scraper.copy(enabled = enabledById[scraper.id] ?: scraper.enabled) }
+                .sortedWith(compareBy { orderById[it.id] ?: Int.MAX_VALUE })
+            state.copy(
+                pluginsEnabled = backup.pluginsEnabled,
+                groupStreamsByRepository = backup.groupStreamsByRepository,
+                repositories = repositories,
+                scrapers = scrapers,
+            )
+        }
+        persist()
+        backup.repositories.forEach { refreshRepositoryInternal(it.manifestUrl, pushAfterRefresh = false, ensureInitialized = false) }
+        return true
     }
 
     actual fun getEnabledScrapersForType(type: String): List<PluginScraper> {

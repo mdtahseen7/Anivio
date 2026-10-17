@@ -37,6 +37,10 @@ actual object PluginRepository {
 
     actual fun setGroupStreamsByRepository(enabled: Boolean) = Unit
 
+    actual fun exportSetupPayload(): String = PluginSetupBackup().let { kotlinx.serialization.json.Json.encodeToString(PluginSetupBackup.serializer(), it) }
+
+    actual fun restoreSetupPayload(payload: String): Boolean = false
+
     actual fun getEnabledScrapersForType(type: String): List<PluginScraper> = emptyList()
 
     actual fun getEnabledMangaScrapers(): List<PluginScraper> = emptyList()
