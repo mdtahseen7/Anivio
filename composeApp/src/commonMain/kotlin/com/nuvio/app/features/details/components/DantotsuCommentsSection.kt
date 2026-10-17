@@ -83,9 +83,6 @@ fun DantotsuCommentsSection(
     }
 
     val state by DantotsuCommentsRepository.uiState.collectAsStateWithLifecycle()
-    var composerText by remember(mediaId) { mutableStateOf("") }
-    var composerSpoiler by remember(mediaId) { mutableStateOf(false) }
-    var replyingTo by remember(mediaId) { mutableStateOf<DantotsuComment?>(null) }
     var editingComment by remember(mediaId) { mutableStateOf<DantotsuComment?>(null) }
     var showRules by remember(mediaId) { mutableStateOf(false) }
 
@@ -133,22 +130,6 @@ fun DantotsuCommentsSection(
             }
         }
 
-        DantotsuComposer(
-            text = composerText,
-            onTextChange = { composerText = it.take(300) },
-            replyingTo = replyingTo,
-            enabled = state.signedInUser != null && !state.isPosting,
-            spoiler = composerSpoiler,
-            onSpoilerChange = { composerSpoiler = it },
-            onCancelReply = { replyingTo = null },
-            onSend = {
-                DantotsuCommentsRepository.post(composerText, replyingTo?.id, if (composerSpoiler) 1 else null)
-                composerText = ""
-                replyingTo = null
-                composerSpoiler = false
-            },
-        )
-
         state.errorMessage?.let { error ->
             NuvioSurfaceCard {
                 Text(error, color = MaterialTheme.colorScheme.error)
@@ -174,7 +155,7 @@ fun DantotsuCommentsSection(
                     comment = comment,
                     currentUser = state.signedInUser,
                     onVote = DantotsuCommentsRepository::vote,
-                    onReply = { replyingTo = it },
+                    onReply = DantotsuCommentsRepository::setReplyingTo,
                     onEdit = { editingComment = it },
                     onDelete = DantotsuCommentsRepository::delete,
                     onReport = { DantotsuCommentsRepository.report(it, "Reported from Anivio") },
@@ -232,7 +213,38 @@ fun DantotsuCommentsSection(
 }
 
 @Composable
+fun DantotsuCommentsComposer(
+    modifier: Modifier = Modifier,
+) {
+    val state by DantotsuCommentsRepository.uiState.collectAsStateWithLifecycle()
+    var composerText by remember(state.mediaId) { mutableStateOf("") }
+    var composerSpoiler by remember(state.mediaId) { mutableStateOf(false) }
+
+    DantotsuComposer(
+        modifier = modifier,
+        text = composerText,
+        onTextChange = { composerText = it.take(300) },
+        replyingTo = state.replyingTo,
+        enabled = state.signedInUser != null && !state.isPosting,
+        spoiler = composerSpoiler,
+        onSpoilerChange = { composerSpoiler = it },
+        onCancelReply = { DantotsuCommentsRepository.setReplyingTo(null) },
+        onSend = {
+            DantotsuCommentsRepository.post(
+                composerText,
+                state.replyingTo?.id,
+                if (composerSpoiler) 1 else null,
+            )
+            composerText = ""
+            composerSpoiler = false
+            DantotsuCommentsRepository.setReplyingTo(null)
+        },
+    )
+}
+
+@Composable
 private fun DantotsuComposer(
+    modifier: Modifier,
     text: String,
     onTextChange: (String) -> Unit,
     replyingTo: DantotsuComment?,
@@ -242,7 +254,7 @@ private fun DantotsuComposer(
     onCancelReply: () -> Unit,
     onSend: () -> Unit,
 ) {
-    NuvioSurfaceCard {
+    NuvioSurfaceCard(modifier = modifier) {
         if (!enabled && replyingTo == null) {
             Text("Connect AniList to join the discussion.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
