@@ -27,8 +27,6 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -1207,8 +1205,6 @@ fun MetaDetailsScreen(
                                     .align(Alignment.BottomCenter)
                                     .fillMaxWidth()
                                     .padding(horizontal = contentHorizontalPadding)
-                                    .imePadding()
-                                    .navigationBarsPadding()
                                     .zIndex(2f),
                             )
                         }
@@ -1237,6 +1233,7 @@ fun MetaDetailsScreen(
                                 },
                                 containerColor = MaterialTheme.colorScheme.primaryContainer,
                                 contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(56.dp),
                             ) {
                                 Icon(
                                     imageVector = if (detailContentTab == DetailContentTab.INFO) {

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -22,6 +23,7 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Send
 import androidx.compose.material.icons.rounded.Shield
@@ -38,6 +40,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -51,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -62,6 +66,9 @@ import com.nuvio.app.features.details.MetaDetails
 import com.nuvio.app.features.anilist.parseAniListMediaId
 import com.nuvio.app.core.ui.NuvioSurfaceCard
 import com.nuvio.app.core.ui.nuvio
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 
 enum class DantotsuCommentSort(val apiValue: Int, val label: String) {
     NEWEST(0, "Newest"),
@@ -254,7 +261,11 @@ private fun DantotsuComposer(
     onCancelReply: () -> Unit,
     onSend: () -> Unit,
 ) {
-    NuvioSurfaceCard(modifier = modifier) {
+    var optionsExpanded by remember { mutableStateOf(false) }
+    NuvioSurfaceCard(
+        modifier = modifier,
+        contentPadding = 10.dp,
+    ) {
         if (!enabled && replyingTo == null) {
             Text("Connect AniList to join the discussion.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
@@ -270,19 +281,55 @@ private fun DantotsuComposer(
                 modifier = Modifier.fillMaxWidth(),
                 enabled = enabled,
                 placeholder = { Text("Write a response…") },
+                singleLine = true,
                 supportingText = { Text("${text.length}/300") },
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    disabledContainerColor = Color.Transparent,
+                ),
                 trailingIcon = {
-                    IconButton(onClick = onSend, enabled = enabled && text.trim().isNotEmpty()) {
-                        Icon(Icons.Rounded.Send, contentDescription = "Post comment")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box {
+                            IconButton(onClick = { optionsExpanded = true }) {
+                                Icon(Icons.Rounded.MoreHoriz, contentDescription = "More comment options")
+                            }
+                            DropdownMenu(
+                                expanded = optionsExpanded,
+                                onDismissRequest = { optionsExpanded = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text(if (spoiler) "Remove spoiler" else "Mark as spoiler") },
+                                    onClick = {
+                                        onSpoilerChange(!spoiler)
+                                        optionsExpanded = false
+                                    },
+                                )
+                            }
+                        }
+                        IconButton(
+                            onClick = onSend,
+                            enabled = enabled && text.trim().isNotEmpty(),
+                            modifier = Modifier.size(48.dp),
+                        ) {
+                            Icon(Icons.Rounded.Send, contentDescription = "Post comment")
+                        }
                     }
                 },
             )
-            FilterChip(
-                selected = spoiler,
-                onClick = { onSpoilerChange(!spoiler) },
-                label = { Text("Spoiler") },
-            )
         }
+    }
+}
+
+private fun formatCommentTimestamp(raw: String): String {
+    val instant = runCatching { Instant.parse(raw) }.getOrNull() ?: return raw
+    val local = instant.toLocalDateTime(TimeZone.currentSystemDefault())
+    return buildString {
+        append(local.date)
+        append(' ')
+        append(local.time.hour.toString().padStart(2, '0'))
+        append(':')
+        append(local.time.minute.toString().padStart(2, '0'))
     }
 }
 
@@ -330,7 +377,7 @@ private fun DantotsuCommentCard(
                         }
                     }
                 }
-                Text(comment.timestamp, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(formatCommentTimestamp(comment.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (comment.tag != null) {
                     Text("Spoiler", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                 }
@@ -348,7 +395,7 @@ private fun DantotsuCommentCard(
                         fontWeight = FontWeight.SemiBold,
                     )
                 } else {
-                    Text(comment.content, style = MaterialTheme.typography.bodyMedium)
+                    CommentContent(comment.content)
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -384,6 +431,38 @@ private fun DantotsuCommentCard(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun CommentContent(content: String) {
+    val uriHandler = LocalUriHandler.current
+    val url = Regex("https?://\\S+").find(content)?.value?.trimEnd('.', ',', ')', ']', '}')
+    val isKlipyMedia = url?.contains("static.klipy.co/", ignoreCase = true) == true &&
+        url.substringBefore('?').lowercase().let { it.endsWith(".gif") || it.endsWith(".webp") || it.endsWith(".png") }
+    val isKlipyPage = url?.contains("klipy.com/", ignoreCase = true) == true
+
+    when {
+        isKlipyMedia -> AsyncImage(
+            model = url,
+            contentDescription = "Comment GIF",
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 260.dp)
+                .clip(RoundedCornerShape(12.dp)),
+            contentScale = ContentScale.Fit,
+        )
+        isKlipyPage -> Text(
+            text = "Open GIF on Klipy",
+            modifier = Modifier
+                .clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .clickable { uriHandler.openUri(url) }
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.SemiBold,
+        )
+        else -> Text(content, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
