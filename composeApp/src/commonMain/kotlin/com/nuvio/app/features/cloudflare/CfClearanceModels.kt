@@ -53,15 +53,50 @@ private val CF_CHALLENGE_MARKERS = listOf(
     "/cdn-cgi/challenge",
     "cf-chl-",
     "ddos-guard",
+    // Cloudflare Turnstile / Managed Challenge
+    "challenges.cloudflare.com",
+    "cf-turnstile",
+    "turnstile",
+    "verify you are human",
+    "checking your browser",
+    "enable javascript and cookies to continue",
+)
+
+/**
+ * Markers that only appear on a full-page challenge interstitial, never on an ordinary page that
+ * merely embeds a Turnstile widget. Safe to match even when the response is HTTP 200.
+ */
+private val CF_INTERSTITIAL_MARKERS = listOf(
+    "just a moment",
+    "cf-browser-verification",
+    "challenge-platform",
+    "/cdn-cgi/challenge",
+    "cf-chl-",
+    "cf_chl",
+    "ddos-guard",
+    "challenges.cloudflare.com",
+    "verify you are human",
+    "checking your browser",
+    "enable javascript and cookies to continue",
 )
 
 /**
  * Heuristic: does this response look like a Cloudflare (or DDoS-Guard) challenge rather than real
  * content? Requires a blocking status plus a body that carries a known challenge marker, so a plain
  * 403 from a normal API is not mistaken for a challenge.
+ *
+ * Turnstile / Managed Challenge interstitials are frequently served as **HTTP 200** with a full HTML
+ * challenge page, so a 200 is also treated as a challenge when the body is HTML and carries a
+ * full-page interstitial marker. A normal HTML page that merely embeds the Turnstile widget does not
+ * carry those markers and is left untouched.
  */
 fun isCloudflareChallenge(status: Int, body: String?): Boolean {
-    if (status != 403 && status != 503 && status != 429) return false
-    val head = body?.take(4000)?.lowercase() ?: return false
-    return CF_CHALLENGE_MARKERS.any { head.contains(it) }
+    val head = body?.take(8000)?.lowercase() ?: return false
+    val hasMarker = CF_CHALLENGE_MARKERS.any { head.contains(it) }
+    if (!hasMarker) return false
+    // Hard-blocking statuses with any challenge marker are always a challenge.
+    if (status == 403 || status == 503 || status == 429) return true
+    // Turnstile / managed-challenge interstitials come back as 200 with an HTML body.
+    if (status != 200) return false
+    return head.trimStart().startsWith("<") && CF_INTERSTITIAL_MARKERS.any { head.contains(it) }
 }
