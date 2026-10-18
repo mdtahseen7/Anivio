@@ -10,6 +10,7 @@ import com.nuvio.app.core.anilist.AniListMediaDetail
 import com.nuvio.app.core.anilist.AniListStaffEdge
 import com.nuvio.app.core.anilist.AniZipClient
 import com.nuvio.app.core.anilist.AniZipResponse
+import com.nuvio.app.core.anilist.FanartClient
 import com.nuvio.app.core.anilist.clearLogoUrl
 import com.nuvio.app.core.anilist.fanartUrl
 import com.nuvio.app.core.anilist.imdbId
@@ -200,6 +201,12 @@ object AniListMetaSource {
                     isMovie = isMovie,
                     expectedEpisodeCount = resolvedMedia.episodes,
                 ).copy(airingScheduleByEpisode = resolvedMedia.airingScheduleByEpisode())
+                val fanartLogo = if (!isMovie && aniZip?.tvdbId() == null && aniZip?.tmdbId() == null) {
+                    TvdbClient.searchSeriesId(resolvedMedia.preferredTitle().orEmpty())
+                        ?.let { tvdbId -> FanartClient.tvArtwork(tvdbId).logoUrl }
+                } else {
+                    null
+                }
                 val base = resolvedMedia.toMetaDetails(
                     itemId = id,
                     itemType = type,
@@ -207,6 +214,7 @@ object AniListMetaSource {
                     kitsuEpisodes = enrichment.kitsuEpisodes,
                     tvdbEpisodes = enrichment.tvdbEpisodes,
                     tvdbArtwork = enrichment.tvdbArtwork,
+                    fanartLogo = fanartLogo,
                     mappedSeason = mappedSeason,
                 )
                 enrichWithTmdb(meta = base, aniZip = aniZip)
@@ -231,6 +239,7 @@ object AniListMetaSource {
                     kitsuEpisodes = emptyMap(),
                     tvdbEpisodes = emptyMap(),
                     tvdbArtwork = TvdbArtwork(),
+                    fanartLogo = null,
                     mappedSeason = mappedSeason,
                 ),
             )
@@ -319,6 +328,7 @@ object AniListMetaSource {
         kitsuEpisodes: Map<Int, KitsuEpisode>,
         tvdbEpisodes: Map<Int, TvdbEpisode>,
         tvdbArtwork: TvdbArtwork,
+        fanartLogo: String?,
         mappedSeason: Int?,
     ): MetaDetails {
         val staffEdges = staff?.edges.orEmpty()
@@ -341,7 +351,7 @@ object AniListMetaSource {
             background = tvdbArtwork.backgroundUrl
                 ?: bannerImage?.takeIf { it.isNotBlank() }
                 ?: aniZip?.fanartUrl(),
-            logo = tvdbArtwork.clearLogoUrl ?: aniZip?.clearLogoUrl(),
+            logo = fanartLogo ?: tvdbArtwork.clearLogoUrl ?: aniZip?.clearLogoUrl(),
             description = description?.stripAniListMarkup(),
             releaseInfo = (seasonYear ?: startDate?.year)?.toString(),
             lastAirDate = endDate?.toIsoDateOrNull(),

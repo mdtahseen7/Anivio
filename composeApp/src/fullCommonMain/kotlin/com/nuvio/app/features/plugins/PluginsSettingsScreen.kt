@@ -2,9 +2,11 @@ package com.nuvio.app.features.plugins
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,8 +19,10 @@ import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.DragHandle
 import androidx.compose.material.icons.rounded.Extension
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -121,6 +125,7 @@ fun PluginsSettingsPageContent(
     var configuringScraper by remember { mutableStateOf<PluginScraper?>(null) }
     var configuringLayout by remember { mutableStateOf<String?>(null) }
     var reorderingScraperId by remember { mutableStateOf<String?>(null) }
+    var expandedScraperId by rememberSaveable { mutableStateOf<String?>(null) }
 
     val sortedRepos = remember(uiState.repositories) {
         uiState.repositories.sortedBy { it.name.lowercase() }
@@ -158,9 +163,10 @@ fun PluginsSettingsPageContent(
     ) {
         NuvioSectionLabel(stringResource(Res.string.plugins_section_overview))
         NuvioSurfaceCard {
-            Row(
+            FlowRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 NuvioInfoBadge(text = stringResource(Res.string.plugins_badge_repos, sortedRepos.size))
                 NuvioInfoBadge(text = stringResource(Res.string.plugins_badge_providers, sortedScrapers.size))
@@ -341,27 +347,18 @@ fun PluginsSettingsPageContent(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = repo.name,
-                                style = MaterialTheme.typography.headlineLarge,
+                                style = MaterialTheme.typography.titleLarge,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                             )
                             repo.version?.let { version ->
-                                Spacer(modifier = Modifier.height(6.dp))
                                 Text(
                                     text = stringResource(Res.string.plugins_repo_version, version),
-                                    style = MaterialTheme.typography.bodyLarge,
+                                    style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = repo.manifestUrl,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             NuvioIconActionButton(
@@ -379,9 +376,10 @@ fun PluginsSettingsPageContent(
                         }
                     }
                     Spacer(modifier = Modifier.height(14.dp))
-                    Row(
+                    FlowRow(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         NuvioInfoBadge(text = stringResource(Res.string.plugins_badge_providers, repo.scraperCount))
                         if (repo.isRefreshing) {
@@ -427,9 +425,13 @@ fun PluginsSettingsPageContent(
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                         }
                         Spacer(modifier = Modifier.height(12.dp))
-                        ProviderRow(
-                            scraper = scraper,
-                            results = testResults[scraper.id],
+                            ProviderRow(
+                                scraper = scraper,
+                                results = testResults[scraper.id],
+                                detailsExpanded = expandedScraperId == scraper.id,
+                                onToggleDetails = {
+                                    expandedScraperId = if (expandedScraperId == scraper.id) null else scraper.id
+                                },
                             isTesting = testingScraperId == scraper.id,
                             testEnabled = hasTmdbApiKey,
                             onTest = {                                testingScraperId = scraper.id
@@ -540,6 +542,8 @@ fun PluginsSettingsPageContent(
 private fun ProviderRow(
     scraper: PluginScraper,
     results: List<PluginRuntimeResult>?,
+    detailsExpanded: Boolean,
+    onToggleDetails: () -> Unit,
     isTesting: Boolean,
     testEnabled: Boolean,
     onTest: () -> Unit,
@@ -547,6 +551,9 @@ private fun ProviderRow(
     onReorder: () -> Unit,
     onConfigure: (() -> Unit)?,
 ) {
+    val visibleResults = results.orEmpty()
+    var actionsExpanded by remember { mutableStateOf(false) }
+
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -571,15 +578,17 @@ private fun ProviderRow(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Text(
-                        text = scraper.description.ifBlank {
-                            stringResource(Res.string.plugins_provider_no_description)
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    AnimatedVisibility(visible = detailsExpanded) {
+                        Text(
+                            text = scraper.description.ifBlank {
+                                stringResource(Res.string.plugins_provider_no_description)
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -598,28 +607,29 @@ private fun ProviderRow(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                if (onConfigure != null) {
-                    IconButton(onClick = onConfigure) {
-                        Icon(
-                            imageVector = Icons.Rounded.Settings,
-                            contentDescription = "Provider settings",
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                    }
+                TextButton(onClick = onToggleDetails) {
+                    Text(if (detailsExpanded) "Hide" else "Details")
                 }
-                IconButton(
-                    onClick = onTest,
-                    enabled = testEnabled && !isTesting,
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Bolt,
-                        contentDescription = stringResource(Res.string.plugins_button_test_provider),
-                        tint = if (testEnabled && !isTesting) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    )
+                Box {
+                    IconButton(onClick = { actionsExpanded = true }) {
+                        Icon(Icons.Rounded.MoreVert, contentDescription = "Provider actions")
+                    }
+                    DropdownMenu(
+                        expanded = actionsExpanded,
+                        onDismissRequest = { actionsExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(Res.string.plugins_button_test_provider)) },
+                            onClick = { actionsExpanded = false; onTest() },
+                            enabled = testEnabled && !isTesting,
+                        )
+                        onConfigure?.let { configure ->
+                            DropdownMenuItem(
+                                text = { Text("Configure") },
+                                onClick = { actionsExpanded = false; configure() },
+                            )
+                        }
+                    }
                 }
                 Switch(
                     checked = scraper.enabled,
@@ -629,26 +639,31 @@ private fun ProviderRow(
             }
         }
         Spacer(modifier = Modifier.height(10.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            NuvioInfoBadge(text = scraper.supportedTypes.joinToString(" | "))
-            NuvioInfoBadge(text = stringResource(Res.string.plugins_provider_version, scraper.version))
-            if (!scraper.manifestEnabled) {
-                NuvioInfoBadge(text = stringResource(Res.string.plugins_provider_disabled_by_repo))
+        AnimatedVisibility(visible = detailsExpanded) {
+            Column {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    NuvioInfoBadge(text = scraper.supportedTypes.joinToString(" | "))
+                    NuvioInfoBadge(text = stringResource(Res.string.plugins_provider_version, scraper.version))
+                    if (!scraper.manifestEnabled) {
+                        NuvioInfoBadge(text = stringResource(Res.string.plugins_provider_disabled_by_repo))
+                    }
+                }
             }
         }
 
-        if (!results.isNullOrEmpty()) {
+        AnimatedVisibility(visible = detailsExpanded && visibleResults.isNotEmpty()) {
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = stringResource(Res.string.plugins_test_results_count, results.size),
+                text = stringResource(Res.string.plugins_test_results_count, visibleResults.size),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(modifier = Modifier.height(8.dp))
-            results.take(8).forEach { result ->
+            visibleResults.take(8).forEach { result ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.Top,
