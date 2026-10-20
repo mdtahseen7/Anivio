@@ -6,6 +6,7 @@ import com.nuvio.app.core.anilist.AniListPage
 import com.nuvio.app.core.anilist.toMetaPreview
 import com.nuvio.app.features.catalog.CatalogPage
 import com.nuvio.app.features.catalog.dedupeCatalogItems
+import com.nuvio.app.features.anivio.enrichPreviewPostersWithAnivio
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
@@ -68,7 +69,9 @@ internal object AniListSearchSource {
         val pageObject = data["Page"] as? JsonObject
             ?: return@withContext CatalogPage(items = emptyList(), rawItemCount = 0, nextSkip = null)
         val parsed = AniListClient.json.decodeFromJsonElement(AniListPage.serializer(), pageObject)
-        val items = dedupeCatalogItems(parsed.media.mapNotNull { it.toMetaPreview() })
+        val items = enrichPreviewPostersWithAnivio(
+            dedupeCatalogItems(parsed.media.mapNotNull { it.toMetaPreview() }),
+        )
 
         CatalogPage(
             items = items,

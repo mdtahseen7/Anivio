@@ -224,7 +224,9 @@ object MetaDetailsRepository {
         cachedMetaByRequestKey[requestKey]?.let { return it.baseMeta }
 
         if (isAniListMediaId(id) || id.startsWith("mal:", ignoreCase = true)) {
-            val publicMeta = PublicAnimeSource.details(id = id, contentType = type)?.meta
+            val publicMeta = PublicAnimeSource.details(id = id, contentType = type)
+                ?.meta
+                ?.enrichWithAnivioArtwork()
             if (publicMeta != null) {
                 if (cacheResult) cachedMetaByRequestKey[requestKey] = CachedMetaEntry(baseMeta = publicMeta)
                 return publicMeta
@@ -374,23 +376,26 @@ object MetaDetailsRepository {
         mdbListSettings: com.nuvio.app.features.mdblist.MdbListSettings,
         metaScreenSettingsFingerprint: String,
     ) {
-        val cachedEntry = CachedMetaEntry(baseMeta = meta)
+        // Anivio is optional artwork enrichment. Existing AniList/TVDB/addon values remain the
+        // fallback, and the bounded best-effort lookup cannot block the details page indefinitely.
+        val artworkEnrichedMeta = meta.enrichWithAnivioArtwork()
+        val cachedEntry = CachedMetaEntry(baseMeta = artworkEnrichedMeta)
         cachedMetaByRequestKey[requestKey] = cachedEntry
 
-        if (!shouldEnrichForMetaScreen(meta, fallbackItemId, mdbListSettings)) {
-            _uiState.value = MetaDetailsUiState(meta = meta.withUnreleasedFilter())
+        if (!shouldEnrichForMetaScreen(artworkEnrichedMeta, fallbackItemId, mdbListSettings)) {
+            _uiState.value = MetaDetailsUiState(meta = artworkEnrichedMeta.withUnreleasedFilter())
             activeRequestKey = requestKey
             return
         }
 
         _uiState.value = MetaDetailsUiState(
             isLoading = true,
-            meta = meta,
+            meta = artworkEnrichedMeta,
         )
         val enrichedMeta = withContext(Dispatchers.Default) {
             enrichForMetaScreen(
                 requestKey = requestKey,
-                meta = meta,
+                meta = artworkEnrichedMeta,
                 fallbackItemId = fallbackItemId,
                 settings = mdbListSettings,
                 settingsFingerprint = metaScreenSettingsFingerprint,

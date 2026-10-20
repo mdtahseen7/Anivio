@@ -26,6 +26,11 @@ import com.nuvio.app.core.anilist.tmdbId
 import com.nuvio.app.core.anilist.toMetaPreview
 import com.nuvio.app.core.time.EpisodeReleaseDatePlatform
 import com.nuvio.app.core.anilist.airingScheduleByEpisode
+import com.nuvio.app.core.anivio.AnivioClient
+import com.nuvio.app.core.anivio.AnivioMedia
+import com.nuvio.app.core.anivio.backgroundUrl
+import com.nuvio.app.core.anivio.logoUrl
+import com.nuvio.app.core.anivio.posterUrl
 import com.nuvio.app.features.anime.AnimeEnrichment
 import com.nuvio.app.features.anime.buildEnrichedEpisodes
 import com.nuvio.app.features.anime.loadAnimeEnrichment
@@ -44,6 +49,7 @@ import com.nuvio.app.features.tmdb.TmdbArtworkSource
 import com.nuvio.app.features.tmdb.TmdbMetadataService
 import com.nuvio.app.features.tmdb.TmdbSettings
 import com.nuvio.app.features.tmdb.TmdbSettingsRepository
+import com.nuvio.app.features.tracking.TrackingSettingsRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -180,12 +186,21 @@ object AniListMetaSource {
                 externalFallbackId = null,
             )
         }
-        val (media, aniZip) = coroutineScope {
+        TrackingSettingsRepository.ensureLoaded()
+        val anivioSettings = TrackingSettingsRepository.uiState.value
+        val (media, aniZip, anivioMedia) = coroutineScope {
             val mediaDeferred = async { fetchMediaDetail(mediaId, isManga = false, forceRefresh = forceRefresh) }
             // Best-effort: a null here just means fewer episode stills and no TMDB hop. Manga never
             // reaches this request because its details are wholly keyed by its AniList media id.
             val aniZipDeferred = async { AniZipClient.mappings(mediaId, forceRefresh) }
-            mediaDeferred.await() to aniZipDeferred.await()
+            val anivioDeferred = async {
+                if (anivioSettings.anivioAssetsEnabled) {
+                    AnivioClient.mediaByAniListIdOrNull(mediaId, forceRefresh)
+                } else {
+                    null
+                }
+            }
+            Triple(mediaDeferred.await(), aniZipDeferred.await(), anivioDeferred.await())
         }
         val resolvedMedia = media ?: return@withContext null
         val isMovie = type.equals("movie", ignoreCase = true)
@@ -198,6 +213,7 @@ object AniListMetaSource {
             val enrichedDeferred = async {
                 val enrichment = loadAnimeEnrichment(
                     aniZip = aniZip,
+                    anivioMedia = anivioMedia,
                     isMovie = isMovie,
                     expectedEpisodeCount = resolvedMedia.episodes,
                 ).copy(airingScheduleByEpisode = resolvedMedia.airingScheduleByEpisode())
@@ -214,6 +230,7 @@ object AniListMetaSource {
                     kitsuEpisodes = enrichment.kitsuEpisodes,
                     tvdbEpisodes = enrichment.tvdbEpisodes,
                     tvdbArtwork = enrichment.tvdbArtwork,
+                    anivioMedia = anivioMedia,
                     fanartLogo = fanartLogo,
                     mappedSeason = mappedSeason,
                 )
@@ -239,6 +256,7 @@ object AniListMetaSource {
                     kitsuEpisodes = emptyMap(),
                     tvdbEpisodes = emptyMap(),
                     tvdbArtwork = TvdbArtwork(),
+                    anivioMedia = anivioMedia,
                     fanartLogo = null,
                     mappedSeason = mappedSeason,
                 ),
@@ -328,6 +346,7 @@ object AniListMetaSource {
         kitsuEpisodes: Map<Int, KitsuEpisode>,
         tvdbEpisodes: Map<Int, TvdbEpisode>,
         tvdbArtwork: TvdbArtwork,
+        anivioMedia: AnivioMedia?,
         fanartLogo: String?,
         mappedSeason: Int?,
     ): MetaDetails {
@@ -343,15 +362,20 @@ object AniListMetaSource {
             name = preferredTitle() ?: itemId,
             // TVDB's series poster is the show's, so it is only right for a first season or a film;
             // sequels get their season poster in enrichWithTmdb instead.
-            poster = tvdbArtwork.posterUrl?.takeIf { mappedSeason == null || mappedSeason <= 1 }
+            poster = anivioMedia?.posterUrl
+                ?: tvdbArtwork.posterUrl?.takeIf { mappedSeason == null || mappedSeason <= 1 }
                 ?: coverImage?.extraLarge?.takeIf { it.isNotBlank() }
                 ?: coverImage?.large?.takeIf { it.isNotBlank() },
             // A 1920x1080 TVDB background beats AniList's thin banner behind the details header,
             // and ani.zip's single fanart pick is the fallback when TVDB has none.
-            background = tvdbArtwork.backgroundUrl
+            background = anivioMedia?.backgroundUrl
+                ?: tvdbArtwork.backgroundUrl
                 ?: bannerImage?.takeIf { it.isNotBlank() }
                 ?: aniZip?.fanartUrl(),
-            logo = fanartLogo ?: tvdbArtwork.clearLogoUrl ?: aniZip?.clearLogoUrl(),
+            logo = anivioMedia?.logoUrl
+                ?: fanartLogo
+                ?: tvdbArtwork.clearLogoUrl
+                ?: aniZip?.clearLogoUrl(),
             description = description?.stripAniListMarkup(),
             releaseInfo = (seasonYear ?: startDate?.year)?.toString(),
             lastAirDate = endDate?.toIsoDateOrNull(),
@@ -404,6 +428,7 @@ object AniListMetaSource {
                     kitsuEpisodes = kitsuEpisodes,
                     tvdbEpisodes = tvdbEpisodes,
                     airingScheduleByEpisode = airingScheduleByEpisode(),
+                    anivioMedia = anivioMedia,
                     seriesPoster = coverImage?.extraLarge ?: coverImage?.large,
                 )
             },
@@ -567,6 +592,7 @@ object AniListMetaSource {
         kitsuEpisodes: Map<Int, KitsuEpisode>,
         tvdbEpisodes: Map<Int, TvdbEpisode>,
         airingScheduleByEpisode: Map<Int, Long>,
+        anivioMedia: AnivioMedia?,
         seriesPoster: String?,
     ): List<MetaVideo> = buildEnrichedEpisodes(
         videoIdPrefix = "$ANILIST_ID_PREFIX$mediaId",
@@ -575,6 +601,7 @@ object AniListMetaSource {
             aniZip = aniZip,
             kitsuEpisodes = kitsuEpisodes,
             tvdbEpisodes = tvdbEpisodes,
+            anivioMedia = anivioMedia,
             airingScheduleByEpisode = airingScheduleByEpisode,
         ),
         seriesPoster = seriesPoster,

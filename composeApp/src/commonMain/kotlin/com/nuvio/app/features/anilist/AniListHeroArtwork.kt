@@ -11,8 +11,13 @@ import com.nuvio.app.core.anilist.clearLogoUrl
 import com.nuvio.app.core.anilist.fanartUrl
 import com.nuvio.app.core.anilist.tmdbId
 import com.nuvio.app.core.anilist.tvdbId
+import com.nuvio.app.core.anivio.AnivioClient
+import com.nuvio.app.core.anivio.backgroundUrl
+import com.nuvio.app.core.anivio.logoUrl
+import com.nuvio.app.core.anivio.posterUrl
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.home.stableKey
+import com.nuvio.app.features.tracking.TrackingSettingsRepository
 import com.nuvio.app.features.tmdb.TmdbArtwork
 import com.nuvio.app.features.tmdb.TmdbArtworkSource
 import kotlinx.atomicfu.atomic
@@ -79,7 +84,13 @@ object AniListHeroArtwork {
         val mediaId = parseAniListMediaId(item.id) ?: return item
 
         return try {
+            TrackingSettingsRepository.ensureLoaded()
             val aniZip = AniZipClient.mappings(mediaId)
+            val anivioMedia = if (TrackingSettingsRepository.uiState.value.anivioAssetsEnabled) {
+                AnivioClient.mediaByAniListIdOrNull(mediaId)
+            } else {
+                null
+            }
             val tmdbId = aniZip?.tmdbId()
             val tvdbId = aniZip?.tvdbId()
             val mappedSeason = aniZip?.mappedSeasonNumber()
@@ -121,16 +132,19 @@ object AniListHeroArtwork {
             item.copy(
                 // The hero renders the portrait: TVDB's 680x1000 poster and TMDB's w780 both beat
                 // AniList's ~460px cover on a tall phone screen.
-                poster = seasonPoster
+                poster = anivioMedia?.posterUrl
+                    ?: seasonPoster
                     ?: tvdbArtwork.posterUrl?.takeIf { mappedSeason == null || mappedSeason <= 1 }
                     ?: tmdbArtwork.posterUrl
                     ?: item.poster,
-                banner = tmdbArtwork.backdropUrl
+                banner = anivioMedia?.backgroundUrl
+                    ?: tmdbArtwork.backdropUrl
                     ?: tvdbArtwork.backgroundUrl
                     ?: fanartArtwork.backgroundUrl
                     ?: aniZip?.fanartUrl()
                     ?: item.banner,
-                logo = fanartArtwork.logoUrl
+                logo = anivioMedia?.logoUrl
+                    ?: fanartArtwork.logoUrl
                     ?: tvdbArtwork.clearLogoUrl
                     ?: aniZip?.clearLogoUrl()
                     ?: tmdbArtwork.logoUrl

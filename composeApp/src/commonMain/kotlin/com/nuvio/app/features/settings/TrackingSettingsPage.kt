@@ -52,6 +52,11 @@ import nuvio.composeapp.generated.resources.settings_tracking_connect_first
 import nuvio.composeapp.generated.resources.settings_tracking_continue_watching_days_all
 import nuvio.composeapp.generated.resources.settings_tracking_continue_watching_days_value
 import nuvio.composeapp.generated.resources.settings_tracking_data_sources
+import nuvio.composeapp.generated.resources.settings_tracking_anivio_api
+import nuvio.composeapp.generated.resources.settings_tracking_anivio_assets
+import nuvio.composeapp.generated.resources.settings_tracking_anivio_assets_description
+import nuvio.composeapp.generated.resources.settings_tracking_anivio_metadata_fallback
+import nuvio.composeapp.generated.resources.settings_tracking_anivio_metadata_fallback_description
 import nuvio.composeapp.generated.resources.settings_tracking_local_library_description
 import nuvio.composeapp.generated.resources.settings_tracking_local_progress_description
 import nuvio.composeapp.generated.resources.settings_tracking_mal_source_description
@@ -81,6 +86,31 @@ internal fun LazyListScope.trackingSettingsContent(
     malUiState: MalAuthUiState,
     settingsUiState: TrackingSettingsUiState,
 ) {
+    item {
+        SettingsSection(
+            title = stringResource(Res.string.settings_tracking_anivio_api),
+            isTablet = isTablet,
+        ) {
+            SettingsGroup(isTablet = isTablet) {
+                SettingsSwitchRow(
+                    title = stringResource(Res.string.settings_tracking_anivio_assets),
+                    description = stringResource(Res.string.settings_tracking_anivio_assets_description),
+                    checked = settingsUiState.anivioAssetsEnabled,
+                    isTablet = isTablet,
+                    onCheckedChange = TrackingSettingsRepository::setAnivioAssetsEnabled,
+                )
+                SettingsGroupDivider(isTablet = isTablet)
+                SettingsSwitchRow(
+                    title = stringResource(Res.string.settings_tracking_anivio_metadata_fallback),
+                    description = stringResource(Res.string.settings_tracking_anivio_metadata_fallback_description),
+                    checked = settingsUiState.anivioMetadataFallbackEnabled,
+                    isTablet = isTablet,
+                    onCheckedChange = TrackingSettingsRepository::setAnivioMetadataFallbackEnabled,
+                )
+            }
+        }
+    }
+
     item {
         SettingsSection(
             title = stringResource(Res.string.settings_tracking_services),

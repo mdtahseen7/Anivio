@@ -6,6 +6,7 @@ import com.nuvio.app.core.anilist.KitsuEpisode
 import com.nuvio.app.core.anilist.TvdbArtwork
 import com.nuvio.app.core.anilist.TvdbClient
 import com.nuvio.app.core.anilist.TvdbEpisode
+import com.nuvio.app.core.anivio.AnivioMedia
 import com.nuvio.app.core.anilist.kitsuId
 import com.nuvio.app.core.anilist.mappedSeasonNumber
 import com.nuvio.app.core.anilist.tvdbId
@@ -28,6 +29,7 @@ data class AnimeEnrichment(
     val kitsuEpisodes: Map<Int, KitsuEpisode> = emptyMap(),
     val tvdbEpisodes: Map<Int, TvdbEpisode> = emptyMap(),
     val tvdbArtwork: TvdbArtwork = TvdbArtwork(),
+    val anivioMedia: AnivioMedia? = null,
     val mappedSeason: Int? = null,
     /**
      * Exact upcoming broadcast times by episode number, in epoch millis. Only AniList publishes
@@ -46,8 +48,13 @@ suspend fun loadAnimeEnrichment(
     aniZip: AniZipResponse?,
     isMovie: Boolean,
     expectedEpisodeCount: Int?,
+    anivioMedia: AnivioMedia? = null,
 ): AnimeEnrichment {
-    if (aniZip == null) return AnimeEnrichment()
+    if (aniZip == null) {
+        return AnimeEnrichment(
+            anivioMedia = anivioMedia,
+        )
+    }
     val mappedSeason = aniZip.mappedSeasonNumber()
     val seriesId = aniZip.tvdbId()
 
@@ -100,6 +107,7 @@ suspend fun loadAnimeEnrichment(
             kitsuEpisodes = kitsuDeferred.await(),
             tvdbEpisodes = tvdbEpisodesDeferred.await(),
             tvdbArtwork = artworkDeferred.await(),
+            anivioMedia = anivioMedia,
             mappedSeason = mappedSeason,
         )
     }

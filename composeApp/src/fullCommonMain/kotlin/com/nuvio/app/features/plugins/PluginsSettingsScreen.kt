@@ -81,7 +81,11 @@ import nuvio.composeapp.generated.resources.plugins_group_by_repo_title
 import nuvio.composeapp.generated.resources.plugins_input_manifest_placeholder
 import nuvio.composeapp.generated.resources.plugins_message_installed
 import nuvio.composeapp.generated.resources.plugins_provider_disabled_by_repo
+import nuvio.composeapp.generated.resources.plugins_provider_downloading
+import nuvio.composeapp.generated.resources.plugins_provider_download_failed
+import nuvio.composeapp.generated.resources.plugins_provider_installed
 import nuvio.composeapp.generated.resources.plugins_provider_no_description
+import nuvio.composeapp.generated.resources.plugins_provider_not_installed
 import nuvio.composeapp.generated.resources.plugins_provider_version
 import nuvio.composeapp.generated.resources.plugins_repo_fallback_label
 import nuvio.composeapp.generated.resources.plugins_repo_version
@@ -433,7 +437,7 @@ fun PluginsSettingsPageContent(
                                     expandedScraperId = if (expandedScraperId == scraper.id) null else scraper.id
                                 },
                             isTesting = testingScraperId == scraper.id,
-                            testEnabled = hasTmdbApiKey,
+                            testEnabled = hasTmdbApiKey && scraper.enabled && scraper.code.isNotBlank(),
                             onTest = {                                testingScraperId = scraper.id
                                 coroutineScope.launch {
                                     PluginRepository.testScraper(scraper.id)
@@ -452,7 +456,7 @@ fun PluginsSettingsPageContent(
                             },
                             onToggle = { PluginRepository.toggleScraper(scraper.id, it) },
                             onReorder = { reorderingScraperId = scraper.id },
-                            onConfigure = if (scraper.hasSettings) {
+                            onConfigure = if (scraper.hasSettings && scraper.enabled && scraper.code.isNotBlank()) {
                                 {
                                     coroutineScope.launch {
                                         val layout = PluginRuntime.getPluginSettingsLayout(scraper.code, scraper.id)
@@ -634,11 +638,32 @@ private fun ProviderRow(
                 Switch(
                     checked = scraper.enabled,
                     onCheckedChange = onToggle,
-                    enabled = scraper.manifestEnabled,
+                    enabled = scraper.manifestEnabled && !scraper.isInstalling,
                 )
             }
         }
         Spacer(modifier = Modifier.height(10.dp))
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            NuvioInfoBadge(
+                text = when {
+                    scraper.isInstalling -> stringResource(Res.string.plugins_provider_downloading)
+                    scraper.code.isBlank() -> stringResource(Res.string.plugins_provider_not_installed)
+                    else -> stringResource(Res.string.plugins_provider_installed)
+                },
+            )
+        }
+        scraper.downloadErrorMessage?.let { errorMessage ->
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = stringResource(Res.string.plugins_provider_download_failed, errorMessage),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
         AnimatedVisibility(visible = detailsExpanded) {
             Column {
                 FlowRow(
