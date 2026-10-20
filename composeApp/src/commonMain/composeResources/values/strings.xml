@@ -1321,6 +1321,11 @@
     <string name="settings_trakt_save_actions_description">Sync your watchlist, watch progress, continue watching, scrobbles, and personal lists with Trakt.</string>
     <string name="settings_trakt_sign_in_description">Sync your watchlist, watch progress, continue watching, scrobbles, and personal lists with Trakt.</string>
     <string name="settings_tracking_data_sources">Sources</string>
+    <string name="settings_tracking_anivio_api">Anivio API</string>
+    <string name="settings_tracking_anivio_assets">Use Anivio assets</string>
+    <string name="settings_tracking_anivio_assets_description">Use artwork returned by Anivio when available.</string>
+    <string name="settings_tracking_anivio_metadata_fallback">Use Anivio metadata when AniList is unavailable</string>
+    <string name="settings_tracking_anivio_metadata_fallback_description">Fill in anime metadata from Anivio when AniList cannot provide it.</string>
     <string name="settings_tracking_features">SOURCE PREFERENCES</string>
     <string name="settings_tracking_viewing_discovery">Viewing preferences</string>
     <string name="settings_tracking_services">Accounts</string>
@@ -2330,7 +2335,11 @@
     <string name="plugins_manifest_version_missing">Manifest version is missing.</string>
     <string name="plugins_message_installed">Installed %1$s.</string>
     <string name="plugins_provider_disabled_by_repo">Disabled by repo</string>
+    <string name="plugins_provider_downloading">Installing provider…</string>
+    <string name="plugins_provider_download_failed">Couldn&apos;t install %1$s because its script could not be downloaded. Try again.</string>
+    <string name="plugins_provider_installed">Installed</string>
     <string name="plugins_provider_no_description">No description</string>
+    <string name="plugins_provider_not_installed">Not installed</string>
     <string name="plugins_provider_version">v%1$s</string>
     <string name="plugins_repo_fallback_label">Plugin repository</string>
     <string name="plugins_repo_version">Version %1$s</string>

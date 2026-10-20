@@ -9,6 +9,10 @@ internal expect object TrackingSettingsStorage {
     fun saveWatchProgressSource(value: String)
     fun loadContinueWatchingDaysCap(): Int?
     fun saveContinueWatchingDaysCap(days: Int)
+    fun loadAnivioAssetsEnabled(): Boolean?
+    fun saveAnivioAssetsEnabled(enabled: Boolean)
+    fun loadAnivioMetadataFallbackEnabled(): Boolean?
+    fun saveAnivioMetadataFallbackEnabled(enabled: Boolean)
     fun exportToSyncPayload(): JsonObject
     fun replaceFromSyncPayload(payload: JsonObject)
 }

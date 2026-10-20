@@ -75,6 +75,8 @@ data class PluginScraper(
     val needsCaptcha: Boolean = false,
     val domains: List<String> = emptyList(),
     val code: String,
+    val isInstalling: Boolean = false,
+    val downloadErrorMessage: String? = null,
 ) {
     fun supportsType(type: String): Boolean {
         val normalizedType = normalizePluginType(type)

@@ -306,6 +306,85 @@ actual object PluginRepository {
 
     actual fun toggleScraper(scraperId: String, enabled: Boolean) {
         initialize()
+        val current = _uiState.value.scrapers.firstOrNull { it.id == scraperId } ?: return
+        if (!enabled || !current.manifestEnabled) {
+            _uiState.update { state ->
+                state.copy(
+                    scrapers = state.scrapers.map { scraper ->
+                        if (scraper.id == scraperId) scraper.copy(enabled = false) else scraper
+                    },
+                )
+            }
+            persist()
+            return
+        }
+
+        // A newly discovered provider has metadata but no downloaded script yet. Fetch only this
+        // provider when the user explicitly enables it, instead of installing every script in the
+        // repository during repository discovery.
+        if (current.code.isBlank()) {
+            _uiState.update { state ->
+                state.copy(
+                    scrapers = state.scrapers.map { scraper ->
+                        if (scraper.id == scraperId) {
+                            scraper.copy(isInstalling = true, downloadErrorMessage = null)
+                        } else {
+                            scraper
+                        }
+                    },
+                )
+            }
+            scope.launch {
+                val result = runCatching {
+                    httpGetText(scraperCodeUrl(current.repositoryUrl, current.filename))
+                }
+                val code = result.getOrNull()?.takeIf { it.isNotBlank() }
+                if (code == null) {
+                    _uiState.update { state ->
+                        state.copy(
+                            scrapers = state.scrapers.map { scraper ->
+                                if (scraper.id == scraperId) {
+                                    // Keep only the provider name in state. The localized UI string
+                                    // is resolved by Compose, avoiding resource access from the
+                                    // repository's background scope.
+                                    scraper.copy(isInstalling = false, downloadErrorMessage = current.name)
+                                } else {
+                                    scraper
+                                }
+                            },
+                        )
+                    }
+                    persist()
+                    return@launch
+                }
+
+                PluginStorage.saveScraperCode(
+                    profileId = currentProfileId,
+                    scraperId = current.id,
+                    code = code,
+                    overwrite = true,
+                )
+                _uiState.update { state ->
+                    state.copy(
+                        scrapers = state.scrapers.map { scraper ->
+                            if (scraper.id == scraperId) {
+                                scraper.copy(
+                                    enabled = true,
+                                    code = code,
+                                    isInstalling = false,
+                                    downloadErrorMessage = null,
+                                )
+                            } else {
+                                scraper
+                            }
+                        },
+                    )
+                }
+                persist()
+            }
+            return
+        }
+
         _uiState.update { state ->
             state.copy(
                 scrapers = state.scrapers.map { scraper ->
@@ -502,33 +581,37 @@ actual object PluginRepository {
         return withContext(Dispatchers.Default) {
             val payload = httpGetText(manifestUrl)
             val manifest = PluginManifestParser.parse(payload)
-            val baseUrl = manifestUrl.substringBefore("?").removeSuffix("/manifest.json")
 
             val scrapers = manifest.scrapers
                 .filter { scraper -> scraper.isSupportedOnCurrentPlatform() }
                 .mapNotNull { info ->
-                    val codeUrl = if (info.filename.startsWith("http://") || info.filename.startsWith("https://")) {
-                        info.filename
-                    } else {
-                        "$baseUrl/${info.filename.trimStart('/')}"
-                    }
+                    val scraperId = "${manifestUrl.lowercase()}:${info.id}"
+                    val previous = previousScrapers[scraperId]
+                    val shouldLoadCode = previous?.code?.isNotBlank() == true || previous?.enabled == true
                     runCatching {
-                        val code = httpGetText(codeUrl)
-                        val scraperId = "${manifestUrl.lowercase()}:${info.id}"
-                        val cached = PluginStorage.saveScraperCode(
-                            profileId = storageProfileId,
-                            scraperId = scraperId,
-                            code = code,
-                            overwrite = true,
-                        )
-                        if (!cached) {
-                            log.w { "Failed to cache plugin scraper $scraperId" }
+                        val code = if (shouldLoadCode) {
+                            httpGetText(scraperCodeUrl(manifestUrl, info.filename))
+                        } else {
+                            ""
                         }
-                        val previous = previousScrapers[scraperId]
+                        if (code.isNotBlank()) {
+                            val cached = PluginStorage.saveScraperCode(
+                                profileId = storageProfileId,
+                                scraperId = scraperId,
+                                code = code,
+                                overwrite = true,
+                            )
+                            if (!cached) {
+                                log.w { "Failed to cache plugin scraper $scraperId" }
+                            }
+                        }
                         val enabled = when {
                             !info.enabled -> false
                             previous != null -> previous.enabled
-                            else -> info.enabled
+                            // Repositories may advertise many providers. Installing the repository
+                            // must not silently opt the user into every provider; a first-time
+                            // scraper is explicitly enabled from the provider list instead.
+                            else -> false
                         }
 
                         PluginScraper(
@@ -574,6 +657,12 @@ actual object PluginRepository {
         if (supported.isNotEmpty() && platform !in supported) return false
         if (platform in disabled) return false
         return true
+    }
+
+    private fun scraperCodeUrl(manifestUrl: String, filename: String): String {
+        if (filename.startsWith("http://") || filename.startsWith("https://")) return filename
+        val baseUrl = manifestUrl.substringBefore("?").removeSuffix("/manifest.json")
+        return "$baseUrl/${filename.trimStart('/')}"
     }
 
     private fun shouldRefreshRepository(

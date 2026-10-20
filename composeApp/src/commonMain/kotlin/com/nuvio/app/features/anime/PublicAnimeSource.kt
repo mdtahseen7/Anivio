@@ -2,7 +2,9 @@ package com.nuvio.app.features.anime
 
 import com.nuvio.app.features.anilist.AniListCatalogSource
 import com.nuvio.app.features.anilist.AniListMetaSource
+import com.nuvio.app.features.anivio.AnivioMetaSource
 import com.nuvio.app.features.anilist.isAniListMangaId
+import com.nuvio.app.core.anilist.AniListUnavailableException
 import com.nuvio.app.features.catalog.CatalogPage
 import com.nuvio.app.features.details.MetaDetails
 
@@ -78,19 +80,30 @@ object PublicAnimeSource {
         if (id.startsWith("mal:", ignoreCase = true)) {
             return PublicAnimeRouter.fallbackOnly { it.details(id, contentType, forceRefresh) }
         }
-        return PublicAnimeRouter.route(
-            forceProbe = forceRefresh,
-            aniList = {
-                AniListMetaSource.fetchMeta(
-                    id = id,
-                    type = contentType,
-                    forceRefresh = forceRefresh,
-                    onPartialMeta = onPartialMeta,
-                )?.let {
-                    PublicAnimeMetaResult(it.meta, it.externalFallbackId)
-                }
-            },
-            fallback = { it.details(id, contentType, forceRefresh) },
-        )
+        val aniListFetch = suspend {
+            AniListMetaSource.fetchMeta(
+                id = id,
+                type = contentType,
+                forceRefresh = forceRefresh,
+                onPartialMeta = onPartialMeta,
+            )?.let {
+                PublicAnimeMetaResult(it.meta, it.externalFallbackId)
+            }
+        }
+        return try {
+            PublicAnimeRouter.route(
+                forceProbe = forceRefresh,
+                aniList = aniListFetch,
+                fallback = { provider ->
+                    val anivio = AnivioMetaSource.fetchMeta(id, contentType, forceRefresh)
+                    anivio?.let { PublicAnimeMetaResult(it, null) }
+                        ?: provider.details(id, contentType, forceRefresh)
+                },
+            )
+        } catch (error: AniListUnavailableException) {
+            AnivioMetaSource.fetchMeta(id, contentType, forceRefresh)
+                ?.let { PublicAnimeMetaResult(it, null) }
+                ?: throw error
+        }
     }
 }

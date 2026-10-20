@@ -11,11 +11,16 @@ import com.nuvio.app.core.anilist.malId
 import com.nuvio.app.core.mal.MalPublicAnimeNode
 import com.nuvio.app.core.mal.MalAnimePage
 import com.nuvio.app.core.mal.MalClient
+import com.nuvio.app.core.anivio.AnivioClient
+import com.nuvio.app.core.anivio.backgroundUrl
+import com.nuvio.app.core.anivio.logoUrl
+import com.nuvio.app.core.anivio.posterUrl
 import com.nuvio.app.features.anime.AnimeEnrichment
 import com.nuvio.app.features.anime.PublicAnimeFallbackProvider
 import com.nuvio.app.features.anime.PublicAnimeMetaResult
 import com.nuvio.app.features.anime.buildEnrichedEpisodes
 import com.nuvio.app.features.anime.loadAnimeEnrichment
+import com.nuvio.app.features.anivio.enrichPreviewPostersWithAnivio
 import com.nuvio.app.features.catalog.CatalogPage
 import com.nuvio.app.features.details.MetaCompany
 import com.nuvio.app.features.details.MetaDetails
@@ -24,7 +29,9 @@ import com.nuvio.app.features.details.MetaVideo
 import com.nuvio.app.features.details.formatRuntimeFromMinutes
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.home.PosterShape
+import com.nuvio.app.features.tracking.TrackingSettingsRepository
 import com.nuvio.app.features.anilist.ANILIST_SEASON
+import com.nuvio.app.features.anilist.parseAniListMediaId
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -126,10 +133,20 @@ object MalPublicAnimeProvider : PublicAnimeFallbackProvider {
         // AniZipClient caches, so reusing the helper costs nothing and keeps one definition of how
         // a MAL id becomes a canonical app id.
         val canonicalId = canonicalId(malId, forceRefresh)
+        TrackingSettingsRepository.ensureLoaded()
+        val anivioSettings = TrackingSettingsRepository.uiState.value
+        val anivioMedia = if (anivioSettings.anivioAssetsEnabled) {
+            parseAniListMediaId(canonicalId)?.let { aniListId ->
+                AnivioClient.mediaByAniListIdOrNull(aniListId, forceRefresh)
+            }
+        } else {
+            null
+        }
         val enrichment = loadAnimeEnrichment(
             aniZip = aniZip,
             isMovie = anime.contentType(contentType) == "movie",
             expectedEpisodeCount = anime.episodeCount?.takeIf { it > 0 },
+            anivioMedia = anivioMedia,
         )
         return PublicAnimeMetaResult(
             meta = anime.toMetaDetails(canonicalId, contentType, enrichment),
@@ -157,7 +174,7 @@ object MalPublicAnimeProvider : PublicAnimeFallbackProvider {
 
     private suspend fun MalPublicAnimeNode.toPreview(requestedType: String, forceRefresh: Boolean): MetaPreview? {
         val poster = mainPicture?.large ?: mainPicture?.medium ?: return null
-        return MetaPreview(
+        val preview = MetaPreview(
             id = canonicalId(id, forceRefresh),
             type = contentType(requestedType),
             name = alternativeTitles?.en?.takeIf(String::isNotBlank) ?: title,
@@ -170,6 +187,7 @@ object MalPublicAnimeProvider : PublicAnimeFallbackProvider {
             imdbRating = score?.takeIf { it > 0 }?.toString(),
             genres = genres.map { it.name },
         )
+        return enrichPreviewPostersWithAnivio(listOf(preview)).first()
     }
 
     private fun MalPublicAnimeNode.toMetaDetails(
@@ -181,7 +199,8 @@ object MalPublicAnimeProvider : PublicAnimeFallbackProvider {
         val malPoster = mainPicture?.large ?: mainPicture?.medium
         // TVDB's series poster is the show's, so it is only correct for a first season or a film;
         // for a sequel MAL's own cover is the more accurate picture of this entry.
-        val poster = enrichment.tvdbArtwork.posterUrl
+        val poster = enrichment.anivioMedia?.posterUrl
+            ?: enrichment.tvdbArtwork.posterUrl
             ?.takeIf { enrichment.mappedSeason == null || enrichment.mappedSeason <= 1 }
             ?: enrichment.aniZip?.artworkUrl("Poster")
             ?: malPoster
@@ -203,10 +222,13 @@ object MalPublicAnimeProvider : PublicAnimeFallbackProvider {
             poster = poster,
             // MAL's `pictures` are alternate posters, not backdrops, so a 1920x1080 TVDB fanart is a
             // large upgrade behind the details header.
-            background = enrichment.tvdbArtwork.backgroundUrl
+            background = enrichment.anivioMedia?.backgroundUrl
+                ?: enrichment.tvdbArtwork.backgroundUrl
                 ?: enrichment.aniZip?.fanartUrl()
                 ?: pictures.firstOrNull()?.large,
-            logo = enrichment.tvdbArtwork.clearLogoUrl ?: enrichment.aniZip?.clearLogoUrl(),
+            logo = enrichment.anivioMedia?.logoUrl
+                ?: enrichment.tvdbArtwork.clearLogoUrl
+                ?: enrichment.aniZip?.clearLogoUrl(),
             description = synopsis,
             releaseInfo = season?.year?.toString() ?: startDate?.take(4),
             lastAirDate = endDate,

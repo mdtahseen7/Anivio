@@ -8,6 +8,7 @@ import com.nuvio.app.core.anilist.AniListPage
 import com.nuvio.app.core.anilist.toMetaPreview
 import com.nuvio.app.features.catalog.CatalogPage
 import com.nuvio.app.features.catalog.dedupeCatalogItems
+import com.nuvio.app.features.anivio.enrichPreviewPostersWithAnivio
 import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.home.MetaPreview
 import kotlinx.coroutines.Dispatchers
@@ -131,7 +132,7 @@ object AniListCatalogSource {
         }
         """.trimIndent()
 
-    private fun JsonObject.readCatalogPage(
+    private suspend fun JsonObject.readCatalogPage(
         alias: String,
         catalog: AniListCatalog,
         requestedPage: Int,
@@ -169,8 +170,9 @@ object AniListCatalogSource {
                 rawItemCount = mediaPage.media.size
             }
 
-            val items: List<MetaPreview> = dedupeCatalogItems(media.mapNotNull { it.toMetaPreview() })
+            val baseItems = dedupeCatalogItems(media.mapNotNull { it.toMetaPreview() })
                 .let { previews -> if (maxItems == null) previews else previews.take(maxItems) }
+            val items: List<MetaPreview> = enrichPreviewPostersWithAnivio(baseItems)
 
             CatalogPage(
                 items = items,
