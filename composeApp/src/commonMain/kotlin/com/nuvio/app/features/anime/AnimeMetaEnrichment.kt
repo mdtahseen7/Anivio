@@ -36,6 +36,7 @@ data class AnimeEnrichment(
      * these; the MAL path leaves it empty and episode notifications fall back to the air date.
      */
     val airingScheduleByEpisode: Map<Int, Long> = emptyMap(),
+    val nextAiringEpisodeNumber: Int? = null,
 )
 
 /**
@@ -49,10 +50,12 @@ suspend fun loadAnimeEnrichment(
     isMovie: Boolean,
     expectedEpisodeCount: Int?,
     anivioMedia: AnivioMedia? = null,
+    nextAiringEpisodeNumber: Int? = null,
 ): AnimeEnrichment {
     if (aniZip == null) {
         return AnimeEnrichment(
             anivioMedia = anivioMedia,
+            nextAiringEpisodeNumber = nextAiringEpisodeNumber,
         )
     }
     val mappedSeason = aniZip.mappedSeasonNumber()
@@ -108,6 +111,7 @@ suspend fun loadAnimeEnrichment(
             tvdbEpisodes = tvdbEpisodesDeferred.await(),
             tvdbArtwork = artworkDeferred.await(),
             anivioMedia = anivioMedia,
+            nextAiringEpisodeNumber = nextAiringEpisodeNumber,
             mappedSeason = mappedSeason,
         )
     }
@@ -165,10 +169,16 @@ fun buildEnrichedEpisodes(
     fallbackTitle: (Int) -> String,
 ): List<MetaVideo> {
     val aniZip = enrichment.aniZip
-    val total = episodeCount?.takeIf { it > 0 }
-        ?: aniZip?.episodeCount?.takeIf { it > 0 }
-        ?: aniZip?.episodes?.keys?.mapNotNull(String::toIntOrNull)?.maxOrNull()
-        ?: return emptyList()
+    val total = listOfNotNull(
+        episodeCount?.takeIf { it > 0 },
+        aniZip?.episodeCount?.takeIf { it > 0 },
+        aniZip?.episodes?.keys?.mapNotNull(String::toIntOrNull)?.maxOrNull(),
+        enrichment.anivioMedia?.episodes?.takeIf { it > 0 },
+        enrichment.kitsuEpisodes.keys.maxOrNull(),
+        enrichment.tvdbEpisodes.keys.maxOrNull(),
+        enrichment.airingScheduleByEpisode.keys.maxOrNull(),
+        enrichment.nextAiringEpisodeNumber?.takeIf { it > 0 },
+    ).maxOrNull() ?: return emptyList()
 
     return (1..total).map { number ->
         val episode = aniZip?.episodes?.get(number.toString())

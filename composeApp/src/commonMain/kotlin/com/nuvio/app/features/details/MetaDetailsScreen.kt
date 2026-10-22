@@ -2227,6 +2227,8 @@ private fun ConfiguredMetaSections(
                         MoreLikeThisSource.TMDB -> stringResource(Res.string.detail_more_like_this_powered_by_tmdb)
                         MoreLikeThisSource.ANILIST ->
                             stringResource(Res.string.detail_more_like_this_powered_by_anilist)
+                        MoreLikeThisSource.ANIVIO ->
+                            stringResource(Res.string.detail_more_like_this_powered_by_anivio)
                         null -> null
                     }
                     DetailPosterRailSection(

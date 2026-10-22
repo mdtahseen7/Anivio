@@ -216,6 +216,7 @@ object AniListMetaSource {
                     anivioMedia = anivioMedia,
                     isMovie = isMovie,
                     expectedEpisodeCount = resolvedMedia.episodes,
+                    nextAiringEpisodeNumber = resolvedMedia.nextAiringEpisode?.episode,
                 ).copy(airingScheduleByEpisode = resolvedMedia.airingScheduleByEpisode())
                 val fanartLogo = if (!isMovie && aniZip?.tvdbId() == null && aniZip?.tmdbId() == null) {
                     TvdbClient.searchSeriesId(resolvedMedia.preferredTitle().orEmpty())

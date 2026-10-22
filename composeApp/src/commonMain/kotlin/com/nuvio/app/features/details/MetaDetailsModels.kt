@@ -59,6 +59,7 @@ data class MangaInfo(
 enum class MoreLikeThisSource {
     TMDB,
     ANILIST,
+    ANIVIO,
 }
 
 /** A single AniList user review shown in the Comments section. */

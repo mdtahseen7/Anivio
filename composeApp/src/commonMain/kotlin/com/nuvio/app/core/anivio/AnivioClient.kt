@@ -15,7 +15,9 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.put
 
 /** Small, bounded unauthenticated client for Anivio's GraphQL and mapping APIs. */
@@ -58,7 +60,7 @@ object AnivioClient {
     /** Lightweight catalog page. The server receives exactly 20 as its page size. */
     suspend fun catalog(query: AnivioCatalogQuery = AnivioCatalogQuery(), forceRefresh: Boolean = false): List<AnivioMedia> {
         val page = query.page.coerceAtLeast(1)
-        val key = "catalog:$page:${query.sort}:${query.season}:${query.seasonYear}:${query.genre}:${query.averageScoreGreater}"
+        val key = "catalog:$page:${query.sort}:${query.statusIn}:${query.season}:${query.seasonYear}:${query.genre}:${query.averageScoreGreater}"
         return cached(key, forceRefresh) {
             requestCatalog(query.copy(page = page)).take(MAX_LIST_ITEMS)
         }
@@ -138,6 +140,9 @@ object AnivioClient {
         graphQl<PageData>(CATALOG_QUERY, buildJsonObject {
             put("page", query.page)
             put("sort", query.sort.wireName)
+            if (query.statusIn.isNotEmpty()) {
+                put("statusIn", buildJsonArray { query.statusIn.forEach { add(JsonPrimitive(it)) } })
+            }
             query.season?.let { put("season", it) }
             query.seasonYear?.let { put("seasonYear", it) }
             query.genre?.let { put("genre", it) }
@@ -148,7 +153,10 @@ object AnivioClient {
         graphQl<ExtrasData>(EXTRAS_QUERY, buildJsonObject { put("id", anilistId) })?.media?.let {
             AnivioMediaExtras(
                 characters = it.characters.edges.take(MAX_LIST_ITEMS),
-                relations = it.relations.edges.take(MAX_LIST_ITEMS),
+                relations = it.relations.edges
+                    .filter { edge -> edge.relationType?.uppercase() in setOf("PREQUEL", "SEQUEL") }
+                    .take(MAX_LIST_ITEMS),
+                recommendations = it.recommendations.take(MAX_LIST_ITEMS),
                 videos = it.videos.take(MAX_LIST_ITEMS),
                 screenshots = it.screenshots.take(MAX_LIST_ITEMS),
             )
@@ -260,6 +268,7 @@ object AnivioClient {
     @Serializable private data class ExtrasPayload(
         val characters: CharacterConnection = CharacterConnection(),
         val relations: RelationConnection = RelationConnection(),
+        val recommendations: List<AnivioMedia> = emptyList(),
         val videos: List<AnivioVideo> = emptyList(),
         val screenshots: List<AnivioScreenshot> = emptyList(),
     )
@@ -312,9 +321,9 @@ object AnivioClient {
     """
 
     private const val CATALOG_QUERY = """
-        query Catalog(${"$"}page: Int!, ${"$"}sort: MediaSort!, ${"$"}season: MediaSeason, ${"$"}seasonYear: Int, ${"$"}genre: String, ${"$"}averageScoreGreater: Int) {
+        query Catalog(${"$"}page: Int!, ${"$"}sort: MediaSort!, ${"$"}statusIn: [MediaStatus], ${"$"}season: MediaSeason, ${"$"}seasonYear: Int, ${"$"}genre: String, ${"$"}averageScoreGreater: Int) {
           Page(page: ${"$"}page, perPage: 20) {
-            media(type: ANIME, sort: [${"$"}sort], season: ${"$"}season, seasonYear: ${"$"}seasonYear, genre: ${"$"}genre, averageScore_greater: ${"$"}averageScoreGreater) { $LIST_FIELDS }
+            media(type: ANIME, sort: [${"$"}sort], status_in: ${"$"}statusIn, season: ${"$"}season, seasonYear: ${"$"}seasonYear, genre: ${"$"}genre, averageScore_greater: ${"$"}averageScoreGreater) { $LIST_FIELDS }
           }
         }
     """
@@ -323,7 +332,8 @@ object AnivioClient {
         query MediaExtras(${"$"}id: Int) {
           Media(id: ${"$"}id) {
             characters { edges { role node { id name { first middle last full native alternative alternativeSpoiler } image { large medium } description gender dateOfBirth { year month day } age bloodType siteUrl } voiceActors { id name { first middle last full native alternative } image { large medium } siteUrl } } }
-            relations { edges { relationType node { id title { romaji english native } coverImage { large medium } seasonYear } } }
+            relations { edges { relationType node { id title { romaji english native } type format status seasonYear averageScore popularity isAdult coverImage { large medium } } } }
+            recommendations { id title { romaji english native } type format status seasonYear averageScore popularity isAdult coverImage { large medium } }
             videos { id url title thumbnail artist type source }
             screenshots { id url small medium large order source }
           }

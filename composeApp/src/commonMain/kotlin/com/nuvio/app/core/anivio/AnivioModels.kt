@@ -160,6 +160,7 @@ data class AnivioStatusDistribution(
 data class AnivioMediaExtras(
     val characters: List<AnivioCharacterEdge> = emptyList(),
     val relations: List<AnivioRelationEdge> = emptyList(),
+    val recommendations: List<AnivioMedia> = emptyList(),
     val videos: List<AnivioVideo> = emptyList(),
     val screenshots: List<AnivioScreenshot> = emptyList(),
 )
@@ -304,6 +305,7 @@ enum class AnivioMediaSort(val wireName: String) {
 data class AnivioCatalogQuery(
     val page: Int = 1,
     val sort: AnivioMediaSort = AnivioMediaSort.TRENDING_DESC,
+    val statusIn: List<String> = emptyList(),
     val season: String? = null,
     val seasonYear: Int? = null,
     val genre: String? = null,

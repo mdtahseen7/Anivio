@@ -1602,6 +1602,7 @@
     <string name="details_more_like_this">More Like This</string>
     <string name="detail_more_like_this_powered_by_tmdb">Powered by TMDB</string>
     <string name="detail_more_like_this_powered_by_anilist">Powered by AniList</string>
+    <string name="detail_more_like_this_powered_by_anivio">Powered by Anivio</string>
     <string name="details_notify_new_episodes">Notify me about new episodes</string>
     <string name="details_notify_subscribed">Notifications on</string>
     <string name="detail_more_like_this_powered_by_trakt">Powered by Trakt</string>

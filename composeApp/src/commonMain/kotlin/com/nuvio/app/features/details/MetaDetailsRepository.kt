@@ -51,9 +51,16 @@ object MetaDetailsRepository {
         val mdbListSettings = MdbListSettingsRepository.snapshot()
         val metaScreenSettingsFingerprint = buildMetaScreenSettingsFingerprint(mdbListSettings)
 
+        if (cachedMetaByRequestKey[requestKey]?.baseMeta?.needsEpisodeRetry() == true) {
+            cachedMetaByRequestKey.remove(requestKey)
+        }
+
         cachedMetaByRequestKey[requestKey]?.let { cachedEntry ->
             cachedEntry.metaScreenMeta
-                ?.takeIf { cachedEntry.metaScreenSettingsFingerprint == metaScreenSettingsFingerprint }
+                ?.takeIf {
+                    cachedEntry.metaScreenSettingsFingerprint == metaScreenSettingsFingerprint &&
+                        !it.needsEpisodeRetry()
+                }
                 ?.let { cachedMeta ->
                     _uiState.value = MetaDetailsUiState(meta = cachedMeta.withUnreleasedFilter())
                     activeRequestKey = requestKey
@@ -61,7 +68,7 @@ object MetaDetailsRepository {
                 }
 
             val cachedBaseMeta = cachedEntry.baseMeta
-            if (!shouldEnrichForMetaScreen(cachedBaseMeta, id, mdbListSettings)) {
+            if (!shouldEnrichForMetaScreen(cachedBaseMeta, id, mdbListSettings) && !cachedBaseMeta.needsEpisodeRetry()) {
                 _uiState.value = MetaDetailsUiState(meta = cachedBaseMeta.withUnreleasedFilter())
                 activeRequestKey = requestKey
                 return
@@ -94,7 +101,7 @@ object MetaDetailsRepository {
             return
         }
 
-        if (currentState.meta?.type == type && currentState.meta.id == id && !currentState.isLoading) {
+        if (currentState.meta?.type == type && currentState.meta.id == id && !currentState.isLoading && !currentState.meta.needsEpisodeRetry()) {
             log.d { "Skipping reload for cached meta — type=$type id=$id" }
             activeRequestKey = requestKey
             return
@@ -510,6 +517,11 @@ object MetaDetailsRepository {
             collectionItems = collectionItems.filterReleasedItems(todayIsoDate),
         )
     }
+
+    private fun MetaDetails.needsEpisodeRetry(): Boolean =
+        !type.equals("movie", ignoreCase = true) &&
+            hasScheduledVideos &&
+            videos.none { it.season != null || it.episode != null }
 
    
     fun findEmbeddedStreams(videoId: String): List<com.nuvio.app.features.streams.StreamItem> {

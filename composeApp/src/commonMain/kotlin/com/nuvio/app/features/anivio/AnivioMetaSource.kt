@@ -3,6 +3,7 @@ package com.nuvio.app.features.anivio
 import com.nuvio.app.core.anivio.AnivioClient
 import com.nuvio.app.core.anivio.AnivioEpisode
 import com.nuvio.app.core.anivio.AnivioMedia
+import com.nuvio.app.core.anivio.AnivioMediaExtras
 import com.nuvio.app.core.anivio.backgroundUrl
 import com.nuvio.app.core.anivio.logoUrl
 import com.nuvio.app.core.anivio.posterUrl
@@ -12,7 +13,10 @@ import com.nuvio.app.features.details.MetaDetails
 import com.nuvio.app.features.details.MetaCompany
 import com.nuvio.app.features.details.MetaLink
 import com.nuvio.app.features.details.MetaVideo
+import com.nuvio.app.features.details.MoreLikeThisSource
 import com.nuvio.app.features.details.formatRuntimeFromMinutes
+import com.nuvio.app.features.home.MetaPreview
+import com.nuvio.app.features.home.PosterShape
 import com.nuvio.app.features.tracking.TrackingSettingsRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
@@ -20,6 +24,9 @@ import kotlinx.coroutines.withTimeoutOrNull
 /** Metadata-only fallback used when AniList is unavailable. */
 object AnivioMetaSource {
     private const val EPISODE_LIST_TIMEOUT_MS = 3_000L
+    private const val EXTRAS_TIMEOUT_MS = 3_000L
+    private const val MAX_RELATED_ITEMS = 12
+    private val STORY_RELATIONS = listOf("PREQUEL", "SEQUEL")
 
     suspend fun fetchMeta(
         id: String,
@@ -48,14 +55,35 @@ object AnivioMetaSource {
                 }
             }.orEmpty()
         }
-        return media.toMetaDetails(id = id, type = type, episodes = episodes)
+        val extras = withTimeoutOrNull(EXTRAS_TIMEOUT_MS) {
+            try {
+                AnivioClient.mediaExtrasByAniListId(mediaId, forceRefresh)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Throwable) {
+                null
+            }
+        }
+        return media.toMetaDetails(id = id, type = type, episodes = episodes, extras = extras)
     }
 
     private fun AnivioMedia.toMetaDetails(
         id: String,
         type: String,
         episodes: List<AnivioEpisode>,
+        extras: AnivioMediaExtras?,
     ): MetaDetails {
+        val relatedTitles = extras?.relations.orEmpty()
+            .filter { it.relationType?.uppercase() in STORY_RELATIONS }
+            .sortedBy { STORY_RELATIONS.indexOf(it.relationType?.uppercase()) }
+            .mapNotNull { it.node?.toMetaPreview(type) }
+            .distinctBy { it.id }
+        val moreLikeThis = extras?.recommendations.orEmpty()
+            .filterNot { it.isAdult }
+            .filter { it.format?.uppercase() !in setOf("MANGA", "NOVEL", "ONE_SHOT") }
+            .mapNotNull { it.toMetaPreview(type) }
+            .distinctBy { it.id }
+            .take(MAX_RELATED_ITEMS)
         return MetaDetails(
             id = id,
             type = type,
@@ -84,7 +112,25 @@ object AnivioMetaSource {
                     url = url,
                 )
             },
+            moreLikeThis = moreLikeThis,
+            moreLikeThisSource = MoreLikeThisSource.ANIVIO.takeIf { moreLikeThis.isNotEmpty() },
+            relatedTitles = relatedTitles,
             videos = buildAnivioEpisodeVideos(id = id, type = type, episodeCount = this.episodes, episodes = episodes),
+        )
+    }
+
+    private fun AnivioMedia.toMetaPreview(requestedType: String): MetaPreview? {
+        val titleText = title?.english ?: title?.romaji ?: title?.native ?: return null
+        return MetaPreview(
+            id = "anilist:$id",
+            type = if (format.equals("MOVIE", ignoreCase = true)) "movie" else requestedType,
+            name = titleText,
+            poster = posterUrl,
+            posterShape = PosterShape.Poster,
+            releaseInfo = seasonYear?.toString(),
+            popularity = popularity?.toDouble(),
+            imdbRating = averageScore?.takeIf { it > 0 }?.let { (it / 10.0).toString() },
+            airingStatus = status?.replace('_', ' ')?.replaceFirstChar { it.uppercase() },
         )
     }
 }

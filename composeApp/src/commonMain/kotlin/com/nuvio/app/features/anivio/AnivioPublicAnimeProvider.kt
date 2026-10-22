@@ -111,6 +111,7 @@ object AnivioPublicAnimeProvider {
                 query = AnivioCatalogQuery(
                     page = page,
                     sort = sort,
+                    statusIn = listOf("RELEASING").takeIf { sort == AnivioMediaSort.TRENDING_DESC }.orEmpty(),
                     genre = genre?.takeIf(String::isNotBlank),
                 ),
                 forceRefresh = forceRefresh,
@@ -134,7 +135,10 @@ object AnivioPublicAnimeProvider {
     }
 
     private fun catalogQuery(catalogId: String): AnivioCatalogQuery? = when (catalogId) {
-        "trending" -> AnivioCatalogQuery(sort = AnivioMediaSort.TRENDING_DESC)
+        "trending" -> AnivioCatalogQuery(
+            sort = AnivioMediaSort.TRENDING_DESC,
+            statusIn = listOf("RELEASING"),
+        )
         "popular" -> AnivioCatalogQuery(sort = AnivioMediaSort.POPULARITY_DESC)
         "top-rated" -> AnivioCatalogQuery(sort = AnivioMediaSort.SCORE_DESC)
         "newest", "recently-released" -> AnivioCatalogQuery(sort = AnivioMediaSort.START_DATE_DESC)
