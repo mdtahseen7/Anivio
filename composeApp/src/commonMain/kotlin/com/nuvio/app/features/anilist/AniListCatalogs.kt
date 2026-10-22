@@ -18,6 +18,7 @@ import nuvio.composeapp.generated.resources.anilist_row_recently_released
 import nuvio.composeapp.generated.resources.anilist_row_trending
 import nuvio.composeapp.generated.resources.anilist_row_upcoming
 import nuvio.composeapp.generated.resources.anilist_source_name
+import nuvio.composeapp.generated.resources.anime_source_anivio
 import nuvio.composeapp.generated.resources.tracking_source_mal
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.getString
@@ -191,6 +192,7 @@ fun buildAniListCatalogDefinitions(mode: ContentMode = ContentModeRepository.mod
         getString(
             when (PublicAnimeRouter.activeProvider) {
                 PublicAnimeProvider.MAL -> Res.string.tracking_source_mal
+                PublicAnimeProvider.ANIVIO -> Res.string.anime_source_anivio
                 PublicAnimeProvider.ANILIST -> Res.string.anilist_source_name
             },
         )

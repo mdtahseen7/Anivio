@@ -1992,8 +1992,10 @@
     <string name="settings_anime_source_title">Anime data source</string>
     <string name="settings_anime_source_dialog_subtitle">Where catalogs, Discover and anime details are loaded from.</string>
     <string name="anime_source_auto">Automatic</string>
-    <string name="anime_source_auto_description">Use AniList, and switch to MyAnimeList on its own if AniList stops responding.</string>
+    <string name="anime_source_auto_description">Use AniList first, then Anivio during outages, with MyAnimeList as an additional fallback when available.</string>
     <string name="anime_source_anilist_description">Always use AniList. Catalogs stay empty while AniList is down.</string>
+    <string name="anime_source_anivio">Anivio</string>
+    <string name="anime_source_anivio_description">Always use Anivio for anime catalogs, Discover and details. Streams still come from installed providers.</string>
     <string name="anime_source_mal_description">Always use MyAnimeList. Genre filters in Discover are unavailable on this source.</string>
     <string name="anime_source_mal_unavailable">Needs a MyAnimeList client id in this build</string>
     <string name="home_catalog_default_title">%1$s - %2$s</string>

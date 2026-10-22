@@ -45,7 +45,7 @@ data class PublicAnimeMetaResult(
     val externalFallbackId: String?,
 )
 
-enum class PublicAnimeProvider { ANILIST, MAL }
+enum class PublicAnimeProvider { ANILIST, ANIVIO, MAL }
 
 /**
  * User-facing choice of where anime catalogs, Discover and metadata come from.
@@ -54,7 +54,7 @@ enum class PublicAnimeProvider { ANILIST, MAL }
  * source and disable failover in that direction, which is what someone who prefers MAL's data — or
  * distrusts it — actually wants.
  */
-enum class AnimeDataSourcePreference { AUTO, ANILIST, MAL }
+enum class AnimeDataSourcePreference { AUTO, ANILIST, ANIVIO, MAL }
 
 /**
  * Process-wide AniList-primary circuit. Only [AniListUnavailableException] opens it; programming,
@@ -72,6 +72,7 @@ object PublicAnimeRouter {
     val activeProvider: PublicAnimeProvider
         get() = when (preferenceRef.value) {
             AnimeDataSourcePreference.ANILIST -> PublicAnimeProvider.ANILIST
+            AnimeDataSourcePreference.ANIVIO -> PublicAnimeProvider.ANIVIO
             // A pin to MAL is meaningless without an installed provider; report the truth.
             AnimeDataSourcePreference.MAL ->
                 if (fallbackRef.value != null) PublicAnimeProvider.MAL else PublicAnimeProvider.ANILIST
@@ -109,8 +110,45 @@ object PublicAnimeRouter {
         val provider = fallbackRef.value ?: return aniList()
         return when (preferenceRef.value) {
             AnimeDataSourcePreference.ANILIST -> aniList()
+            AnimeDataSourcePreference.ANIVIO -> fallback(provider)
             AnimeDataSourcePreference.MAL -> fallback(provider)
             AnimeDataSourcePreference.AUTO -> routeAuto(forceProbe, aniList, fallback, provider)
+        }
+    }
+
+    /**
+     * Routes like [route], but also lets a provider-neutral fallback run when no MAL provider is
+     * installed. Explicit source pins retain their existing meaning: only AUTO may fail over.
+     *
+     * The nullable provider keeps the existing MAL contract intact while allowing common metadata
+     * services (such as Anivio) to serve an outage without making the Android-only MAL adapter a
+     * prerequisite.
+     */
+    suspend fun <T> routeWithOptionalFallback(
+        forceProbe: Boolean = false,
+        aniList: suspend () -> T,
+        fallback: suspend (PublicAnimeFallbackProvider?) -> T,
+    ): T {
+        val provider = fallbackRef.value
+        if (provider != null) {
+            return route(
+                forceProbe = forceProbe,
+                aniList = aniList,
+                fallback = { fallback(provider) },
+            )
+        }
+
+        // Preserve the existing explicit-pin behavior when there is no installed MAL provider.
+        if (preferenceRef.value == AnimeDataSourcePreference.ANILIST) return aniList()
+        if (preferenceRef.value == AnimeDataSourcePreference.ANIVIO) return fallback(null)
+
+        return try {
+            aniList().also { recoverToAniList() }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: AniListUnavailableException) {
+            if (NetworkStatusRepository.uiState.value.isOfflineLike) throw error
+            fallback(null)
         }
     }
 

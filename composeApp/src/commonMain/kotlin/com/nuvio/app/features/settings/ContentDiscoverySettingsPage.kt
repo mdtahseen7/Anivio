@@ -17,6 +17,8 @@ import com.nuvio.app.features.plugins.PluginRepository
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.anilist_source_name
 import nuvio.composeapp.generated.resources.anime_source_anilist_description
+import nuvio.composeapp.generated.resources.anime_source_anivio_description
+import nuvio.composeapp.generated.resources.anime_source_anivio
 import nuvio.composeapp.generated.resources.anime_source_auto
 import nuvio.composeapp.generated.resources.anime_source_auto_description
 import nuvio.composeapp.generated.resources.anime_source_mal_description
@@ -169,6 +171,7 @@ private fun CloudflareClearanceGroup(isTablet: Boolean) {
 private fun animeDataSourceLabel(source: AnimeDataSourcePreference): String = when (source) {
     AnimeDataSourcePreference.AUTO -> stringResource(Res.string.anime_source_auto)
     AnimeDataSourcePreference.ANILIST -> stringResource(Res.string.anilist_source_name)
+    AnimeDataSourcePreference.ANIVIO -> stringResource(Res.string.anime_source_anivio)
     AnimeDataSourcePreference.MAL -> stringResource(Res.string.tracking_source_mal)
 }
 
@@ -185,6 +188,11 @@ private fun animeDataSourceOptions(
         value = AnimeDataSourcePreference.ANILIST,
         title = stringResource(Res.string.anilist_source_name),
         description = stringResource(Res.string.anime_source_anilist_description),
+    ),
+    TrackingPickerOption(
+        value = AnimeDataSourcePreference.ANIVIO,
+        title = stringResource(Res.string.anime_source_anivio),
+        description = stringResource(Res.string.anime_source_anivio_description),
     ),
     TrackingPickerOption(
         value = AnimeDataSourcePreference.MAL,
