@@ -95,20 +95,12 @@ fun parseAniListMediaId(id: String): Int? {
         ?.takeIf { it > 0 }
 }
 
-/** Picks a usable direct ani.zip mapping before trying bounded related-title fallbacks. */
-internal fun chooseAniZipMapping(
-    direct: AniZipResponse?,
-    related: List<AniZipResponse?>,
-): AniZipResponse? = listOfNotNull(direct)
-    .plus(related.filterNotNull())
-    .firstOrNull(::hasUsefulAniZipData)
-
-private fun hasUsefulAniZipData(mapping: AniZipResponse?): Boolean = mapping != null && (
-    mapping.tvdbId() != null ||
-        mapping.tmdbId() != null ||
-        mapping.episodes.isNotEmpty() ||
-        mapping.images.isNotEmpty()
-    )
+/**
+ * Keeps ani.zip enrichment scoped to the AniList entry currently being opened.
+ *
+ * A related entry belongs to another cour, so its mapping must never be used as fallback.
+ */
+internal fun currentEntryAniZipMapping(direct: AniZipResponse?): AniZipResponse? = direct
 
 data class AniListMetaResult(
     val meta: MetaDetails,
@@ -126,7 +118,6 @@ data class AniListMetaResult(
  */
 object AniListMetaSource {
     private const val TMDB_ENRICH_TIMEOUT_MS = 6_000L
-    private const val MAX_RELATED_MAPPING_LOOKUPS = 3
 
     /** Matches what the TMDB path used to return, so the rail's length does not visibly change. */
     private const val MAX_MORE_LIKE_THIS = 12
@@ -220,14 +211,10 @@ object AniListMetaSource {
             Triple(mediaDeferred.await(), aniZipDeferred.await(), anivioDeferred.await())
         }
         val resolvedMedia = media ?: return@withContext null
-        // Some AniList sequel entries are not mapped independently by ani.zip. Reuse a bounded
-        // prequel/parent mapping in that case so TVDB can still supply the season's episodes,
-        // poster and clear logo without making Anivio a higher-priority artwork source.
-        val aniZip = resolveAniZipMapping(
-            media = resolvedMedia,
-            direct = directAniZip,
-            forceRefresh = forceRefresh,
-        )
+        // AniList creates a separate media entry for every cour, while related entries can point
+        // to a different season of the same franchise. Never borrow a prequel's ani.zip mapping:
+        // its external ids and episode data would make an unmapped sequel render as that prequel.
+        val aniZip = currentEntryAniZipMapping(directAniZip)
         val isMovie = type.equals("movie", ignoreCase = true)
         val mappedSeason = aniZip?.mappedSeasonNumber()
         val externalFallbackId = aniZip?.imdbId()
@@ -293,28 +280,6 @@ object AniListMetaSource {
                 externalFallbackId = externalFallbackId,
             )
         }
-    }
-
-    private suspend fun resolveAniZipMapping(
-        media: AniListMediaDetail,
-        direct: AniZipResponse?,
-        forceRefresh: Boolean,
-    ): AniZipResponse? {
-        if (hasUsefulAniZipData(direct)) return direct
-
-        val relatedIds = media.relations?.edges.orEmpty()
-            .filter { it.relationType?.uppercase() in setOf("PREQUEL", "PARENT") }
-            .mapNotNull { it.node?.id }
-            .distinct()
-            .take(MAX_RELATED_MAPPING_LOOKUPS)
-
-        val relatedMappings = buildList {
-            for (relatedId in relatedIds) {
-                val mapping = AniZipClient.mappings(relatedId, forceRefresh)
-                if (mapping != null) add(mapping)
-            }
-        }
-        return chooseAniZipMapping(direct, relatedMappings)
     }
 
     /**

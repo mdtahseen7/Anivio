@@ -25,6 +25,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class AniListOutageBoundaryTest {
@@ -158,7 +159,7 @@ class AniListOutageBoundaryTest {
     }
 
     @Test
-    fun `unmapped sequel can use a related ani zip mapping`() {
+    fun `unmapped sequel does not inherit a related ani zip mapping`() {
         val related = AniZipResponse(
             images = listOf(
                 AniZipImage(coverType = "Clearlogo", url = "https://image.test/jojo-logo.png"),
@@ -166,6 +167,10 @@ class AniListOutageBoundaryTest {
             episodes = mapOf("1" to AniZipEpisode(image = "https://image.test/episode.png")),
         )
 
-        assertEquals(related, chooseAniZipMapping(direct = null, related = listOf(related)))
+        // A prequel mapping has season 1's episode metadata and external IDs. Using it for an
+        // unmapped sequel causes the sequel details screen to become a copy of the prequel.
+        val sequelMapping = currentEntryAniZipMapping(direct = null)
+        assertNull(sequelMapping)
+        assertNotEquals(related, sequelMapping)
     }
 }
