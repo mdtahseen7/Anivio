@@ -65,7 +65,7 @@ class HomeHeroSectionTest {
     }
 
     @Test
-    fun `hero prefers wide banner over portrait poster`() {
+    fun `hero prefers portrait poster over wide banner`() {
         val item = MetaPreview(
             id = "anilist:OnePiece",
             type = "series",
@@ -74,18 +74,18 @@ class HomeHeroSectionTest {
             banner = "https://image.test/banner.jpg",
         )
 
-        assertEquals("https://image.test/banner.jpg", homeHeroImageUrl(item))
+        assertEquals("https://image.test/poster.jpg", homeHeroImageUrl(item))
     }
 
     @Test
-    fun `hero falls back to poster when no banner exists`() {
+    fun `hero falls back to banner when no poster exists`() {
         val item = MetaPreview(
             id = "anilist:1",
             type = "series",
             name = "Fallback",
-            poster = "https://image.test/poster.jpg",
+            banner = "https://image.test/banner.jpg",
         )
 
-        assertEquals("https://image.test/poster.jpg", homeHeroImageUrl(item))
+        assertEquals("https://image.test/banner.jpg", homeHeroImageUrl(item))
     }
 }

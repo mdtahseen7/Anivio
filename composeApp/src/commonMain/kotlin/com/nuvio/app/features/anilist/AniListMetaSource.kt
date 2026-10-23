@@ -95,6 +95,21 @@ fun parseAniListMediaId(id: String): Int? {
         ?.takeIf { it > 0 }
 }
 
+/** Picks a usable direct ani.zip mapping before trying bounded related-title fallbacks. */
+internal fun chooseAniZipMapping(
+    direct: AniZipResponse?,
+    related: List<AniZipResponse?>,
+): AniZipResponse? = listOfNotNull(direct)
+    .plus(related.filterNotNull())
+    .firstOrNull(::hasUsefulAniZipData)
+
+private fun hasUsefulAniZipData(mapping: AniZipResponse?): Boolean = mapping != null && (
+    mapping.tvdbId() != null ||
+        mapping.tmdbId() != null ||
+        mapping.episodes.isNotEmpty() ||
+        mapping.images.isNotEmpty()
+    )
+
 data class AniListMetaResult(
     val meta: MetaDetails,
     /** ani.zip's IMDb id, for the MdbList and Trakt lookups that key on one. */
@@ -111,6 +126,7 @@ data class AniListMetaResult(
  */
 object AniListMetaSource {
     private const val TMDB_ENRICH_TIMEOUT_MS = 6_000L
+    private const val MAX_RELATED_MAPPING_LOOKUPS = 3
 
     /** Matches what the TMDB path used to return, so the rail's length does not visibly change. */
     private const val MAX_MORE_LIKE_THIS = 12
@@ -189,7 +205,7 @@ object AniListMetaSource {
         }
         TrackingSettingsRepository.ensureLoaded()
         val anivioSettings = TrackingSettingsRepository.uiState.value
-        val (media, aniZip, anivioMedia) = coroutineScope {
+        val (media, directAniZip, anivioMedia) = coroutineScope {
             val mediaDeferred = async { fetchMediaDetail(mediaId, isManga = false, forceRefresh = forceRefresh) }
             // Best-effort: a null here just means fewer episode stills and no TMDB hop. Manga never
             // reaches this request because its details are wholly keyed by its AniList media id.
@@ -204,6 +220,14 @@ object AniListMetaSource {
             Triple(mediaDeferred.await(), aniZipDeferred.await(), anivioDeferred.await())
         }
         val resolvedMedia = media ?: return@withContext null
+        // Some AniList sequel entries are not mapped independently by ani.zip. Reuse a bounded
+        // prequel/parent mapping in that case so TVDB can still supply the season's episodes,
+        // poster and clear logo without making Anivio a higher-priority artwork source.
+        val aniZip = resolveAniZipMapping(
+            media = resolvedMedia,
+            direct = directAniZip,
+            forceRefresh = forceRefresh,
+        )
         val isMovie = type.equals("movie", ignoreCase = true)
         val mappedSeason = aniZip?.mappedSeasonNumber()
         val externalFallbackId = aniZip?.imdbId()
@@ -269,6 +293,28 @@ object AniListMetaSource {
                 externalFallbackId = externalFallbackId,
             )
         }
+    }
+
+    private suspend fun resolveAniZipMapping(
+        media: AniListMediaDetail,
+        direct: AniZipResponse?,
+        forceRefresh: Boolean,
+    ): AniZipResponse? {
+        if (hasUsefulAniZipData(direct)) return direct
+
+        val relatedIds = media.relations?.edges.orEmpty()
+            .filter { it.relationType?.uppercase() in setOf("PREQUEL", "PARENT") }
+            .mapNotNull { it.node?.id }
+            .distinct()
+            .take(MAX_RELATED_MAPPING_LOOKUPS)
+
+        val relatedMappings = buildList {
+            for (relatedId in relatedIds) {
+                val mapping = AniZipClient.mappings(relatedId, forceRefresh)
+                if (mapping != null) add(mapping)
+            }
+        }
+        return chooseAniZipMapping(direct, relatedMappings)
     }
 
     /**

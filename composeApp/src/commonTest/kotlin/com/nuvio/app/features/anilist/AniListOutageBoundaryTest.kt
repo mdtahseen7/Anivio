@@ -156,4 +156,16 @@ class AniListOutageBoundaryTest {
 
         assertEquals("https://image.test/hdtv.png", response.aniZipLogoUrl())
     }
+
+    @Test
+    fun `unmapped sequel can use a related ani zip mapping`() {
+        val related = AniZipResponse(
+            images = listOf(
+                AniZipImage(coverType = "Clearlogo", url = "https://image.test/jojo-logo.png"),
+            ),
+            episodes = mapOf("1" to AniZipEpisode(image = "https://image.test/episode.png")),
+        )
+
+        assertEquals(related, chooseAniZipMapping(direct = null, related = listOf(related)))
+    }
 }

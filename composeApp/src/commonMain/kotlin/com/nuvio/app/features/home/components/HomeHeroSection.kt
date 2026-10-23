@@ -196,8 +196,9 @@ fun HomeHeroSection(
                 ) {
                     visiblePages.forEach { layer ->
                         AsyncImage(
-                            // Heroes are wide compositions. Prefer a real backdrop/banner and only
-                            // crop the portrait poster when no wide artwork exists.
+                            // Keep the hero's artwork consistent with the poster-led design: use the
+                            // sharp portrait key art first and only fall back to a wide image when a
+                            // poster is unavailable.
                             model = homeHeroImageUrl(items[layer.page]),
                             contentDescription = items[layer.page].name,
                             modifier = Modifier
@@ -329,7 +330,7 @@ fun HomeHeroSection(
     }
 }
 
-internal fun homeHeroImageUrl(item: MetaPreview): String? = item.banner ?: item.poster
+internal fun homeHeroImageUrl(item: MetaPreview): String? = item.poster ?: item.banner
 
 private data class HeroPageLayer(
     val page: Int,
