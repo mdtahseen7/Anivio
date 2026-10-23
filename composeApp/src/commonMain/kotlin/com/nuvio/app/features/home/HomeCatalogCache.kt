@@ -19,7 +19,7 @@ import kotlinx.serialization.json.Json
  * since renamed, reordered, disabled or uninstalled can never be resurrected by the cache.
  */
 internal object HomeCatalogCache {
-    private const val VERSION = 1
+    private const val VERSION = 2
 
     /** Old enough that the rows are more likely wrong than useful; refetched from scratch instead. */
     private const val MAX_AGE_MS = 7L * 24 * 60 * 60 * 1000

@@ -229,8 +229,8 @@ object HomeRepository {
                 ))
             }
             if (warmedItems.isEmpty()) return@launch
-            // Move the toggle-time artwork storm earlier. Misses cache as misses, so each
-            // title pays this once per install.
+            // Move the toggle-time artwork storm earlier. Misses are only timestamped, so a
+            // failed lookup is retried on the next launch instead of being cached for a week.
             try {
                 AniListHeroArtwork.resolve(warmedItems)
             } catch (_: Throwable) {
@@ -366,8 +366,8 @@ object HomeRepository {
         } else {
             emptyList()
         }
-        // AniList only has portrait covers and a patchy banner, so swap in the wide backdrop and
-        // title logo resolved from TMDB / fanart.tv / ani.zip once they land.
+        // AniList only has a ~460px cover, so swap in TVDB's 680x1000 portrait and its clear logo
+        // (falling back to Anivio / TMDB / fanart) once the enrichment lands.
         val heroArtwork = AniListHeroArtwork.snapshot()
         val decoratedHeroItems = heroItems.map { item -> heroArtwork[item.stableKey()] ?: item }
 
@@ -390,7 +390,8 @@ object HomeRepository {
 
         heroArtworkJob = scope.launch {
             AniListHeroArtwork.resolve(items)
-            // Everything passed in is cached now, so this republish cannot re-trigger itself.
+            // Everything passed in is either cached or timestamped, so this republish cannot
+            // re-trigger itself inside the retry window.
             publishCurrentState(
                 isLoading = _uiState.value.isLoading,
                 requestKey = requestKey,

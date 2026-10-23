@@ -27,20 +27,24 @@ data class TvdbEpisode(
     val runtimeMinutes: Int? = null,
 )
 
-/** Best-scored series artwork per slot, chosen from everything TVDB offers for the show. */
+/** Best-scored artwork per slot, chosen from everything TVDB offers for the title. */
 data class TvdbArtwork(
     val posterUrl: String? = null,
     val backgroundUrl: String? = null,
     val clearLogoUrl: String? = null,
 )
 
+fun TvdbArtwork.hasArtwork(): Boolean =
+    !posterUrl.isNullOrBlank() || !backgroundUrl.isNullOrBlank() || !clearLogoUrl.isNullOrBlank()
+
 /**
  * Minimal TheTVDB v4 client, for the two things TVDB does better than anything else in this app:
  * per-season posters, and episode lists that already carry `seasonNumber`.
  *
- * The series id comes from `api.ani.zip`, so this cannot help titles ani.zip has no mapping for.
- * What it does fix is ani.zip's frequently-null English episode titles, and it replaces the
- * inferred-then-patched TMDB season poster with the season's own key art.
+ * The id usually comes from `api.ani.zip`, but a title search is used when ani.zip has no mapping,
+ * so TVDB still wins for artwork on titles ani.zip does not know. It also fixes ani.zip's
+ * frequently-null English episode titles, and replaces the inferred-then-patched TMDB season poster
+ * with the season's own key art.
  *
  * Auth is a single `POST /login` with the project key — no PIN, since this is not a user-supported
  * key — returning a bearer token good for about a month, cached here for a day.
@@ -87,24 +91,44 @@ object TvdbClient {
      */
     suspend fun seriesArtwork(seriesId: String): TvdbArtwork {
         if (!TvdbSettingsRepository.isConfigured || seriesId.isBlank()) return TvdbArtwork()
+        return artwork(
+            cacheKey = seriesId,
+            path = "/series/$seriesId/artworks",
+            label = "series/$seriesId",
+        )
+    }
 
+    /**
+     * Movie artwork for titles ani.zip only knows as a film. The extended record carries the same
+     * `artworks` array as the series endpoint, including clear-logo type 23.
+     */
+    suspend fun movieArtwork(movieId: String): TvdbArtwork {
+        if (!TvdbSettingsRepository.isConfigured || movieId.isBlank()) return TvdbArtwork()
+        return artwork(
+            cacheKey = "movie:$movieId",
+            path = "/movies/$movieId/extended",
+            label = "movie/$movieId",
+        )
+    }
+
+    private suspend fun artwork(cacheKey: String, path: String, label: String): TvdbArtwork {
         cacheMutex.withLock {
-            artworkCache[seriesId]?.takeIf { nowMs() - it.storedAtMs <= CACHE_TTL_MS }
+            artworkCache[cacheKey]?.takeIf { nowMs() - it.storedAtMs <= CACHE_TTL_MS }
         }?.let { return it.value }
 
         // Artwork is effectively immutable once published, so the disk copy is trusted for far
         // longer than the in-memory TTL. This is what stops logos being re-fetched every launch.
-        TvdbArtworkDiskCache.get(seriesId, nowMs())?.let { stored ->
+        TvdbArtworkDiskCache.get(cacheKey, nowMs())?.let { stored ->
             cacheMutex.withLock {
-                artworkCache.remove(seriesId)
-                artworkCache[seriesId] = CachedValue(stored, nowMs())
+                artworkCache.remove(cacheKey)
+                artworkCache[cacheKey] = CachedValue(stored, nowMs())
                 while (artworkCache.size > CACHE_MAX_ENTRIES) artworkCache.remove(artworkCache.keys.first())
             }
             return stored
         }
 
         val resolved = runCatching {
-            val payload = authorizedGet("/series/$seriesId/artworks") ?: return@runCatching TvdbArtwork()
+            val payload = authorizedGet(path) ?: return@runCatching TvdbArtwork()
             val artworks = json.decodeFromString<TvdbArtworksResponse>(payload)
                 .data
                 ?.artworks
@@ -119,15 +143,15 @@ object TvdbClient {
                 clearLogoUrl = artworks.best(TYPE_CLEARLOGO, preferEnglish = true),
             )
         }.onFailure { error ->
-            log.w(error) { "TVDB artwork lookup failed for series/$seriesId" }
+            log.w(error) { "TVDB artwork lookup failed for $label" }
         }.getOrDefault(TvdbArtwork())
 
         cacheMutex.withLock {
-            artworkCache.remove(seriesId)
-            artworkCache[seriesId] = CachedValue(resolved, nowMs())
+            artworkCache.remove(cacheKey)
+            artworkCache[cacheKey] = CachedValue(resolved, nowMs())
             while (artworkCache.size > CACHE_MAX_ENTRIES) artworkCache.remove(artworkCache.keys.first())
         }
-        TvdbArtworkDiskCache.put(seriesId, resolved, nowMs())
+        TvdbArtworkDiskCache.put(cacheKey, resolved, nowMs())
         return resolved
     }
 
@@ -258,45 +282,50 @@ object TvdbClient {
 
     /**
      * Title search for anime `api.ani.zip` has no mapping for. fanart.tv is id-keyed with
-     * no search endpoint, so callers use the returned TVDB series id with the normal
-     * fanart/TVDB artwork path. Best-match only: a normalized exact title wins, otherwise
-     * the first series hit. Null on miss — callers cache the untouched item, so an
-     * unmatchable title costs one search per process.
+     * no search endpoint, so callers use the returned TVDB id with the normal fanart/TVDB
+     * artwork path. Best-match only: a normalized exact title wins, otherwise the first
+     * hit of the requested type. Null on miss — callers record an attempt, so an
+     * unmatchable title is retried later rather than cached forever.
      */
-    suspend fun searchSeriesId(title: String): String? {
+    suspend fun searchSeriesId(title: String): String? = searchId(title, "series")
+
+    suspend fun searchMovieId(title: String): String? = searchId(title, "movie")
+
+    private suspend fun searchId(title: String, type: String): String? {
         if (!TvdbSettingsRepository.isConfigured || title.isBlank()) return null
         val query = title.trim()
+        val cacheKey = "$type:$query"
         cacheMutex.withLock {
-            searchCache[query]?.takeIf { nowMs() - it.storedAtMs <= CACHE_TTL_MS }?.let { return it.value }
+            searchCache[cacheKey]?.takeIf { nowMs() - it.storedAtMs <= CACHE_TTL_MS }?.let { return it.value }
         }
         val resolved = runCatching {
-            val payload = authorizedGet("/search?query=${query.encodeURLParameter()}&type=series&limit=5")
+            val payload = authorizedGet("/search?query=${query.encodeURLParameter()}&type=$type&limit=5")
                 ?: return null
-            pickSeriesId(payload, query)
+            pickId(payload, query, type)
         }.onFailure { error ->
-            log.w(error) { "TVDB title search failed" }
+            log.w(error) { "TVDB $type title search failed" }
         }.getOrNull()
         if (!resolved.isNullOrBlank()) {
             cacheMutex.withLock {
-                searchCache[query] = CachedValue(resolved, nowMs())
+                searchCache[cacheKey] = CachedValue(resolved, nowMs())
                 while (searchCache.size > CACHE_MAX_ENTRIES) searchCache.remove(searchCache.keys.first())
             }
         }
         return resolved?.takeIf { it.isNotBlank() }
     }
 
-    private fun pickSeriesId(payload: String, title: String): String? {
+    private fun pickId(payload: String, title: String, type: String): String? {
         val results = json.parseToJsonElement(payload).jsonObject["data"] as? JsonArray
             ?: return null
         data class Candidate(val id: String, val name: String)
         val candidates = results.mapNotNull { element ->
             val obj = element as? JsonObject ?: return@mapNotNull null
-            val type = (obj["type"] as? JsonPrimitive)?.contentOrNull
-            if (type != null && !type.equals("series", ignoreCase = true)) return@mapNotNull null
+            val resultType = (obj["type"] as? JsonPrimitive)?.contentOrNull
+            if (resultType != null && !resultType.equals(type, ignoreCase = true)) return@mapNotNull null
             val rawId = (obj["tvdb_id"] as? JsonPrimitive)?.contentOrNull
                 ?: (obj["id"] as? JsonPrimitive)?.contentOrNull
                 ?: return@mapNotNull null
-            // tvdb_id can arrive as "series-12345" or a bare number.
+            // tvdb_id can arrive as "series-12345", "movie-12345" or a bare number.
             val numeric = Regex("\\d+").findAll(rawId).lastOrNull()?.value
                 ?: return@mapNotNull null
             Candidate(numeric, (obj["name"] as? JsonPrimitive)?.contentOrNull.orEmpty())
