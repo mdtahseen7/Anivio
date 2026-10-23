@@ -5,10 +5,10 @@ import com.nuvio.app.core.anilist.FanartArtwork
 import com.nuvio.app.core.anilist.FanartClient
 import com.nuvio.app.core.anilist.TvdbArtwork
 import com.nuvio.app.core.anilist.TvdbClient
-import com.nuvio.app.core.anilist.clearLogoUrl
 import com.nuvio.app.core.anilist.fanartUrl
 import com.nuvio.app.core.anilist.hasArtwork
 import com.nuvio.app.core.anilist.mappedSeasonNumber
+import com.nuvio.app.core.anilist.logoUrl
 import com.nuvio.app.core.anilist.tmdbId
 import com.nuvio.app.core.anilist.tvdbId
 import com.nuvio.app.core.anivio.AnivioClient
@@ -35,8 +35,8 @@ import kotlinx.coroutines.coroutineScope
  * needs a sharper portrait poster and a transparent title logo:
  *
  * - **poster**: TVDB's 680x1000 key art (series or movie) -> Anivio -> TMDB -> AniList.
- * - **logo**: TVDB clear logo -> Anivio -> fanart.tv -> ani.zip -> TMDB.
- * - **backdrop**: TVDB background -> Anivio -> TMDB -> fanart.tv -> ani.zip -> AniList.
+ * - **logo**: TVDB clear logo -> fanart.tv -> ani.zip -> TMDB -> AniList -> Anivio.
+ * - **backdrop**: TVDB background -> TMDB -> fanart.tv -> ani.zip -> AniList -> Anivio.
  *
  * TVDB is tried first even when `api.ani.zip` has no mapping: the id comes from ani.zip when it
  * does, otherwise from a TVDB title search. `HomeHeroSection` already renders `MetaPreview.logo`
@@ -77,7 +77,7 @@ object AniListHeroArtwork {
         return items.any { item ->
             val key = item.stableKey()
             isAniListId(item.id) &&
-                key !in cache &&
+                (cache[key] == null || needsArtworkRefresh(cache.getValue(key))) &&
                 now - (attempts[key] ?: 0L) > RETRY_AFTER_MS
         }
     }
@@ -94,7 +94,7 @@ object AniListHeroArtwork {
         val pending = items.filter { item ->
             val key = item.stableKey()
             isAniListId(item.id) &&
-                key !in cache &&
+                (cache[key] == null || needsArtworkRefresh(cache.getValue(key))) &&
                 now - (attempts[key] ?: 0L) > RETRY_AFTER_MS
         }
         if (pending.isEmpty()) return
@@ -194,17 +194,17 @@ object AniListHeroArtwork {
                     ?: tmdbArtwork.posterUrl
                     ?: item.poster,
                 banner = tvdbArtwork.backgroundUrl
-                    ?: anivioMedia?.backgroundUrl
                     ?: tmdbArtwork.backdropUrl
                     ?: fanartArtwork.backgroundUrl
                     ?: aniZip?.fanartUrl()
-                    ?: item.banner,
+                    ?: item.banner
+                    ?: anivioMedia?.backgroundUrl,
                 logo = tvdbArtwork.clearLogoUrl
-                    ?: anivioMedia?.logoUrl
                     ?: fanartArtwork.logoUrl
-                    ?: aniZip?.clearLogoUrl()
+                    ?: aniZip?.logoUrl()
                     ?: tmdbArtwork.logoUrl
-                    ?: item.logo,
+                    ?: item.logo
+                    ?: anivioMedia?.logoUrl,
             )
         } catch (error: CancellationException) {
             throw error
@@ -213,4 +213,8 @@ object AniListHeroArtwork {
             item
         }
     }
+
+    /** Cached hero entries created before an artwork source was available must be retried. */
+    private fun needsArtworkRefresh(item: MetaPreview): Boolean =
+        item.banner.isNullOrBlank() || item.logo.isNullOrBlank()
 }

@@ -1,5 +1,6 @@
 package com.nuvio.app.features.home.components
 
+import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.watchprogress.ContinueWatchingSectionStyle
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -61,5 +62,30 @@ class HomeHeroSectionTest {
 
         assertEquals(false, layout.isTablet)
         assertEquals(268f, layout.heroHeight.value, 0.001f)
+    }
+
+    @Test
+    fun `hero prefers wide banner over portrait poster`() {
+        val item = MetaPreview(
+            id = "anilist:OnePiece",
+            type = "series",
+            name = "One Piece",
+            poster = "https://image.test/poster.jpg",
+            banner = "https://image.test/banner.jpg",
+        )
+
+        assertEquals("https://image.test/banner.jpg", homeHeroImageUrl(item))
+    }
+
+    @Test
+    fun `hero falls back to poster when no banner exists`() {
+        val item = MetaPreview(
+            id = "anilist:1",
+            type = "series",
+            name = "Fallback",
+            poster = "https://image.test/poster.jpg",
+        )
+
+        assertEquals("https://image.test/poster.jpg", homeHeroImageUrl(item))
     }
 }

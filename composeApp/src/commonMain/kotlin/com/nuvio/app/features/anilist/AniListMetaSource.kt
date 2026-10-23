@@ -24,6 +24,7 @@ import com.nuvio.app.core.anilist.mappedSeasonNumber
 import com.nuvio.app.core.anilist.stripAniListMarkup
 import com.nuvio.app.core.anilist.tmdbId
 import com.nuvio.app.core.anilist.toMetaPreview
+import com.nuvio.app.core.anilist.logoUrl as aniZipLogoUrl
 import com.nuvio.app.core.time.EpisodeReleaseDatePlatform
 import com.nuvio.app.core.anilist.airingScheduleByEpisode
 import com.nuvio.app.core.anivio.AnivioClient
@@ -367,16 +368,15 @@ object AniListMetaSource {
                 ?: tvdbArtwork.posterUrl?.takeIf { mappedSeason == null || mappedSeason <= 1 }
                 ?: coverImage?.extraLarge?.takeIf { it.isNotBlank() }
                 ?: coverImage?.large?.takeIf { it.isNotBlank() },
-            // A 1920x1080 TVDB background beats AniList's thin banner behind the details header,
-            // and ani.zip's single fanart pick is the fallback when TVDB has none.
-            background = anivioMedia?.backgroundUrl
-                ?: tvdbArtwork.backgroundUrl
+            // Prefer the established artwork providers first; Anivio is the final fallback.
+            background = tvdbArtwork.backgroundUrl
                 ?: bannerImage?.takeIf { it.isNotBlank() }
-                ?: aniZip?.fanartUrl(),
-            logo = anivioMedia?.logoUrl
-                ?: fanartLogo
+                ?: aniZip?.fanartUrl()
+                ?: anivioMedia?.backgroundUrl,
+            logo = fanartLogo
                 ?: tvdbArtwork.clearLogoUrl
-                ?: aniZip?.clearLogoUrl(),
+                ?: aniZip?.aniZipLogoUrl()
+                ?: anivioMedia?.logoUrl,
             description = description?.stripAniListMarkup(),
             releaseInfo = (seasonYear ?: startDate?.year)?.toString(),
             lastAirDate = endDate?.toIsoDateOrNull(),

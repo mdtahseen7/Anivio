@@ -11,9 +11,11 @@ import com.nuvio.app.core.anilist.AniListTitle
 import com.nuvio.app.core.anilist.airingScheduleByEpisode
 import com.nuvio.app.core.anilist.toMetaPreview
 import com.nuvio.app.core.anilist.AniZipEpisode
+import com.nuvio.app.core.anilist.AniZipImage
 import com.nuvio.app.core.anilist.AniZipResponse
 import com.nuvio.app.core.anilist.KitsuEpisode
 import com.nuvio.app.core.anilist.TvdbEpisode
+import com.nuvio.app.core.anilist.logoUrl as aniZipLogoUrl
 import com.nuvio.app.core.anivio.AnivioArtwork
 import com.nuvio.app.core.anivio.AnivioMedia
 import com.nuvio.app.core.anivio.logoUrl
@@ -142,5 +144,16 @@ class AniListOutageBoundaryTest {
         )
 
         assertEquals("https://image.test/hdtv.png", media.logoUrl)
+    }
+
+    @Test
+    fun `ani zip accepts common logo artwork variants`() {
+        val response = AniZipResponse(
+            images = listOf(
+                AniZipImage(coverType = "HDTVLogo", url = "https://image.test/hdtv.png"),
+            ),
+        )
+
+        assertEquals("https://image.test/hdtv.png", response.aniZipLogoUrl())
     }
 }

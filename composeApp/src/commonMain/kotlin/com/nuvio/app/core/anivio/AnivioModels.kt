@@ -327,12 +327,31 @@ val AnivioMedia.backgroundUrl: String?
 
 /** Prefer the best transparent title treatment for hero/detail branding. */
 val AnivioMedia.logoUrl: String?
-    get() = listOf("hdtvlogo", "clearlogo", "logo").asSequence()
-        .flatMap { preferredType ->
-            artworks.asSequence().filter { it.type.equals(preferredType, ignoreCase = true) }
-        }
-        .firstOrNull()?.bestUrl
-        ?: images.firstOrNull { it.type.equals("logo", ignoreCase = true) }?.bestUrl
+    get() {
+        val typeRank = mapOf("hdtvlogo" to 3, "clearlogo" to 2, "logo" to 1)
+        val artwork = artworks
+            .asSequence()
+            .filterNot { it.isAdult }
+            .filter { typeRank.containsKey(it.type?.lowercase()) }
+            .sortedWith(
+                compareByDescending<AnivioArtwork> { typeRank[it.type?.lowercase()] ?: 0 }
+                    .thenByDescending { logoLanguageRank(it.language) }
+                    .thenByDescending { (it.width ?: 0) * (it.height ?: 0) },
+            )
+            .firstOrNull()
+        return artwork?.bestUrl
+            ?: images
+                .asSequence()
+                .filter { it.type?.lowercase() in setOf("hdtvlogo", "clearlogo", "logo") }
+                .map { it.bestUrl }
+                .firstOrNull()
+    }
+
+private fun logoLanguageRank(language: String?): Int = when (language?.lowercase()) {
+    "en" -> 3
+    null, "" -> 2
+    else -> 1
+}
 
 val AnivioImage.bestUrl: String
     get() = large ?: medium ?: small ?: url
