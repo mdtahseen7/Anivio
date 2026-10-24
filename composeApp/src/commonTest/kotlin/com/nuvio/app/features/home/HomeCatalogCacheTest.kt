@@ -28,6 +28,23 @@ class HomeCatalogCacheTest {
     }
 
     @Test
+    fun `round trips artwork attempts and the stored timestamp`() {
+        val payload = HomeCatalogCache.encodePayload(
+            sections = mapOf("anilist:trending|v1" to section(items = listOf(preview("anilist:1")))),
+            heroArtwork = emptyMap(),
+            nowEpochMs = NOW,
+            attemptedArtwork = mapOf("series:anilist:9" to NOW - 1_000L),
+        )
+
+        val snapshot = requireNotNull(payload).let {
+            HomeCatalogCache.decodePayload(payload = it, nowEpochMs = NOW)
+        }
+
+        assertEquals(NOW, snapshot?.storedAtEpochMs)
+        assertEquals(NOW - 1_000L, snapshot?.attemptedArtwork?.get("series:anilist:9"))
+    }
+
+    @Test
     fun `nothing is stored when there are no rows and no artwork`() {
         assertNull(
             HomeCatalogCache.encodePayload(
