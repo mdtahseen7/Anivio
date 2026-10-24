@@ -633,10 +633,18 @@ fun HomeScreen(
         HomeRepository.refresh(enabledAddons)
     }
 
+    // Collections start empty and fill once on load. Without this guard the effect below
+    // force-refreshed home on every cold start for anyone with a collection folder,
+    // blowing straight past the fresh-cache skip in HomeRepository.refresh. Only a real
+    // edit after load may force; the initial load is served by the normal refresh path.
+    var previousCollections by remember { mutableStateOf(collections) }
     LaunchedEffect(collections, enabledAddons) {
         HomeCatalogSettingsRepository.syncCollections(collections)
         HomeRepository.applyCurrentSettings()
-        if (collections.any { it.folders.isNotEmpty() }) {
+        val hadLoadedCollections = previousCollections.isNotEmpty()
+        val collectionsChanged = previousCollections != collections
+        previousCollections = collections
+        if (hadLoadedCollections && collectionsChanged && collections.any { it.folders.isNotEmpty() }) {
             HomeRepository.refresh(enabledAddons, force = true)
         }
     }
