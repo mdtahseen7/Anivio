@@ -41,6 +41,9 @@ internal object HomeCatalogCache {
     /** The hero shows 8 at a time, but shuffles from the whole pool, so keep a healthy margin. */
     private const val MAX_HERO_ARTWORK_ENTRIES = 160
 
+    /** Mirrors AniListHeroArtwork's miss cap, so recorded attempts never grow unbounded on disk. */
+    private const val MAX_ATTEMPT_ENTRIES = 320
+
     private val log = Logger.withTag("HomeCatalogCache")
     private val json = Json {
         ignoreUnknownKeys = true
@@ -64,12 +67,14 @@ internal object HomeCatalogCache {
         sections: Map<String, HomeCatalogSection>,
         heroArtwork: Map<String, MetaPreview>,
         volatileCacheKeys: Set<String> = emptySet(),
+        attemptedArtwork: Map<String, Long> = emptyMap(),
     ) {
         val payload = encodePayload(
             sections = sections,
             heroArtwork = heroArtwork,
             nowEpochMs = EpisodeReleaseDatePlatform.nowEpochMs(),
             volatileCacheKeys = volatileCacheKeys,
+            attemptedArtwork = attemptedArtwork,
         ) ?: return
 
         runCatching { HomeCatalogCacheStorage.savePayload(payload) }
@@ -104,6 +109,8 @@ internal object HomeCatalogCache {
                     )
                 },
             heroArtwork = stored.heroArtwork.associate { entry -> entry.key to entry.item },
+            attemptedArtwork = stored.attemptedArtwork.associate { entry -> entry.key to entry.attemptedAtEpochMs },
+            storedAtEpochMs = stored.storedAtEpochMs,
         )
     }
 
@@ -113,6 +120,7 @@ internal object HomeCatalogCache {
         heroArtwork: Map<String, MetaPreview>,
         nowEpochMs: Long,
         volatileCacheKeys: Set<String> = emptySet(),
+        attemptedArtwork: Map<String, Long> = emptyMap(),
     ): String? {
         val rows = sections.entries
             .asSequence()
@@ -139,6 +147,11 @@ internal object HomeCatalogCache {
                 heroArtwork = heroArtwork.entries
                     .take(MAX_HERO_ARTWORK_ENTRIES)
                     .map { (key, item) -> StoredHomeHeroArtwork(key = key, item = item) },
+                attemptedArtwork = attemptedArtwork.entries
+                    .take(MAX_ATTEMPT_ENTRIES)
+                    .map { (key, attemptedAt) ->
+                        StoredHeroArtworkAttempt(key = key, attemptedAtEpochMs = attemptedAt)
+                    },
             ),
         )
     }
@@ -155,6 +168,10 @@ internal data class HomeCatalogCacheSnapshot(
     val rows: Map<String, HomeCatalogCachedRow>,
     /** Keyed by [MetaPreview.stableKey], as [com.nuvio.app.features.anilist.AniListHeroArtwork] keys it. */
     val heroArtwork: Map<String, MetaPreview>,
+    /** Last artwork-attempt timestamps, keyed like [heroArtwork]. Survives process death. */
+    val attemptedArtwork: Map<String, Long> = emptyMap(),
+    /** When this snapshot was written, so callers can judge its freshness. 0 when unknown. */
+    val storedAtEpochMs: Long = 0L,
 ) {
     val isEmpty: Boolean get() = rows.isEmpty() && heroArtwork.isEmpty()
 }
@@ -165,6 +182,8 @@ private data class StoredHomeCatalogCache(
     val storedAtEpochMs: Long = 0L,
     val rows: List<StoredHomeCatalogRow> = emptyList(),
     val heroArtwork: List<StoredHomeHeroArtwork> = emptyList(),
+    // Defaults to empty so payloads written before this field existed still decode.
+    val attemptedArtwork: List<StoredHeroArtworkAttempt> = emptyList(),
 )
 
 @Serializable
@@ -184,4 +203,10 @@ private data class StoredHomeCatalogRow(
 private data class StoredHomeHeroArtwork(
     val key: String = "",
     val item: MetaPreview,
+)
+
+@Serializable
+private data class StoredHeroArtworkAttempt(
+    val key: String = "",
+    val attemptedAtEpochMs: Long = 0L,
 )

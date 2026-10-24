@@ -60,6 +60,19 @@ object AniListHeroArtwork {
 
     fun snapshot(): Map<String, MetaPreview> = cacheRef.value
 
+    /** Last attempt timestamps for titles whose artwork never resolved, for persisting across launches. */
+    fun attemptsSnapshot(): Map<String, Long> = attemptsRef.value
+
+    /**
+     * Seeds [attemptsRef] with misses recorded in an earlier session, so a title with no
+     * artwork anywhere does not re-fire the whole ani.zip / TVDB / TMDB / fanart chain on
+     * every cold start. Anything attempted in this process wins, so hydrating can only fill gaps.
+     */
+    fun hydrateAttempts(attempts: Map<String, Long>) {
+        if (attempts.isEmpty()) return
+        attemptsRef.update { current -> attempts + current }
+    }
+
     /**
      * Seeds the cache with artwork resolved in an earlier session, from `HomeCatalogCache`.
      * Anything resolved in this process wins, so hydrating can only fill gaps.
