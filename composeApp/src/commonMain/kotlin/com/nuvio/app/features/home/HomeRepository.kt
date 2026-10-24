@@ -17,6 +17,7 @@ import com.nuvio.app.features.collection.CollectionSource
 import com.nuvio.app.features.collection.TmdbCollectionSourceResolver
 import com.nuvio.app.features.collection.catalogRouteKey
 import com.nuvio.app.features.collection.findCollectionCatalog
+import com.nuvio.app.core.time.EpisodeReleaseDatePlatform
 import com.nuvio.app.features.watchprogress.CurrentDateProvider
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -63,6 +64,14 @@ object HomeRepository {
     private var lastPublishedCatalogHeroEmpty: Boolean = true
     private var lastErrorMessage: String? = null
     private var hydratedFromCache: Boolean = false
+
+    /**
+     * How long a disk cache written by the last successful refresh stands in for a network
+     * refresh. Matches the cache's volatile-row cap: a recency row older than this is already
+     * dropped by the cache read, so the coverage check below forces a refresh past this age
+     * whenever such a row is on screen. Forced refreshes ignore this entirely.
+     */
+    private const val HOME_CATALOG_FRESH_MS = 60L * 60 * 1000
 
     fun refresh(addons: List<ManagedAddon>, force: Boolean = false) {
         val activeAddons = addons.enabledAddons()
@@ -111,7 +120,25 @@ object HomeRepository {
         activeJob = scope.launch {
             // Paint last session's rows first: the network refresh below then happens behind
             // content the user can already read instead of behind skeletons.
-            hydrateFromCache(requestKey = requestKey)
+            val snapshot = hydrateFromCache(requestKey = requestKey)
+            if (!force && snapshot != null && isCacheFreshFor(snapshot, requests)) {
+                // The last successful refresh wrote this cache recently and it covers every
+                // current definition, so serve it instead of paying a full network refresh on
+                // every app open. Forced refreshes (pull-to-refresh, coming back online,
+                // collections changing) still always hit the network.
+                activeRequestKey = null
+                publishCurrentState(
+                    isLoading = false,
+                    requestKey = requestKey,
+                )
+                ensureCollectionHeroFallback(
+                    addons = activeAddons,
+                    forceRefresh = false,
+                    refreshSources = false,
+                    requestKey = requestKey,
+                )
+                return@launch
+            }
             val prioritizedRequests = prioritizeDefinitions(
                 definitions = requests,
                 snapshot = HomeCatalogSettingsRepository.snapshot(),
@@ -279,12 +306,13 @@ object HomeRepository {
      * Rows already in memory are left alone, and a cached row whose definition is gone — uninstalled
      * addon, changed manifest — has no matching cache key, so it cannot come back.
      */
-    private fun hydrateFromCache(requestKey: String) {
-        if (hydratedFromCache) return
+    private fun hydrateFromCache(requestKey: String): HomeCatalogCacheSnapshot? {
+        if (hydratedFromCache) return null
         hydratedFromCache = true
 
-        val snapshot = HomeCatalogCache.load() ?: return
+        val snapshot = HomeCatalogCache.load() ?: return null
         AniListHeroArtwork.hydrate(snapshot.heroArtwork)
+        AniListHeroArtwork.hydrateAttempts(snapshot.attemptedArtwork)
 
         val restored = currentDefinitions.mapNotNull { definition ->
             if (cachedSections.containsKey(definition.cacheKey)) return@mapNotNull null
@@ -292,14 +320,31 @@ object HomeRepository {
                 ?: return@mapNotNull null
             definition.cacheKey to definition.toSection(row)
         }
-        if (restored.isEmpty() && snapshot.heroArtwork.isEmpty()) return
+        if (restored.isEmpty() && snapshot.heroArtwork.isEmpty()) return snapshot
 
         cachedSections = cachedSections + restored
-        if (activeRequestKey != requestKey) return
+        if (activeRequestKey != requestKey) return snapshot
         publishCurrentState(
             isLoading = true,
             requestKey = requestKey,
         )
+        return snapshot
+    }
+
+    /**
+     * True when the disk cache was written by a recent successful refresh and covers every row
+     * the home screen is about to show. A snapshot missing any current definition must not
+     * stand in for a refresh — otherwise a recency row would go stale while the rest looks fresh.
+     */
+    private fun isCacheFreshFor(
+        snapshot: HomeCatalogCacheSnapshot,
+        requests: List<HomeCatalogDefinition>,
+    ): Boolean {
+        if (snapshot.storedAtEpochMs <= 0L) return false
+        val age = EpisodeReleaseDatePlatform.nowEpochMs() - snapshot.storedAtEpochMs
+        if (age < 0L || age > HOME_CATALOG_FRESH_MS) return false
+        val keys = requests.mapTo(mutableSetOf(), HomeCatalogDefinition::cacheKey)
+        return keys.all { key -> snapshot.rows.containsKey(key) }
     }
 
     /** Writes the rows currently on screen, plus any hero artwork resolved for them, to disk. */
@@ -307,6 +352,7 @@ object HomeRepository {
         HomeCatalogCache.save(
             sections = cachedSections,
             heroArtwork = AniListHeroArtwork.snapshot(),
+            attemptedArtwork = AniListHeroArtwork.attemptsSnapshot(),
             // Recorded per row rather than inferred at read time: the cache holds only keys and items,
             // and a key cannot say whether the row it belongs to is about recency.
             volatileCacheKeys = currentDefinitions
