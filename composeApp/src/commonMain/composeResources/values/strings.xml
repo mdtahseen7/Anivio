@@ -33,6 +33,7 @@
     <string name="action_saving">Saving…</string>
     <string name="action_switch">Switch</string>
     <string name="cd_stream_info">Stream info</string>
+    <string name="cd_switch_player_engine">Switch player engine</string>
     <string name="stream_info_section_source">SOURCE</string>
     <string name="stream_info_section_video">VIDEO</string>
     <string name="stream_info_section_audio">AUDIO</string>

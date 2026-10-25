@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.Flag
+import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Forward10
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.LockOpen
@@ -113,6 +114,7 @@ internal fun PlayerControlsShell(
     onVideoSettingsClick: (() -> Unit)? = null,
     onSwitchEngineClick: (() -> Unit)? = null,
     onPartyClick: (() -> Unit)? = null,
+    partyActive: Boolean = false,
     onStreamInfoClick: () -> Unit = {},
     onSourcesClick: (() -> Unit)? = null,
     onEpisodesClick: (() -> Unit)? = null,
@@ -186,8 +188,9 @@ internal fun PlayerControlsShell(
                     showParentalGuide = showParentalGuide,
                     onParentalGuideAnimationComplete = onParentalGuideAnimationComplete,
                     onLockToggle = onLockToggle,
-                     onVideoSettingsClick = onVideoSettingsClick,
-                     onSwitchEngineClick = onSwitchEngineClick,
+                    onVideoSettingsClick = onVideoSettingsClick,
+                    onPartyClick = onPartyClick,
+                    partyActive = partyActive,
                     onOpenInExternalPlayer = onOpenInExternalPlayer,
                     onBack = onBack,
                     modifier = Modifier
@@ -206,6 +209,9 @@ internal fun PlayerControlsShell(
                         isLocked = isLocked,
                         onLockToggle = onLockToggle,
                         onBack = onBack,
+                        onSwitchEngineClick = onSwitchEngineClick,
+                        onPartyClick = onPartyClick,
+                        partyActive = partyActive,
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .windowInsetsPadding(WindowInsets.safeContent.only(WindowInsetsSides.Top))
@@ -335,9 +341,7 @@ internal fun PlayerControlsShell(
                         onSpeedClick = onSpeedClick,
                         onResizeModeClick = onResizeModeClick,
                         onVideoSettingsClick = onVideoSettingsClick,
-                         onSwitchEngineClick = onSwitchEngineClick,
-                         onPartyClick = onPartyClick,
-                         onStreamInfoClick = onStreamInfoClick,
+                        onStreamInfoClick = onStreamInfoClick,
                         onOpenInExternalPlayer = onOpenInExternalPlayer,
                         onSubmitIntroClick = onSubmitIntroClick,
                         onInteraction = onInteraction,
@@ -365,7 +369,8 @@ private fun PlayerHeader(
     onParentalGuideAnimationComplete: () -> Unit,
     onLockToggle: () -> Unit,
     onVideoSettingsClick: (() -> Unit)?,
-    onSwitchEngineClick: (() -> Unit)?,
+    onPartyClick: (() -> Unit)?,
+    partyActive: Boolean = false,
     onOpenInExternalPlayer: (() -> Unit)?,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -475,6 +480,16 @@ private fun PlayerHeader(
                             onClick = onOpenInExternalPlayer,
                         )
                     }
+                    if (onPartyClick != null) {
+                        PlayerHeaderIconButton(
+                            icon = Icons.Rounded.Groups,
+                            contentDescription = stringResource(Res.string.party_title),
+                            buttonSize = metrics.headerIconSize + 16.dp,
+                            iconSize = metrics.headerIconSize,
+                            onClick = onPartyClick,
+                            tint = if (partyActive) MaterialTheme.colorScheme.primary else Color.White,
+                        )
+                    }
                     PlayerHeaderIconButton(
                         icon = if (isLocked) Icons.Rounded.LockOpen else Icons.Rounded.Lock,
                         contentDescription = if (isLocked) {
@@ -493,15 +508,6 @@ private fun PlayerHeader(
                             buttonSize = metrics.headerIconSize + 16.dp,
                             iconSize = metrics.headerIconSize,
                             onClick = onVideoSettingsClick,
-                        )
-                    }
-                    if (onSwitchEngineClick != null) {
-                        PlayerHeaderIconButton(
-                            icon = Icons.Rounded.SwapHoriz,
-                            contentDescription = stringResource(Res.string.settings_playback_engine),
-                            buttonSize = metrics.headerIconSize + 16.dp,
-                            iconSize = metrics.headerIconSize,
-                            onClick = onSwitchEngineClick,
                         )
                     }
                     NuvioBackButton(
@@ -525,6 +531,7 @@ private fun PlayerHeaderIconButton(
     buttonSize: androidx.compose.ui.unit.Dp,
     iconSize: androidx.compose.ui.unit.Dp,
     onClick: () -> Unit,
+    tint: Color = Color.White,
 ) {
     Box(
         modifier = Modifier
@@ -537,7 +544,7 @@ private fun PlayerHeaderIconButton(
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            tint = Color.White,
+            tint = tint,
             modifier = Modifier.size(iconSize),
         )
     }

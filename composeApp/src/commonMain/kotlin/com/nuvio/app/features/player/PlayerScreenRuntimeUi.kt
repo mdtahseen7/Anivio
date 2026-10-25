@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.features.p2p.P2pStreamingState
 import com.nuvio.app.features.p2p.formatP2pMegabytes
 import com.nuvio.app.features.p2p.formatP2pSpeed
@@ -250,6 +251,8 @@ private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long, 
         enter = fadeIn(),
         exit = fadeOut(),
     ) {
+        val partyState by PartyRepository.state.collectAsStateWithLifecycle()
+        val partyActive = partyState.party != null
         PlayerControlsShell(
             title = title,
             streamTitle = activeStreamTitle,
@@ -314,6 +317,7 @@ private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long, 
             onPartyClick = if (PartyRepository.available.value) {
                 { openPartyPanel() }
             } else null,
+            partyActive = partyActive,
             onStreamInfoClick = { openStreamInfo() },
             onSourcesClick = if (activeVideoId != null) { { openSourcesPanel() } } else null,
             onEpisodesClick = if (isSeries) { { openEpisodesPanel() } } else null,
