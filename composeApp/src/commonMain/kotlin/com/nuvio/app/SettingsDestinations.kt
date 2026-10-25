@@ -15,6 +15,7 @@ import com.nuvio.app.features.downloads.DownloadItem
 import com.nuvio.app.features.downloads.MangaDownloadsRepository
 import com.nuvio.app.features.details.components.MangaReaderOverlay
 import com.nuvio.app.features.plugins.MangaPluginChapter
+import com.nuvio.app.features.party.PartyScreen
 import com.nuvio.app.features.downloads.DownloadsScreen
 import com.nuvio.app.features.home.HomeCatalogSection
 import com.nuvio.app.features.home.MetaPreview
@@ -28,6 +29,7 @@ import com.nuvio.app.navigation.DownloadShowRoute
 import com.nuvio.app.navigation.DownloadsSettingsRoute
 import com.nuvio.app.navigation.FolderDetailRoute
 import com.nuvio.app.navigation.NuvioNavigator
+import com.nuvio.app.navigation.PartyRoute
 import com.nuvio.app.navigation.SettingsPageRoute
 
 @Composable
@@ -68,6 +70,19 @@ internal fun SettingsRootDestination(
         },
         onCheckForUpdatesClick = onCheckForUpdates,
         onTestUpdateBannerClick = onTestUpdateBanner,
+    )
+}
+
+@Composable
+internal fun PartyDestination(
+    route: PartyRoute,
+    navController: NuvioNavigator,
+) {
+    val onBack = rememberGuardedPopBackStack(navController, route)
+    PartyScreen(
+        initialCode = route.code,
+        onBack = onBack,
+        onWatch = { /* The player opens the party media from inside an active party. */ },
     )
 }
 

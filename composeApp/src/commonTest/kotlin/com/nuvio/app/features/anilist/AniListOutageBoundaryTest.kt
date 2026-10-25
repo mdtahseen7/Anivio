@@ -171,6 +171,6 @@ class AniListOutageBoundaryTest {
         // unmapped sequel causes the sequel details screen to become a copy of the prequel.
         val sequelMapping = currentEntryAniZipMapping(direct = null)
         assertNull(sequelMapping)
-        assertNotEquals(related, sequelMapping)
+        assertNotEquals<Any?>(related, sequelMapping)
     }
 }

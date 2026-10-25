@@ -49,6 +49,7 @@ actual fun PlatformPlayerSurface(
     externalSubtitles: List<com.nuvio.app.features.streams.StreamSubtitle>,
     streamType: String?,
     useYoutubeChunkedPlayback: Boolean,
+    playbackEngine: AndroidPlaybackEngine?,
     modifier: Modifier,
     playWhenReady: Boolean,
     initialPositionMs: Long?,

@@ -2,6 +2,8 @@ package com.nuvio.app.core.deeplink
 
 import com.nuvio.app.core.tracking.ensureTrackingProvidersRegistered
 import com.nuvio.app.features.tracking.TrackingProviderRegistry
+import com.nuvio.app.features.party.PARTY_CODE_LENGTH
+import com.nuvio.app.features.party.normalizePartyCode
 import io.ktor.http.Url
 import io.ktor.http.encodeURLParameter
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,6 +21,8 @@ internal sealed interface AppDeepLink {
     ) : AppDeepLink
 
     data object Downloads : AppDeepLink
+
+    data class Party(val code: String) : AppDeepLink
 }
 
 internal object AppDeepLinkRepository {
@@ -76,6 +80,7 @@ internal fun parseAppDeepLink(url: String): AppDeepLink? {
     val host = parsedUrl.host.lowercase()
     val pathSegments = parsedUrl.pathSegments.map(String::trim).filter(String::isNotBlank)
     return when (host) {
+        "party" -> partyDeepLink(pathSegments.firstOrNull() ?: firstParameter(parsedUrl, "code"))
         "meta" -> {
             parseMetaFromParameters(parsedUrl)
                 ?: parseMetaFromPath(pathSegments)
@@ -103,6 +108,11 @@ internal fun parseAppDeepLink(url: String): AppDeepLink? {
             }
         }
     }
+}
+
+private fun partyDeepLink(rawCode: String?): AppDeepLink.Party? {
+    val code = normalizePartyCode(rawCode.orEmpty())
+    return code.takeIf { it.length == PARTY_CODE_LENGTH }?.let(AppDeepLink::Party)
 }
 
 private fun parseMetaFromParameters(parsedUrl: Url): AppDeepLink.Meta? {

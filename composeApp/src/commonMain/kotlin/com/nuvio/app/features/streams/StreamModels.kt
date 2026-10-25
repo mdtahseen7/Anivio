@@ -116,6 +116,7 @@ data class StreamItem(
         get() = url != null || infoHash != null || externalUrl != null || clientResolve != null
 }
 
+@Serializable
 data class StreamBadge(
     val name: String,
     val imageURL: String = "",

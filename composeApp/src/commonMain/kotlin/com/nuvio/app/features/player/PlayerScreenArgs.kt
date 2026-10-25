@@ -1,6 +1,7 @@
 package com.nuvio.app.features.player
 
 import androidx.compose.ui.Modifier
+import com.nuvio.app.features.party.PartyMedia
 
 internal data class PlayerScreenArgs(
     val profileId: Int,
@@ -18,6 +19,7 @@ internal data class PlayerScreenArgs(
     val onBack: () -> Unit,
     val onOpenInExternalPlayer: ((ExternalPlayerPlaybackRequest) -> Unit)?,
     val onOpenExternalUrl: ((String) -> Unit)?,
+    val onOpenPartyMedia: (PartyMedia) -> Unit,
     val modifier: Modifier,
     val logo: String?,
     val poster: String?,

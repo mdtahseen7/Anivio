@@ -106,6 +106,7 @@ actual fun PlatformPlayerSurface(
     externalSubtitles: List<com.nuvio.app.features.streams.StreamSubtitle>,
     streamType: String?,
     useYoutubeChunkedPlayback: Boolean,
+    playbackEngine: AndroidPlaybackEngine?,
     modifier: Modifier,
     playWhenReady: Boolean,
     initialPositionMs: Long?,
@@ -130,8 +131,8 @@ actual fun PlatformPlayerSurface(
         useYoutubeChunkedPlayback,
         initialPositionRequestKey.orEmpty(),
     )
-    var activeEngine by remember(playerSourceKey, playerSettings.androidPlaybackEngine) {
-        mutableStateOf(playerSettings.androidPlaybackEngine.initialAndroidEngine())
+    var activeEngine by remember(playerSourceKey, playerSettings.androidPlaybackEngine, playbackEngine) {
+        mutableStateOf((playbackEngine ?: playerSettings.androidPlaybackEngine).initialAndroidEngine())
     }
 
     when (activeEngine) {
@@ -739,6 +740,7 @@ private fun ExoPlayerSurface(
     LaunchedEffect(exoPlayer) {
         onControllerReady(
             object : PlayerEngineController {
+                override val playbackEngine = AndroidPlaybackEngine.ExoPlayer
                 override fun play() {
                     exoPlayer.playWhenReady = true
                     exoPlayer.play()
@@ -769,9 +771,26 @@ private fun ExoPlayerSurface(
                     nowPlayingController.updateMetadata(info)
                 }
 
-                override fun clearNowPlayingInfo() {
-                    nowPlayingController.clear()
-                }
+                 override fun clearNowPlayingInfo() {
+                     nowPlayingController.clear()
+                 }
+
+                 override suspend fun getMediaInfo(): PlayerMediaInfo {
+                     val video = exoPlayer.videoFormat
+                     val audio = exoPlayer.audioFormat
+                     return PlayerMediaInfo(
+                         videoCodec = CustomDefaultTrackNameProvider.formatNameFromMime(video?.sampleMimeType),
+                         videoWidth = video?.width?.takeIf { it > 0 },
+                         videoHeight = video?.height?.takeIf { it > 0 },
+                         videoFrameRate = video?.frameRate?.takeIf { it > 0f },
+                         videoBitrate = video?.bitrate?.takeIf { it > 0 },
+                         audioCodec = CustomDefaultTrackNameProvider.formatNameFromMime(audio?.sampleMimeType),
+                         audioChannels = audio?.channelCount?.takeIf { it > 0 },
+                         audioSampleRate = audio?.sampleRate?.takeIf { it > 0 },
+                         hdr = video?.hdrFormats().orEmpty(),
+                         bitDepth = video?.colorInfo?.lumaBitdepth?.takeIf { it > 0 },
+                     )
+                 }
 
                 override fun getAudioTracks(): List<AudioTrack> =
                     exoPlayer.extractAudioTracks(context)
@@ -1471,11 +1490,23 @@ private class NuvioLibmpvView(
         }
     }
 
+    suspend fun mediaInfo(): PlayerMediaInfo {
+        if (released.get()) return PlayerMediaInfo()
+        return withContext(mpvDispatcher) {
+            if (released.get()) {
+                PlayerMediaInfo()
+            } else {
+                runCatching { mpvMediaInfo(mpv::getPropertyString) }.getOrDefault(PlayerMediaInfo())
+            }
+        }
+    }
+
     fun controller(
         context: Context,
         nowPlayingController: AndroidPlayerNowPlayingController?,
     ): PlayerEngineController =
         object : PlayerEngineController {
+            override val playbackEngine = AndroidPlaybackEngine.Libmpv
             override fun play() = setPaused(false)
 
             override fun pause() = setPaused(true)
@@ -1484,9 +1515,11 @@ private class NuvioLibmpvView(
 
             override fun seekBy(offsetMs: Long) = this@NuvioLibmpvView.seekByMs(offsetMs)
 
-            override fun retry() {
-                executeMpv { loadCurrentSourceNow(playWhenReady = true) }
-            }
+             override fun retry() {
+                 executeMpv { loadCurrentSourceNow(playWhenReady = true) }
+             }
+
+             override suspend fun getMediaInfo(): PlayerMediaInfo = mediaInfo()
 
             override fun setPlaybackSpeed(speed: Float) {
                 executeMpv {
@@ -1688,6 +1721,14 @@ private class NuvioLibmpvView(
                     ),
                 )
             }
+    }
+}
+
+private fun Format.hdrFormats(): List<String> = buildList {
+    if (sampleMimeType == MimeTypes.VIDEO_DOLBY_VISION) add("DV")
+    when (colorInfo?.colorTransfer) {
+        C.COLOR_TRANSFER_ST2084 -> add("HDR10")
+        C.COLOR_TRANSFER_HLG -> add("HLG")
     }
 }
 

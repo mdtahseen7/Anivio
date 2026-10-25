@@ -111,6 +111,9 @@ internal fun PlayerControlsShell(
     onSubtitleClick: () -> Unit,
     onAudioClick: () -> Unit,
     onVideoSettingsClick: (() -> Unit)? = null,
+    onSwitchEngineClick: (() -> Unit)? = null,
+    onPartyClick: (() -> Unit)? = null,
+    onStreamInfoClick: () -> Unit = {},
     onSourcesClick: (() -> Unit)? = null,
     onEpisodesClick: (() -> Unit)? = null,
     onOpenInExternalPlayer: (() -> Unit)? = null,
@@ -183,7 +186,8 @@ internal fun PlayerControlsShell(
                     showParentalGuide = showParentalGuide,
                     onParentalGuideAnimationComplete = onParentalGuideAnimationComplete,
                     onLockToggle = onLockToggle,
-                    onVideoSettingsClick = onVideoSettingsClick,
+                     onVideoSettingsClick = onVideoSettingsClick,
+                     onSwitchEngineClick = onSwitchEngineClick,
                     onOpenInExternalPlayer = onOpenInExternalPlayer,
                     onBack = onBack,
                     modifier = Modifier
@@ -331,6 +335,9 @@ internal fun PlayerControlsShell(
                         onSpeedClick = onSpeedClick,
                         onResizeModeClick = onResizeModeClick,
                         onVideoSettingsClick = onVideoSettingsClick,
+                         onSwitchEngineClick = onSwitchEngineClick,
+                         onPartyClick = onPartyClick,
+                         onStreamInfoClick = onStreamInfoClick,
                         onOpenInExternalPlayer = onOpenInExternalPlayer,
                         onSubmitIntroClick = onSubmitIntroClick,
                         onInteraction = onInteraction,
@@ -358,6 +365,7 @@ private fun PlayerHeader(
     onParentalGuideAnimationComplete: () -> Unit,
     onLockToggle: () -> Unit,
     onVideoSettingsClick: (() -> Unit)?,
+    onSwitchEngineClick: (() -> Unit)?,
     onOpenInExternalPlayer: (() -> Unit)?,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -485,6 +493,15 @@ private fun PlayerHeader(
                             buttonSize = metrics.headerIconSize + 16.dp,
                             iconSize = metrics.headerIconSize,
                             onClick = onVideoSettingsClick,
+                        )
+                    }
+                    if (onSwitchEngineClick != null) {
+                        PlayerHeaderIconButton(
+                            icon = Icons.Rounded.SwapHoriz,
+                            contentDescription = stringResource(Res.string.settings_playback_engine),
+                            buttonSize = metrics.headerIconSize + 16.dp,
+                            iconSize = metrics.headerIconSize,
+                            onClick = onSwitchEngineClick,
                         )
                     }
                     NuvioBackButton(

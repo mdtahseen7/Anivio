@@ -22,6 +22,35 @@ internal val PlayerScreenRuntime.activePlaybackIdentity: String
         ?.let { hash -> "torrent:$hash:${activeTorrentFileIdx ?: -1}" }
         ?: activeSourceUrl
 
+internal val PlayerScreenRuntime.activePlaybackKey: PlaybackKey
+    get() = PlaybackKey(
+        sourceIdentity = activePlaybackIdentity,
+        videoId = activeVideoId,
+        seasonNumber = activeSeasonNumber,
+        episodeNumber = activeEpisodeNumber,
+        playbackEngine = playbackEngineOverride,
+    )
+
+internal val AndroidPlaybackEngine.switchTarget: AndroidPlaybackEngine
+    get() = if (this == AndroidPlaybackEngine.Libmpv) AndroidPlaybackEngine.ExoPlayer else AndroidPlaybackEngine.Libmpv
+
+internal fun PlayerScreenRuntime.switchPlaybackEngine() {
+    val target = playerController?.playbackEngine?.switchTarget ?: return
+    flushWatchProgress()
+    activeInitialPositionMs = playbackSnapshot.positionMs.coerceAtLeast(0L)
+    activeInitialProgressFraction = null
+    playbackEngineOverride = target
+}
+
+internal fun PlayerScreenRuntime.openStreamInfo() {
+    refreshTracks()
+    val controller = playerController
+    scope.launch {
+        streamMediaInfo = controller?.getMediaInfo() ?: PlayerMediaInfo()
+        showStreamInfo = true
+    }
+}
+
 internal val PlayerScreenRuntime.playbackSession: WatchProgressPlaybackSession
     get() = WatchProgressPlaybackSession(
         profileId = profileId,

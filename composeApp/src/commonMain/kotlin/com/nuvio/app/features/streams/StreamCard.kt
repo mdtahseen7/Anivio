@@ -34,6 +34,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,6 +52,15 @@ import nuvio.composeapp.generated.resources.downloads_section_active
 import nuvio.composeapp.generated.resources.streams_download_file
 import org.jetbrains.compose.resources.stringResource
 
+internal val LocalStreamHighlight = staticCompositionLocalOf<(StreamItem) -> String?> { { null } }
+
+internal data class SharedStream(
+    val label: String,
+    val stream: StreamItem,
+)
+
+internal val LocalSharedStream = staticCompositionLocalOf<SharedStream?> { null }
+
 @Composable
 internal fun StreamCard(
     stream: StreamItem,
@@ -66,7 +76,9 @@ internal fun StreamCard(
     currentLabel: String? = null,
     onDownloadClick: (() -> Unit)? = null,
     isDownloaded: Boolean = false,
+    outlined: Boolean = false,
 ) {
+    val partyLabel = if (isCurrent) null else LocalStreamHighlight.current(stream)
     val cardShape = RoundedCornerShape(12.dp)
     val badgeImages = stream.badges.filter { it.imageURL.isNotBlank() }
     val hasBadges = badgeImages.isNotEmpty() || (showFileSizeBadges && stream.behaviorHints.videoSize != null)
@@ -82,7 +94,7 @@ internal fun StreamCard(
             )
             .clip(cardShape)
             .background(
-                if (isCurrent) {
+                if (isCurrent || outlined) {
                     MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
                 } else {
                     Color.White.copy(alpha = 0.05f)
@@ -124,6 +136,17 @@ internal fun StreamCard(
                 if (isCurrent && !currentLabel.isNullOrBlank()) {
                     Spacer(modifier = Modifier.width(8.dp))
                     CurrentStreamBadge(label = currentLabel)
+                }
+                if (partyLabel != null) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = partyLabel,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
 

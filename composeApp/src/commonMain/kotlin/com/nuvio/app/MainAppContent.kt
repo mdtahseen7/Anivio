@@ -164,6 +164,10 @@ import com.nuvio.app.features.watchprogress.WatchProgressPlaybackSession
 import com.nuvio.app.features.watchprogress.WatchProgressRepository
 import com.nuvio.app.features.watchprogress.WatchProgressSourceCoordinator
 import com.nuvio.app.features.watchprogress.continueWatchingItemKey
+import com.nuvio.app.features.party.PartyMedia
+import com.nuvio.app.features.party.PartyRepository
+import com.nuvio.app.features.party.PartyScreen
+import com.nuvio.app.features.party.PartySync
 import com.nuvio.app.features.watchprogress.nextUpDismissKey
 import com.nuvio.app.features.watchprogress.toContinueWatchingItem
 import com.nuvio.app.navigation.*
@@ -243,6 +247,7 @@ internal fun MainAppContent(
         val libraryScrollToTopRequests = remember { MutableSharedFlow<Unit>(extraBufferCapacity = 1) }
         val settingsRootActionRequests = remember { MutableSharedFlow<Unit>(extraBufferCapacity = 1) }
         val currentRoute = navBackStack.lastOrNull() as? AppRoute
+        val watchPartyTitle = stringResource(Res.string.party_title)
         LaunchedEffect(currentRoute, posterNavigationEnabled) {
             val request = posterNavigation.active
             if (!posterNavigationEnabled || (request != null && currentRoute != request.to)) posterNavigation.clear()
@@ -730,7 +735,7 @@ internal fun MainAppContent(
     }
 
     LaunchedEffect(currentRoute) {
-        val inPlaybackFlow = currentRoute is StreamRoute || currentRoute is PlayerRoute
+        val inPlaybackFlow = currentRoute is StreamRoute || currentRoute is PlayerRoute || currentRoute is PartyRoute
         if (inPlaybackFlow) {
             resumePromptItem = null
         }
@@ -781,6 +786,13 @@ internal fun MainAppContent(
                     AppDeepLink.Downloads -> {
                         activateTab(AppScreenTab.Settings)
                         navController.navigate(DownloadsSettingsRoute(downloadsSettingsTitle)) {
+                            launchSingleTop = true
+                        }
+                        AppDeepLinkRepository.markConsumed(deepLink)
+                    }
+
+                    is AppDeepLink.Party -> {
+                        navController.navigate(PartyRoute(code = deepLink.code, title = watchPartyTitle)) {
                             launchSingleTop = true
                         }
                         AppDeepLinkRepository.markConsumed(deepLink)
@@ -1046,6 +1058,31 @@ internal fun MainAppContent(
             )
             navController.navigate(
                 StreamRoute(launchId = streamLaunchId, title = title),
+            )
+        }
+
+        fun openPartyMedia(media: PartyMedia) {
+            val resumePositionMs = PartyRepository.playback.value
+                ?.takeIf { it.mediaKey == null || it.mediaKey == media.key }
+                ?.let { PartySync.expectedPositionMs(it, PartyRepository.nowMs()) }
+            launchPlaybackWithDownloadPreference(
+                type = media.type,
+                videoId = media.videoId ?: media.metaId,
+                parentMetaId = media.metaId,
+                parentMetaType = media.metaType,
+                title = media.title,
+                logo = media.logo,
+                poster = media.poster,
+                background = media.background,
+                seasonNumber = media.season,
+                episodeNumber = media.episode,
+                episodeTitle = media.episodeTitle,
+                episodeThumbnail = null,
+                pauseDescription = media.description,
+                resumePositionMs = resumePositionMs,
+                resumeProgressFraction = null,
+                manualSelection = true,
+                startFromBeginning = resumePositionMs == null,
             )
         }
 
@@ -1526,6 +1563,7 @@ internal fun MainAppContent(
                         onExternalPlayerLaunch = { launch -> lastExternalPlayerLaunch = launch },
                         launchExternalPlayer = launchExternalPlayer,
                         openExternalStreamUrl = ::openExternalStreamUrl,
+                        onOpenPartyMedia = ::openPartyMedia,
                     )
                 }
                 entry<CatalogRoute> { route ->
@@ -1572,6 +1610,15 @@ internal fun MainAppContent(
                         useNativeNavigation = useNativeNavigation,
                         onOpenDownload = ::openDownloadedItem,
                     )
+                }
+                entry<PartyRoute> { route ->
+                    SettingsDestination(route, navController) { onBack ->
+                        PartyScreen(
+                            initialCode = route.code,
+                            onBack = onBack,
+                            onWatch = ::openPartyMedia,
+                        )
+                    }
                 }
                 entry<DownloadShowRoute> { route ->
                     DownloadShowDestination(

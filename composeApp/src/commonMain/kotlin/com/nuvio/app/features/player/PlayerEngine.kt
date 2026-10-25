@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 
 interface PlayerEngineController {
+    val playbackEngine: AndroidPlaybackEngine? get() = null
     fun play()
     fun pause()
     fun seekTo(positionMs: Long)
@@ -31,6 +32,7 @@ interface PlayerEngineController {
     fun configureIosVideoOutput(settings: PlayerSettingsUiState) {}
     fun updateNowPlayingMetadata(info: PlayerNowPlayingInfo) {}
     fun clearNowPlayingInfo() {}
+    suspend fun getMediaInfo(): PlayerMediaInfo = PlayerMediaInfo()
 }
 
 internal fun sanitizePlaybackHeaders(headers: Map<String, String>?): Map<String, String> {
@@ -71,6 +73,7 @@ expect fun PlatformPlayerSurface(
     externalSubtitles: List<com.nuvio.app.features.streams.StreamSubtitle> = emptyList(),
     streamType: String? = null,
     useYoutubeChunkedPlayback: Boolean = false,
+    playbackEngine: AndroidPlaybackEngine? = null,
     modifier: Modifier = Modifier,
     playWhenReady: Boolean = true,
     initialPositionMs: Long? = null,

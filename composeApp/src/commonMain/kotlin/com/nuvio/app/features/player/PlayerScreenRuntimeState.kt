@@ -15,12 +15,14 @@ import com.nuvio.app.features.p2p.P2pSettingsUiState
 import com.nuvio.app.features.p2p.P2pStreamingState
 import com.nuvio.app.features.player.skip.NextEpisodeInfo
 import com.nuvio.app.features.player.skip.SkipInterval
+import com.nuvio.app.features.party.PartyMedia
 import com.nuvio.app.features.streams.StreamsUiState
 import com.nuvio.app.features.tracking.TrackingMediaReference
 import com.nuvio.app.features.watched.WatchedUiState
 import com.nuvio.app.features.watchprogress.WatchProgressUiState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlin.time.TimeMark
 
 internal class PlayerScreenRuntime(
     args: PlayerScreenArgs,
@@ -57,6 +59,7 @@ internal class PlayerScreenRuntime(
     val torrentTrackers: List<String> get() = args.torrentTrackers
     val initialPositionMs: Long get() = args.initialPositionMs
     val initialProgressFraction: Float? get() = args.initialProgressFraction
+    val onOpenPartyMedia: (PartyMedia) -> Unit get() = args.onOpenPartyMedia
     var activeExternalSubtitles by mutableStateOf(args.externalSubtitles)
     @Deprecated("Use activeExternalSubtitles", ReplaceWith("activeExternalSubtitles"))
     val externalSubtitles: List<com.nuvio.app.features.streams.StreamSubtitle> get() = activeExternalSubtitles
@@ -132,9 +135,20 @@ internal class PlayerScreenRuntime(
     var resizeMode by mutableStateOf(playerSettingsUiState.resizeMode)
     var layoutSize by mutableStateOf(IntSize.Zero)
     var playbackSnapshot by mutableStateOf(PlayerPlaybackSnapshot())
+    var playbackSnapshotMark: TimeMark? = null
     var playerController by mutableStateOf<PlayerEngineController?>(null)
     var playerControllerSourceUrl by mutableStateOf<String?>(null)
     var errorMessage by mutableStateOf<String?>(null)
+    var showSwitchEngineConfirm by mutableStateOf(false)
+    var playbackEngineOverride by mutableStateOf<AndroidPlaybackEngine?>(null)
+    var playbackSnapshotKey by mutableStateOf<PlaybackKey?>(null)
+    var showPartyPanel by mutableStateOf(false)
+    var showPartyChat by mutableStateOf(false)
+    var partyBehind by mutableStateOf(false)
+    var partyBehindMs by mutableStateOf<Long?>(null)
+    var partyRateNudge: Float? = null
+    var partyPreviousKey: String? = null
+    var partyAppInBackground = false
     var isScrubbingTimeline by mutableStateOf(false)
     var scrubbingPositionMs by mutableStateOf<Long?>(null)
     var pausedOverlayVisible by mutableStateOf(false)
@@ -188,6 +202,8 @@ internal class PlayerScreenRuntime(
     var showAudioModal by mutableStateOf(false)
     var showSubtitleModal by mutableStateOf(false)
     var showVideoSettingsModal by mutableStateOf(false)
+    var showStreamInfo by mutableStateOf(false)
+    var streamMediaInfo by mutableStateOf(PlayerMediaInfo())
     var audioTracks by mutableStateOf<List<AudioTrack>>(emptyList())
     var subtitleTracks by mutableStateOf<List<SubtitleTrack>>(emptyList())
     var selectedAudioIndex by mutableStateOf(-1)

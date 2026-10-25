@@ -8,14 +8,18 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import com.nuvio.app.features.p2p.P2pStreamingState
 import com.nuvio.app.features.p2p.formatP2pMegabytes
 import com.nuvio.app.features.p2p.formatP2pSpeed
 import com.nuvio.app.isIos
+import com.nuvio.app.features.party.PartyRepository
 import kotlinx.coroutines.launch
 import nuvio.composeapp.generated.resources.*
+import com.nuvio.app.core.ui.NuvioStatusModal
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
@@ -152,6 +156,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
                 initialPositionMs = activeInitialPositionMs.takeIf { it > 0L },
                 initialPositionRequestKey = initialPositionRequestKey,
                 resizeMode = resizeMode,
+                playbackEngine = playbackEngineOverride,
                 onInitialPositionHandled = { key, handled ->
                     if (key == currentInitialPositionRequestKey()) {
                         initialSeekApplied = handled
@@ -163,6 +168,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
                 },
                 onSnapshot = { snapshot ->
                     playbackSnapshot = snapshot
+                    playbackSnapshotMark = kotlin.time.TimeSource.Monotonic.markNow()
                     if (!snapshot.isLoading) initialLoadCompleted = true
                     if (snapshot.isEnded) {
                         shouldPlay = false
@@ -214,6 +220,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
             p2pRebufferProgress = p2pRebufferProgress,
         )
         RenderPlayerModals(displayedPositionMs = displayedPositionMs)
+        RenderParty(runtime = runtime)
     }
 }
 
@@ -301,6 +308,13 @@ private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long, 
             } else {
                 null
             },
+            onSwitchEngineClick = if (playerController?.playbackEngine != null) {
+                { showSwitchEngineConfirm = true }
+            } else null,
+            onPartyClick = if (PartyRepository.available.value) {
+                { openPartyPanel() }
+            } else null,
+            onStreamInfoClick = { openStreamInfo() },
             onSourcesClick = if (activeVideoId != null) { { openSourcesPanel() } } else null,
             onEpisodesClick = if (isSeries) { { openEpisodesPanel() } } else null,
             onOpenInExternalPlayer = args.onOpenInExternalPlayer?.let { openExternal ->
@@ -611,4 +625,35 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
             showSubmitIntroModal = false
         },
     )
+    StreamInfoOverlay(
+        visible = showStreamInfo,
+        addonName = activeProviderName,
+        addonLogo = null,
+        streamName = activeStreamTitle,
+        streamDescription = activeStreamSubtitle,
+        playbackEngine = playerController?.playbackEngine,
+        serverPlayback = null,
+        mediaInfo = streamMediaInfo,
+        audioTrack = audioTracks.firstOrNull { it.index == selectedAudioIndex }
+            ?: audioTracks.firstOrNull { it.isSelected },
+        subtitleTrack = subtitleTracks.firstOrNull { it.index == selectedSubtitleIndex }
+            ?: subtitleTracks.firstOrNull { it.isSelected },
+        addonSubtitle = selectedAddonSubtitle,
+        onDismiss = { showStreamInfo = false },
+    )
+    val switchEngineTarget = playerController?.playbackEngine?.switchTarget
+    if (switchEngineTarget != null) {
+        NuvioStatusModal(
+            isVisible = showSwitchEngineConfirm,
+            title = "Switch to ${switchEngineTarget.label}",
+            message = "Switch the player engine at the current position?",
+            confirmText = stringResource(Res.string.action_switch),
+            dismissText = stringResource(Res.string.action_cancel),
+            onConfirm = {
+                showSwitchEngineConfirm = false
+                switchPlaybackEngine()
+            },
+            onDismiss = { showSwitchEngineConfirm = false },
+        )
+    }
 }

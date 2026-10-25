@@ -19,6 +19,7 @@ import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.Flag
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.LockOpen
 import androidx.compose.material.icons.rounded.SkipNext
@@ -98,6 +99,9 @@ internal fun PlayerControlActions(
     onSpeedClick: () -> Unit,
     onResizeModeClick: () -> Unit,
     onVideoSettingsClick: (() -> Unit)?,
+    onSwitchEngineClick: (() -> Unit)? = null,
+    onPartyClick: (() -> Unit)? = null,
+    onStreamInfoClick: () -> Unit,
     onOpenInExternalPlayer: (() -> Unit)?,
     onSubmitIntroClick: (() -> Unit)?,
     onInteraction: () -> Unit,
@@ -149,6 +153,17 @@ internal fun PlayerControlActions(
                 icon = Icons.Rounded.Build,
             )
         },
+        onSwitchEngineClick?.let {
+            PlayerControlAction("Switch player engine", it, icon = Icons.Rounded.Build)
+        },
+        onPartyClick?.let {
+            PlayerControlAction("Watch party", it, icon = Icons.Rounded.Build)
+        },
+        PlayerControlAction(
+            stringResource(Res.string.cd_stream_info),
+            onStreamInfoClick,
+            icon = Icons.Rounded.Info,
+        ),
         onSubmitIntroClick?.let {
             PlayerControlAction(
                 stringResource(Res.string.submit_intro_action), it,

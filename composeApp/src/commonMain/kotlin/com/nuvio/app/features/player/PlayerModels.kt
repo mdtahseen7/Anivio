@@ -84,6 +84,14 @@ enum class AndroidPlaybackEngine(
     Libmpv("libmpv"),
 }
 
+internal data class PlaybackKey(
+    val sourceIdentity: String,
+    val videoId: String?,
+    val seasonNumber: Int?,
+    val episodeNumber: Int?,
+    val playbackEngine: AndroidPlaybackEngine? = null,
+)
+
 enum class AndroidLibmpvVideoOutput(
     val mpvValue: String,
     val label: String,

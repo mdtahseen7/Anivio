@@ -321,6 +321,7 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
     BindPlayerUiVisibilityEffects()
     BindPlayerMetadataAndSkipEffects()
     BindDiscordRichPresenceEffects()
+    BindPartyEffects()
 
     DisposableEffect(playbackSession.videoId, activeSourceUrl, activeSourceAudioUrl) {
         val effectVideoId = playbackSession.videoId

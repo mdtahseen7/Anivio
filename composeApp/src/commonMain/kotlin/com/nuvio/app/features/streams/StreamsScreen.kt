@@ -987,6 +987,7 @@ internal fun StreamList(
         StreamBadgeSettingsRepository.ensureLoaded()
         StreamBadgeSettingsRepository.uiState
     }.collectAsStateWithLifecycle()
+    val sharedStream = LocalSharedStream.current
 
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
@@ -996,6 +997,27 @@ internal fun StreamList(
         ),
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
+        sharedStream?.let { shared ->
+            item(key = "shared_stream") {
+                Column {
+                    StreamSectionHeader(
+                        addonName = shared.label,
+                        isLoading = false,
+                    )
+                    StreamCard(
+                        stream = shared.stream,
+                        enabled = true,
+                        appendInstantServiceToDefaultName = false,
+                        showFileSizeBadges = streamBadgeSettings.showFileSizeBadges,
+                        showAddonLogo = streamBadgeSettings.showAddonLogo,
+                        badgePlacement = streamBadgeSettings.badgePlacement,
+                        onClick = { onStreamSelected(shared.stream, resumePositionMs, resumeProgressFraction) },
+                        outlined = true,
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
+            }
+        }
         when {
             hasGroups && anyLoading && !hasAnyStreams -> {
                 item {
