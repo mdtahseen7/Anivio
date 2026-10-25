@@ -39,7 +39,18 @@ internal fun PlayerScreenRuntime.switchPlaybackEngine() {
     flushWatchProgress()
     activeInitialPositionMs = playbackSnapshot.positionMs.coerceAtLeast(0L)
     activeInitialProgressFraction = null
+    // Drop the old controller first so the one-shot seek/track-restore
+    // effects can't fire against it while the new engine starts up.
+    playerController = null
     playbackEngineOverride = target
+    // The new engine is a fresh controller: re-arm the one-shot restore
+    // steps so it resumes at the switch position with the same audio /
+    // subtitle selection instead of starting at 0 with engine defaults.
+    initialSeekApplied = false
+    trackPreferenceRestoreApplied = false
+    preferredAudioSelectionApplied = false
+    preferredSubtitleSelectionApplied = false
+    hasScannedTextTracksOnce = false
 }
 
 internal fun PlayerScreenRuntime.openStreamInfo() {
