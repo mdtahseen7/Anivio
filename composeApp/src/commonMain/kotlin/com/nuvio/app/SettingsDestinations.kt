@@ -56,6 +56,7 @@ internal fun SettingsRootDestination(
     onTestUpdateBanner: (() -> Unit)?,
 ) {
     val onBack = rememberGuardedPopBackStack(navController, route)
+    val partyTitle = stringResource(Res.string.party_title)
     SettingsScreen(
         modifier = Modifier.fillMaxSize(),
         initialPageName = route.pageName,
@@ -71,7 +72,7 @@ internal fun SettingsRootDestination(
         onCollectionsClick = {
             navController.navigate(CollectionsRoute(collectionsTitle))
         },
-        onWatchPartyClick = { navController.navigate(PartyRoute(title = stringResource(Res.string.party_title))) },
+        onWatchPartyClick = { navController.navigate(PartyRoute(title = partyTitle)) },
         onCheckForUpdatesClick = onCheckForUpdates,
         onTestUpdateBannerClick = onTestUpdateBanner,
     )
