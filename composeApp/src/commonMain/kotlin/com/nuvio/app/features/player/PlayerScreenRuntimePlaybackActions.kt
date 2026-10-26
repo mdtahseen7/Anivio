@@ -52,6 +52,13 @@ internal fun PlayerScreenRuntime.switchPlaybackEngine() {
     // state from the new controller's own lists, instead of
     // re-applying the old engine's track ids to the new engine.
     initialSeekApplied = false
+    // Clear the stale subtitle selection: the Exo index would otherwise
+    // survive the switch and make hasActiveSubtitle true, which
+    // suppresses libmpv's slang auto-selection, so no subtitle is ever
+    // picked. -1 lets the preference effect set slang on the new
+    // controller and lets refreshTracks re-derive the selection from
+    // the new controller's own isSelected flags.
+    selectedSubtitleIndex = -1
 }
 
 internal fun PlayerScreenRuntime.openStreamInfo() {
