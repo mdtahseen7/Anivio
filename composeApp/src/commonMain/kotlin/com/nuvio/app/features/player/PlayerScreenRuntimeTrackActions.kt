@@ -388,3 +388,11 @@ private fun PlayerScreenRuntime.disableAutomaticSubtitleSelection() {
     selectedAddonSubtitleId = null
     useCustomSubtitles = false
 }
+
+internal fun PlayerScreenRuntime.refreshAudioTracksIfChanged() {
+    if (playbackSnapshot.isLoading) return
+    val controller = playerController ?: return
+    if (!preferredAudioSelectionApplied || controller.getAudioTracks() != audioTracks) {
+        refreshTracks()
+    }
+}
