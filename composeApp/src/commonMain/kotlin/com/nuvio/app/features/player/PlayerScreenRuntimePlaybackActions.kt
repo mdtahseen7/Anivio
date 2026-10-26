@@ -39,7 +39,26 @@ internal fun PlayerScreenRuntime.switchPlaybackEngine() {
     flushWatchProgress()
     activeInitialPositionMs = playbackSnapshot.positionMs.coerceAtLeast(0L)
     activeInitialProgressFraction = null
+    // Drop the old controller first so seek/track effects can't fire
+    // against it while the new engine starts up. The new surface is
+    // recreated by key(playbackKey) and reports ready via
+    // onControllerReady (guarded by the same key).
+    playerController = null
     playbackEngineOverride = target
+    // Re-arm ONLY the initial seek: Anivio's libmpv surface reports
+    // initial position as unhandled, so the runtime seek effect must
+    // re-run for the new controller. Track flags stay as-is: the
+    // key() surface plus refreshAudioTracksIfChanged() re-sync track
+    // state from the new controller's own lists, instead of
+    // re-applying the old engine's track ids to the new engine.
+    initialSeekApplied = false
+    // Clear the stale subtitle selection: the Exo index would otherwise
+    // survive the switch and make hasActiveSubtitle true, which
+    // suppresses libmpv's slang auto-selection, so no subtitle is ever
+    // picked. -1 lets the preference effect set slang on the new
+    // controller and lets refreshTracks re-derive the selection from
+    // the new controller's own isSelected flags.
+    selectedSubtitleIndex = -1
 }
 
 internal fun PlayerScreenRuntime.openStreamInfo() {

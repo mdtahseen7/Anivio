@@ -46,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.max
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nuvio.app.features.party.PartyRepository
 import com.nuvio.app.core.ui.AppTheme
 import com.nuvio.app.core.ui.LocalNuvioBottomNavigationOverlayPadding
 import com.nuvio.app.core.ui.NuvioScreen
@@ -112,6 +113,12 @@ private fun settingsPageTitles(): Map<SettingsPage, String> {
 }
 
 @Composable
+private fun watchPartyRow(onClick: () -> Unit): (() -> Unit)? {
+    val available by PartyRepository.available.collectAsStateWithLifecycle()
+    return onClick.takeIf { available }
+}
+
+@Composable
 fun SettingsScreen(
     modifier: Modifier = Modifier,
     rootActionRequests: Flow<Unit> = emptyFlow(),
@@ -123,6 +130,7 @@ fun SettingsScreen(
     onExternalBack: (() -> Unit)? = null,
     showInternalHeader: Boolean = true,
     onSwitchProfile: (() -> Unit)? = null,
+    onWatchPartyClick: () -> Unit = {},
     onHomescreenClick: () -> Unit = {},
     onMetaScreenClick: () -> Unit = {},
     onContinueWatchingClick: () -> Unit = {},
@@ -140,6 +148,7 @@ fun SettingsScreen(
     BoxWithConstraints(
         modifier = modifier.fillMaxSize(),
     ) {
+        val watchPartyRowClick = watchPartyRow(onWatchPartyClick)
         val playerSettingsUiState by remember {
             PlayerSettingsRepository.ensureLoaded()
             PlayerSettingsRepository.uiState
@@ -439,6 +448,7 @@ fun SettingsScreen(
                 continueWatchingPreferencesUiState = continueWatchingPreferencesUiState,
                 posterCardStyleUiState = posterCardStyleUiState,
                 onSwitchProfile = onSwitchProfile,
+                onWatchPartyClick = watchPartyRowClick,
                 onDownloadsClick = onDownloadsClick,
                 onAboutClick = openAbout,
                 onPrivacyPolicyClick = openPrivacyPolicy,
@@ -504,6 +514,7 @@ fun SettingsScreen(
                 continueWatchingPreferencesUiState = continueWatchingPreferencesUiState,
                 posterCardStyleUiState = posterCardStyleUiState,
                 onSwitchProfile = onSwitchProfile,
+                onWatchPartyClick = watchPartyRowClick,
                 onHomescreenClick = openHomescreen,
                 onMetaScreenClick = openMetaScreen,
                 onContinueWatchingClick = openContinueWatching,
@@ -579,6 +590,7 @@ private fun MobileSettingsScreen(
     continueWatchingPreferencesUiState: ContinueWatchingPreferencesUiState,
     posterCardStyleUiState: PosterCardStyleUiState,
     onSwitchProfile: (() -> Unit)? = null,
+    onWatchPartyClick: (() -> Unit)? = null,
     onHomescreenClick: () -> Unit = {},
     onMetaScreenClick: () -> Unit = {},
     onContinueWatchingClick: () -> Unit = {},
@@ -716,6 +728,7 @@ private fun MobileSettingsScreen(
                             onDownloadsClick = onDownloadsClick,
                             onAccountClick = onAccountClick,
                             onSwitchProfileClick = onSwitchProfile,
+                            onWatchPartyClick = onWatchPartyClick,
                             showAboutPage = AppFeaturePolicy.aboutPageEnabled,
                         )
                     }
@@ -955,6 +968,7 @@ private fun TabletSettingsScreen(
     continueWatchingPreferencesUiState: ContinueWatchingPreferencesUiState,
     posterCardStyleUiState: PosterCardStyleUiState,
     onSwitchProfile: (() -> Unit)? = null,
+    onWatchPartyClick: (() -> Unit)? = null,
     onDownloadsClick: () -> Unit = {},
     onAboutClick: () -> Unit = {},
     onPrivacyPolicyClick: () -> Unit = {},
@@ -1139,6 +1153,7 @@ private fun TabletSettingsScreen(
                                 onDownloadsClick = onDownloadsClick,
                                 onAccountClick = { openInlinePage(SettingsPage.Account) },
                                 onSwitchProfileClick = onSwitchProfile,
+                                onWatchPartyClick = onWatchPartyClick,
                                 showAccountSection = activeCategory == SettingsCategory.Account,
                                 showGeneralSection = activeCategory == SettingsCategory.General,
                                 showAboutSection = activeCategory == SettingsCategory.About,

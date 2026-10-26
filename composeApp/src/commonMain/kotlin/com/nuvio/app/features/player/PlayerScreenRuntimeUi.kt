@@ -8,9 +8,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.features.p2p.P2pStreamingState
 import com.nuvio.app.features.p2p.formatP2pMegabytes
 import com.nuvio.app.features.p2p.formatP2pSpeed
@@ -142,9 +147,20 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
             ),
     ) {
         val playerSurfaceSourceUrl = if (isP2pPlaybackActive) p2pResolvedSourceUrl else activeSourceUrl
+        val playbackKey = activePlaybackKey
         val initialPositionRequestKey = currentInitialPositionRequestKey()
         if (playerSurfaceSourceUrl != null) {
-            PlatformPlayerSurface(
+            // Nuvio parity: a new playbackKey (engine switch, new episode)
+            // destroys the old surface and its controller instead of
+            // reusing it, and the active guard drops callbacks from the
+            // disposed surface so stale snapshots can't overwrite the
+            // new engine's state.
+            key(playbackKey) {
+                val active = remember { mutableStateOf(true) }
+                DisposableEffect(Unit) {
+                    onDispose { active.value = false }
+                }
+                PlatformPlayerSurface(
                 sourceUrl = playerSurfaceSourceUrl,
                 sourceAudioUrl = activeSourceAudioUrl,
                 sourceHeaders = activeSourceHeaders,
@@ -158,17 +174,21 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
                 resizeMode = resizeMode,
                 playbackEngine = playbackEngineOverride,
                 onInitialPositionHandled = { key, handled ->
-                    if (key == currentInitialPositionRequestKey()) {
+                    if (active.value && playbackKey == activePlaybackKey && key == currentInitialPositionRequestKey()) {
                         initialSeekApplied = handled
                     }
                 },
                 onControllerReady = { controller ->
-                    playerController = controller
-                    playerControllerSourceUrl = activeSourceUrl
+                    if (active.value && playbackKey == activePlaybackKey) {
+                        playerController = controller
+                        playerControllerSourceUrl = activeSourceUrl
+                    }
                 },
                 onSnapshot = { snapshot ->
+                    if (!active.value || playbackKey != activePlaybackKey) return@PlatformPlayerSurface
                     playbackSnapshot = snapshot
                     playbackSnapshotMark = kotlin.time.TimeSource.Monotonic.markNow()
+                    refreshAudioTracksIfChanged()
                     if (!snapshot.isLoading) initialLoadCompleted = true
                     if (snapshot.isEnded) {
                         shouldPlay = false
@@ -176,6 +196,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
                     }
                 },
                 onError = { message ->
+                    if (!active.value || playbackKey != activePlaybackKey) return@PlatformPlayerSurface
                     if (message != null && tryRefreshCredentialedSourceAfterError(message)) {
                         return@PlatformPlayerSurface
                     }
@@ -185,7 +206,8 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
                         removeFailedStreamFromCache()
                     }
                 },
-            )
+                )
+            }
         }
 
         AnimatedVisibility(
@@ -250,6 +272,8 @@ private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long, 
         enter = fadeIn(),
         exit = fadeOut(),
     ) {
+        val partyState by PartyRepository.state.collectAsStateWithLifecycle()
+        val partyActive = partyState.party != null
         PlayerControlsShell(
             title = title,
             streamTitle = activeStreamTitle,
@@ -314,6 +338,7 @@ private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long, 
             onPartyClick = if (PartyRepository.available.value) {
                 { openPartyPanel() }
             } else null,
+            partyActive = partyActive,
             onStreamInfoClick = { openStreamInfo() },
             onSourcesClick = if (activeVideoId != null) { { openSourcesPanel() } } else null,
             onEpisodesClick = if (isSeries) { { openEpisodesPanel() } } else null,

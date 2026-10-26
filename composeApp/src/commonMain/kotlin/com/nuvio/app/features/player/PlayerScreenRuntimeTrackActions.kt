@@ -388,3 +388,18 @@ private fun PlayerScreenRuntime.disableAutomaticSubtitleSelection() {
     selectedAddonSubtitleId = null
     useCustomSubtitles = false
 }
+
+internal fun PlayerScreenRuntime.refreshAudioTracksIfChanged() {
+    if (playbackSnapshot.isLoading) return
+    val controller = playerController ?: return
+    // Nuvio compares audio tracks only. Anivio also compares subtitle
+    // tracks: subtitle renditions can arrive after audio (separate
+    // playlists, external sub-adds), and an audio-only check leaves
+    // subtitleTracks stuck empty once audio has synced.
+    if (!preferredAudioSelectionApplied ||
+        controller.getAudioTracks() != audioTracks ||
+        controller.getSubtitleTracks() != subtitleTracks
+    ) {
+        refreshTracks()
+    }
+}

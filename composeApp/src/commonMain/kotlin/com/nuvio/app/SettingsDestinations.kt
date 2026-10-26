@@ -31,6 +31,9 @@ import com.nuvio.app.navigation.FolderDetailRoute
 import com.nuvio.app.navigation.NuvioNavigator
 import com.nuvio.app.navigation.PartyRoute
 import com.nuvio.app.navigation.SettingsPageRoute
+import nuvio.composeapp.generated.resources.Res
+import nuvio.composeapp.generated.resources.party_title
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun SettingsDestination(
@@ -53,6 +56,7 @@ internal fun SettingsRootDestination(
     onTestUpdateBanner: (() -> Unit)?,
 ) {
     val onBack = rememberGuardedPopBackStack(navController, route)
+    val partyTitle = stringResource(Res.string.party_title)
     SettingsScreen(
         modifier = Modifier.fillMaxSize(),
         initialPageName = route.pageName,
@@ -68,6 +72,7 @@ internal fun SettingsRootDestination(
         onCollectionsClick = {
             navController.navigate(CollectionsRoute(collectionsTitle))
         },
+        onWatchPartyClick = { navController.navigate(PartyRoute(title = partyTitle)) },
         onCheckForUpdatesClick = onCheckForUpdates,
         onTestUpdateBannerClick = onTestUpdateBanner,
     )

@@ -1461,6 +1461,7 @@ internal fun MainAppContent(
                                     null
                                 },
                                 onCollectionsSettingsClick = { navController.navigate(CollectionsRoute(collectionsTitle)) },
+                                onWatchPartySettingsClick = { navController.navigate(PartyRoute(title = watchPartyTitle)) },
                                 onFolderClick = { collectionId, folderId ->
                                     val folderTitle = CollectionRepository.collections.value
                                         .firstOrNull { it.id == collectionId }

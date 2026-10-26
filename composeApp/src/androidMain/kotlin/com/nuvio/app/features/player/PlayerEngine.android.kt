@@ -1700,10 +1700,20 @@ private class NuvioLibmpvView(
         val nodes = mpv.getPropertyNode("track-list")?.asArray()?.toList().orEmpty()
         return nodes
             .filter { node -> node.nodeString("type") == type }
+            // Thumbnail sprite tracks (seek-preview WebVTT whose cues are
+            // "sprite_0.webp#xywh=..." references) are not subtitles:
+            // listing one lets it get selected and renders sprite URLs
+            // as subtitle text.
+            .filterNot { node -> type == "sub" && node.isThumbnailTrack() }
             .mapIndexedNotNull { index, node ->
                 val id = node.nodeInt("id") ?: return@mapIndexedNotNull null
                 val rawLabel = node.nodeString("title")
-                    ?: node.nodeString("external-filename")?.substringAfterLast('/')
+                    ?.takeUnless { it.contains("://") || it.startsWith("&") || it.startsWith("?") }
+                    ?: node.nodeString("external-filename")
+                        ?.substringAfterLast('/')
+                        ?.substringBefore('?')
+                        ?.substringBefore('#')
+                        ?.takeUnless { it.isBlank() || it.startsWith("&") }
                     ?: node.nodeString("codec")
                 val language = node.nodeString("lang") ?: normalizeLanguageCode(rawLabel)
                 val label = rawLabel?.takeIf { it.isNotBlank() }
@@ -1749,6 +1759,17 @@ private fun Int.logIfMpvError(option: String) {
 
 private fun Double?.toMillis(): Long =
     this?.takeIf { it.isFinite() && it > 0.0 }?.let { (it * 1000.0).toLong() } ?: 0L
+
+private fun MPVNode.isThumbnailTrack(): Boolean {
+    val title = nodeString("title")?.lowercase().orEmpty()
+    val filename = nodeString("external-filename")?.lowercase().orEmpty()
+    if ("thumbnail" in title || "sprite" in title ||
+        "thumbnail" in filename || "sprite" in filename
+    ) return true
+    val imageFile = filename.substringAfterLast('/').substringBefore('?').substringBefore('#')
+    return imageFile.endsWith(".webp") || imageFile.endsWith(".jpg") ||
+        imageFile.endsWith(".jpeg") || imageFile.endsWith(".png")
+}
 
 private fun MPVNode.nodeString(key: String): String? =
     runCatching { this[key]?.asString() }.getOrNull()?.takeIf { it.isNotBlank() }
