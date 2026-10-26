@@ -13,6 +13,7 @@ import com.nuvio.app.features.catalog.supportsPagination
 import kotlinx.coroutines.runBlocking
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.home_catalog_default_title
+import nuvio.composeapp.generated.resources.home_catalog_top_today
 import org.jetbrains.compose.resources.getString
 
 /** Where a home row's items come from. */
@@ -22,6 +23,9 @@ enum class HomeCatalogSource {
 
     /** AniList, queried directly by the app — no addon required. */
     ANILIST,
+
+    /** Kitsu's live editorial/trending feed, mapped back to canonical app ids. */
+    KITSU,
 }
 
 data class HomeCatalogDefinition(
@@ -44,6 +48,7 @@ data class HomeCatalogDefinition(
      * keep the long cache by default.
      */
     val isRecencyBased: Boolean = false,
+    val isRanked: Boolean = false,
 ) {
     val cacheKey: String
         get() = "$key|$descriptorSignature"
@@ -61,7 +66,8 @@ fun buildAllHomeCatalogDefinitions(
     addons: List<ManagedAddon>,
     mode: ContentMode = ContentModeRepository.mode.value,
 ): List<HomeCatalogDefinition> =
-    (buildAniListCatalogDefinitions(mode) + if (mode == ContentMode.Anime) buildHomeCatalogDefinitions(addons) else emptyList())
+    (buildAniListCatalogDefinitions(mode) +
+        if (mode == ContentMode.Anime) buildKitsuCatalogDefinitions() + buildHomeCatalogDefinitions(addons) else emptyList())
         .distinctBy(HomeCatalogDefinition::key)
 
 fun buildHomeCatalogRefreshSignature(addons: List<ManagedAddon>): List<String> =
@@ -102,6 +108,24 @@ fun buildHomeCatalogDefinitions(addons: List<ManagedAddon>): List<HomeCatalogDef
                 )
             }
     }.distinctBy(HomeCatalogDefinition::key)
+
+private fun buildKitsuCatalogDefinitions(): List<HomeCatalogDefinition> = listOf(
+    HomeCatalogDefinition(
+        key = "kitsu:series:top-today",
+        defaultTitle = runBlocking { getString(Res.string.home_catalog_top_today) },
+        catalogName = runBlocking { getString(Res.string.home_catalog_top_today) },
+        addonName = "Kitsu",
+        manifestUrl = "",
+        type = "series",
+        catalogId = "top-today",
+        supportsPagination = false,
+        descriptorSignature = "kitsu-top-today-v1",
+        source = HomeCatalogSource.KITSU,
+        defaultHeroSourceEnabled = false,
+        isRecencyBased = true,
+        isRanked = true,
+    ),
+)
 
 private fun buildHomeCatalogDescriptorSignature(
     addon: ManagedAddon,

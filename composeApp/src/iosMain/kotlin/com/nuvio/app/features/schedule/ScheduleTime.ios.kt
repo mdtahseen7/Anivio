@@ -28,6 +28,14 @@ internal actual object ScheduleTime {
         dateFormat = "EEEE"
         timeZone = NSTimeZone.localTimeZone
     }
+    private val weekdayShortFormatter = NSDateFormatter().apply {
+        dateFormat = "EEE"
+        timeZone = NSTimeZone.localTimeZone
+    }
+    private val monthYearFormatter = NSDateFormatter().apply {
+        dateFormat = "MMMM yyyy"
+        timeZone = NSTimeZone.localTimeZone
+    }
 
     actual fun startOfDayEpochSec(epochSec: Long): Long {
         val date = NSDate(epochSec.toDouble())
@@ -53,6 +61,24 @@ internal actual object ScheduleTime {
             in 2..6 -> weekdayFormatter.stringFromDate(dayDate)
             else -> dateFormatter.stringFromDate(dayDate)
         }
+    }
+
+    actual fun weekdayShortLabel(startEpochSec: Long): String =
+        weekdayShortFormatter.stringFromDate(NSDate(startEpochSec.toDouble()))
+
+    actual fun dayNumber(startEpochSec: Long): String {
+        val components = calendar.components(NSCalendarUnitDay, NSDate(startEpochSec.toDouble()))
+        return components.day.toString()
+    }
+
+    actual fun monthYearLabel(startEpochSec: Long): String =
+        monthYearFormatter.stringFromDate(NSDate(startEpochSec.toDouble()))
+
+    actual fun dayStartOffset(startEpochSec: Long, dayOffset: Int): Long {
+        val shiftedDate = NSDate(
+            startEpochSec.toDouble() + dayOffset.toDouble() * 86_400.0,
+        )
+        return startOfDay(shiftedDate).timeIntervalSince1970.toLong()
     }
 
     private fun startOfDay(date: NSDate): NSDate {

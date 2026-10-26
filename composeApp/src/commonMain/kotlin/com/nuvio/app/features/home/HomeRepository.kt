@@ -6,6 +6,10 @@ import com.nuvio.app.features.addons.enabledAddons
 import com.nuvio.app.features.anime.PublicAnimeSource
 import com.nuvio.app.features.anilist.AniListHeroArtwork
 import com.nuvio.app.features.anilist.AniListCatalogSource
+import com.nuvio.app.core.anilist.AniZipClient
+import com.nuvio.app.core.anilist.KitsuClient
+import com.nuvio.app.core.anilist.anilistId
+import com.nuvio.app.core.anilist.malId
 import com.nuvio.app.features.content.ContentMode
 import com.nuvio.app.features.content.ContentModeRepository
 import com.nuvio.app.features.catalog.CatalogPage
@@ -474,6 +478,10 @@ object HomeRepository {
                 maxItems = HOME_CATALOG_PREVIEW_FETCH_LIMIT,
                 forceRefresh = forceRefresh,
             )
+
+            HomeCatalogSource.KITSU -> fetchKitsuTopToday(
+                forceRefresh = forceRefresh,
+            )
         }
         val items = page.items
 
@@ -486,6 +494,7 @@ object HomeRepository {
             items = items,
             availableItemCount = if (items.isEmpty()) 0 else page.rawItemCount,
             hasMore = items.isNotEmpty() && supportsPagination && page.nextSkip != null,
+            isRanked = isRanked,
         )
     }
 
@@ -500,6 +509,7 @@ object HomeRepository {
             items = row.items,
             availableItemCount = row.availableItemCount.takeIf { it > 0 } ?: row.items.size,
             hasMore = row.hasMore && supportsPagination,
+            isRanked = isRanked,
         )
 
     private fun HomeCatalogDefinition.catalogTarget(): CatalogTarget =
@@ -516,7 +526,45 @@ object HomeRepository {
                 catalogId = catalogId,
                 supportsPagination = supportsPagination,
             )
+
+            HomeCatalogSource.KITSU -> CatalogTarget.AniList(
+                catalogId = "trending",
+                contentType = type,
+                supportsPagination = false,
+            )
         }
+
+    private suspend fun fetchKitsuTopToday(forceRefresh: Boolean): CatalogPage {
+        val ranked = KitsuClient.trendingAnime(
+            contentType = "series",
+            limit = 20,
+            forceRefresh = forceRefresh,
+        )
+        val mapped = ranked.mapNotNull { anime ->
+            val kitsuId = anime.id.toIntOrNull() ?: return@mapNotNull null
+            val mapping = AniZipClient.mappingsByKitsuId(kitsuId, forceRefresh)
+            val canonicalId = mapping?.anilistId()?.takeIf { it.isNotBlank() }?.let { "anilist:$it" }
+                ?: mapping?.malId()?.takeIf { it.isNotBlank() }?.let { "mal:$it" }
+                ?: return@mapNotNull null
+            MetaPreview(
+                id = canonicalId,
+                type = "series",
+                name = anime.title,
+                poster = anime.posterUrl,
+                description = anime.synopsis,
+                releaseInfo = anime.startDate?.take(4),
+                rawReleaseDate = anime.startDate,
+                popularity = anime.userCount?.toDouble(),
+                voteCount = anime.userCount,
+                imdbRating = anime.rating?.toString(),
+            )
+        }.distinctBy(MetaPreview::stableKey).take(10)
+        return CatalogPage(
+            items = mapped,
+            rawItemCount = mapped.size,
+            nextSkip = null,
+        )
+    }
 
     private suspend fun fetchAniListHomePages(
         definitions: List<HomeCatalogDefinition>,

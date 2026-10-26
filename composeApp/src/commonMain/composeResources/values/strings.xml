@@ -33,6 +33,7 @@
     <string name="action_saving">Saving…</string>
     <string name="action_switch">Switch</string>
     <string name="cd_stream_info">Stream info</string>
+    <string name="home_catalog_top_today">Top 10 Today</string>
     <string name="cd_switch_player_engine">Switch player engine</string>
     <string name="stream_info_section_source">SOURCE</string>
     <string name="stream_info_section_video">VIDEO</string>
@@ -892,6 +893,11 @@
     <string name="settings_integrations_section_title">INTEGRATIONS</string>
     <string name="settings_integrations_discord_section">RICH PRESENCE</string>
     <string name="schedule_title">Schedule</string>
+    <string name="schedule_airing">Airing</string>
+    <string name="schedule_this_week">This week</string>
+    <string name="schedule_releases_count">%1$d releases</string>
+    <string name="schedule_no_releases_day">Nothing scheduled for this day</string>
+    <string name="schedule_loading">Loading your schedule…</string>
     <string name="schedule_refresh">Refresh</string>
     <string name="schedule_error">Couldn&apos;t load the schedule. Check your connection and try again.</string>
     <string name="schedule_empty">No episodes airing this week.</string>

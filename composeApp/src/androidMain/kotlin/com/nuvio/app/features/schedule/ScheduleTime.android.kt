@@ -9,6 +9,8 @@ import java.time.temporal.ChronoUnit
 internal actual object ScheduleTime {
     private val timeFormatter = DateTimeFormatter.ofPattern("h:mm a")
     private val dateFormatter = DateTimeFormatter.ofPattern("MMM d")
+    private val weekdayShortFormatter = DateTimeFormatter.ofPattern("EEE")
+    private val monthYearFormatter = DateTimeFormatter.ofPattern("MMMM yyyy")
 
     private fun zone(): ZoneId = ZoneId.systemDefault()
 
@@ -30,4 +32,19 @@ internal actual object ScheduleTime {
             else -> day.format(dateFormatter)
         }
     }
+
+    actual fun weekdayShortLabel(startEpochSec: Long): String =
+        Instant.ofEpochSecond(startEpochSec).atZone(zone()).format(weekdayShortFormatter)
+
+    actual fun dayNumber(startEpochSec: Long): String =
+        Instant.ofEpochSecond(startEpochSec).atZone(zone()).dayOfMonth.toString()
+
+    actual fun monthYearLabel(startEpochSec: Long): String =
+        Instant.ofEpochSecond(startEpochSec).atZone(zone()).format(monthYearFormatter)
+
+    actual fun dayStartOffset(startEpochSec: Long, dayOffset: Int): Long =
+        Instant.ofEpochSecond(startEpochSec).atZone(zone()).toLocalDate()
+            .plusDays(dayOffset.toLong())
+            .atStartOfDay(zone())
+            .toEpochSecond()
 }

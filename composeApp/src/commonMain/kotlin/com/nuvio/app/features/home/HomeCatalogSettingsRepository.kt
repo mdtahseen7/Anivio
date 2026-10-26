@@ -28,6 +28,7 @@ data class HomeCatalogSettingsItem(
     val isCollection: Boolean = false,
     val collectionId: String? = null,
     val isPinnedToTop: Boolean = false,
+    val isRanked: Boolean = false,
 ) {
     val displayTitle: String
         get() = customTitle.ifBlank { defaultTitle }
@@ -411,6 +412,7 @@ object HomeCatalogSettingsRepository {
                     enabled = preference?.enabled ?: true,
                     heroSourceEnabled = preference?.heroSourceEnabled ?: true,
                     order = preference?.order ?: 0,
+                    isRanked = definition.isRanked,
                 )
             }
 

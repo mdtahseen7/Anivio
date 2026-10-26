@@ -99,6 +99,8 @@ fun AniZipResponse.malId(): String? = mappings.idString("mal_id")
 
 fun AniZipResponse.kitsuId(): String? = mappings.idString("kitsu_id")
 
+fun AniZipResponse.anilistId(): String? = mappings.idString("anilist_id")
+
 /** ani.zip's `type`, e.g. "TV" or "MOVIE". */
 fun AniZipResponse.mappedType(): String? = mappings.idString("type")
 

@@ -29,4 +29,23 @@ internal fun buildScheduleGroups(entries: List<ScheduleEntry>, nowEpochMs: Long)
         .sortedBy(ScheduleDayGroup::startEpochSec)
 }
 
+/** Builds a complete seven-day calendar, retaining empty days so the layout stays calendar-like. */
+internal fun buildScheduleCalendarDays(
+    entries: List<ScheduleEntry>,
+    nowEpochMs: Long,
+): List<ScheduleDayGroup> {
+    val todayStartSec = ScheduleTime.startOfDayEpochSec(nowEpochMs / 1000)
+    val populatedDays = buildScheduleGroups(entries, nowEpochMs)
+        .associateBy(ScheduleDayGroup::startEpochSec)
+    return (0 until 7).map { offset ->
+        val startSec = ScheduleTime.dayStartOffset(todayStartSec, offset)
+        populatedDays[startSec] ?: ScheduleDayGroup(
+            startEpochSec = startSec,
+            label = ScheduleTime.dayLabel(startSec, nowEpochMs),
+            isToday = offset == 0,
+            entries = emptyList(),
+        )
+    }
+}
+
 internal fun formatScheduleTime(airingAtEpochSec: Long): String = ScheduleTime.timeLabel(airingAtEpochSec)
