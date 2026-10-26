@@ -437,33 +437,57 @@ private fun DantotsuCommentCard(
 @Composable
 private fun CommentContent(content: String) {
     val uriHandler = LocalUriHandler.current
-    val url = Regex("https?://\\S+").find(content)?.value?.trimEnd('.', ',', ')', ']', '}')
-    val isKlipyMedia = url?.contains("static.klipy.co/", ignoreCase = true) == true &&
-        url.substringBefore('?').lowercase().let { it.endsWith(".gif") || it.endsWith(".webp") || it.endsWith(".png") }
-    val isKlipyPage = url?.contains("klipy.com/", ignoreCase = true) == true
+    val urls = Regex("https?://\\S+").findAll(content)
+        .map { it.value.trimEnd('.', ',', ')', ']', '}') }
+        .toList()
+    val mediaUrl = urls.firstOrNull(::isInlineKlipyMediaUrl)
+    val pageUrl = urls.firstOrNull { it.contains("klipy.com/", ignoreCase = true) }
+    val visibleText = content
+        .replace(mediaUrl.orEmpty(), "")
+        .replace(pageUrl.orEmpty(), "")
+        .trim()
 
-    when {
-        isKlipyMedia -> AsyncImage(
-            model = url,
-            contentDescription = "Comment GIF",
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = 260.dp)
-                .clip(RoundedCornerShape(12.dp)),
-            contentScale = ContentScale.Fit,
-        )
-        isKlipyPage -> Text(
-            text = "Open GIF on Klipy",
-            modifier = Modifier
-                .clip(RoundedCornerShape(10.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .clickable { uriHandler.openUri(url) }
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            color = MaterialTheme.colorScheme.primary,
-            fontWeight = FontWeight.SemiBold,
-        )
-        else -> Text(content, style = MaterialTheme.typography.bodyMedium)
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (visibleText.isNotBlank()) {
+            Text(visibleText, style = MaterialTheme.typography.bodyMedium)
+        }
+        if (mediaUrl != null) {
+            AsyncImage(
+                model = mediaUrl,
+                contentDescription = "Comment GIF",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 260.dp)
+                    .clip(RoundedCornerShape(12.dp)),
+                contentScale = ContentScale.Fit,
+            )
+        } else if (pageUrl != null) {
+            // Legacy comments may contain only a Klipy share page. Keep that link usable while
+            // newer direct static.klipy.com media URLs render inline above.
+            Text(
+                text = "GIF link",
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .clickable { uriHandler.openUri(pageUrl) }
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
     }
+}
+
+private fun isInlineKlipyMediaUrl(url: String): Boolean {
+    val normalized = url.substringBefore('?').lowercase()
+    val isKlipyHost = listOf(
+        "static.klipy.com/",
+        "static.klipy.co/",
+        "static1.klipy.com/",
+        "static2.klipy.com/",
+    ).any { normalized.contains(it) }
+    return isKlipyHost && listOf(".gif", ".webp", ".png", ".jpg", ".jpeg")
+        .any(normalized::endsWith)
 }
 
 @Composable

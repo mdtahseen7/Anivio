@@ -24,8 +24,8 @@ enum class HomeCatalogSource {
     /** AniList, queried directly by the app — no addon required. */
     ANILIST,
 
-    /** Kitsu's live editorial/trending feed, mapped back to canonical app ids. */
-    KITSU,
+    /** External daily search ranking, enriched with stable app metadata. */
+    DAILY_RANKING,
 }
 
 data class HomeCatalogDefinition(
@@ -58,7 +58,7 @@ data class HomeCatalogDefinition(
 }
 
 /**
- * Every home row: AniList first so it leads the home screen on a fresh install, then whatever
+ * Every home row: built-in AniList rows first, followed by the external daily ranking and whatever
  * addon catalogs the user has installed. Distinct by key, so an addon whose manifest id happened to
  * be `anilist` could not shadow a built-in row.
  */
@@ -67,7 +67,7 @@ fun buildAllHomeCatalogDefinitions(
     mode: ContentMode = ContentModeRepository.mode.value,
 ): List<HomeCatalogDefinition> =
     (buildAniListCatalogDefinitions(mode) +
-        if (mode == ContentMode.Anime) buildKitsuCatalogDefinitions() + buildHomeCatalogDefinitions(addons) else emptyList())
+        if (mode == ContentMode.Anime) buildDailyRankingCatalogDefinitions() + buildHomeCatalogDefinitions(addons) else emptyList())
         .distinctBy(HomeCatalogDefinition::key)
 
 fun buildHomeCatalogRefreshSignature(addons: List<ManagedAddon>): List<String> =
@@ -109,18 +109,18 @@ fun buildHomeCatalogDefinitions(addons: List<ManagedAddon>): List<HomeCatalogDef
             }
     }.distinctBy(HomeCatalogDefinition::key)
 
-private fun buildKitsuCatalogDefinitions(): List<HomeCatalogDefinition> = listOf(
+private fun buildDailyRankingCatalogDefinitions(): List<HomeCatalogDefinition> = listOf(
     HomeCatalogDefinition(
-        key = "kitsu:series:top-today",
+        key = "daily-ranking:series:top-today",
         defaultTitle = runBlocking { getString(Res.string.home_catalog_top_today) },
         catalogName = runBlocking { getString(Res.string.home_catalog_top_today) },
-        addonName = "Kitsu",
+        addonName = "Daily ranking",
         manifestUrl = "",
         type = "series",
         catalogId = "top-today",
         supportsPagination = false,
-        descriptorSignature = "kitsu-top-today-v1",
-        source = HomeCatalogSource.KITSU,
+        descriptorSignature = "daily-ranking-top-today-v1",
+        source = HomeCatalogSource.DAILY_RANKING,
         defaultHeroSourceEnabled = false,
         isRecencyBased = true,
         isRanked = true,

@@ -104,7 +104,7 @@ private fun RankedHomeCard(
     }
 
     Box(
-        modifier = Modifier.width(206.dp).height(226.dp),
+        modifier = Modifier.width(206.dp).height(292.dp),
         contentAlignment = Alignment.BottomStart,
     ) {
         Text(

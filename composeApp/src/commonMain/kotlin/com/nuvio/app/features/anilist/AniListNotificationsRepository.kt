@@ -1,6 +1,9 @@
 package com.nuvio.app.features.anilist
 
 import com.nuvio.app.core.anilist.AniListClient
+import com.nuvio.app.features.details.DantotsuCommentNotification
+import com.nuvio.app.features.details.DantotsuCommentsApi
+import com.nuvio.app.core.time.EpisodeReleaseDatePlatform
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -42,7 +45,12 @@ data class AniListNotification(
     val userAvatar: String? = null,
     /** Server-provided free text (message body, deletion title, merge reason) when present. */
     val message: String? = null,
+    val source: NotificationSource = NotificationSource.ANILIST,
+    val commentId: Int? = null,
+    val sourceNotificationId: Int? = null,
 )
+
+enum class NotificationSource { ANILIST, DANTOTSU }
 
 data class AniListNotificationsUiState(
     val isAuthenticated: Boolean = false,
@@ -56,8 +64,13 @@ data class AniListNotificationsUiState(
     val error: String? = null,
     /** True once `hasNextPage` came back false — no more pages to load. */
     val hasReachedEnd: Boolean = false,
+    val lastReadDantotsuNotificationId: Int? = null,
 ) {
     fun isNew(item: AniListNotification): Boolean {
+        if (item.source == NotificationSource.DANTOTSU) {
+            return item.sourceNotificationId != null &&
+                item.sourceNotificationId > (lastReadDantotsuNotificationId ?: 0)
+        }
         val cleared = lastClearedAtEpochSec ?: return item.createdAtEpochSec != null
         return (item.createdAtEpochSec ?: 0L) > cleared
     }
@@ -82,6 +95,7 @@ object AniListNotificationsRepository {
 
     private val loadMutex = Mutex()
     private var page = 1
+    private var lastReadDantotsuNotificationId: Int? = null
 
     /**
      * Opens the feed: resets to page 1, refetches, and refreshes the badge. Cheap enough to run
@@ -113,13 +127,25 @@ object AniListNotificationsRepository {
      */
     suspend fun markAllRead(nowEpochSec: Long) {
         val token = AniListAuthRepository.accessTokenOrNull() ?: return
+        val latestCommentNotificationId = _uiState.value.items
+            .filter { it.source == NotificationSource.DANTOTSU }
+            .mapNotNull { it.sourceNotificationId }
+            .maxOrNull()
         try {
             AniListClient.query(
                 query = "query { Viewer { id unreadNotificationCount(resetNotificationCount: true) } }",
                 forceRefresh = true,
                 accessToken = token,
             )
-            _uiState.value = _uiState.value.copy(unreadCount = 0, lastClearedAtEpochSec = nowEpochSec)
+            lastReadDantotsuNotificationId = maxOf(
+                lastReadDantotsuNotificationId ?: 0,
+                latestCommentNotificationId ?: 0,
+            ).takeIf { it > 0 }
+            _uiState.value = _uiState.value.copy(
+                unreadCount = 0,
+                lastClearedAtEpochSec = nowEpochSec,
+                lastReadDantotsuNotificationId = lastReadDantotsuNotificationId,
+            )
             // The feed query (PAGE_QUERY) also carries the unread count and is cached for the normal
             // TTL, so without a forced refetch the badge would reappear from that stale cache on the
             // next open. Re-pull page 1 fresh so cache and state both reflect the reset.
@@ -151,10 +177,23 @@ object AniListNotificationsRepository {
                     ?.get("hasNextPage")?.jsonPrimitive?.booleanOrNull ?: false
                 val parsed = pageObj?.get("notifications")?.jsonArray.orEmpty()
                     .mapNotNull { element -> (element as? JsonObject)?.let(::parseNotification) }
+                val commentNotifications = if (targetPage == 1) {
+                    runCatching { DantotsuCommentsApi.notifications() }
+                        .getOrDefault(emptyList())
+                        .map(::toDantotsuNotification)
+                } else {
+                    emptyList()
+                }
+                val unreadComments = commentNotifications.count { notification ->
+                    notification.sourceNotificationId != null &&
+                        notification.sourceNotificationId > (lastReadDantotsuNotificationId ?: 0)
+                }
 
                 val existing = _uiState.value.items
-                val merged = (if (targetPage == 1) parsed else existing + parsed)
-                    .distinctBy { it.id }
+                val merged = (if (targetPage == 1) parsed + commentNotifications else existing + parsed)
+                    .distinctBy { "${it.source}:$it.id" }
+                    .sortedWith(compareByDescending<AniListNotification> { it.createdAtEpochSec ?: 0L }
+                        .thenByDescending { it.id })
                     .take(MAX_ITEMS)
                 page = targetPage
                 _uiState.value = _uiState.value.copy(
@@ -162,9 +201,10 @@ object AniListNotificationsRepository {
                     isLoading = false,
                     isLoadingMore = false,
                     items = merged,
-                    unreadCount = unread,
+                    unreadCount = unread + unreadComments,
                     error = null,
                     hasReachedEnd = !hasNext || merged.size >= MAX_ITEMS,
+                    lastReadDantotsuNotificationId = lastReadDantotsuNotificationId,
                 )
             } catch (error: CancellationException) {
                 throw error
@@ -177,6 +217,27 @@ object AniListNotificationsRepository {
                 )
             }
         }
+    }
+
+    private fun toDantotsuNotification(item: DantotsuCommentNotification): AniListNotification {
+        val type = when (item.type) {
+            4 -> "DANTOTSU_COMMENT_LIKE"
+            2 -> "DANTOTSU_COMMENT_WARNING"
+            3 -> "DANTOTSU_UPDATE"
+            else -> "DANTOTSU_COMMENT_REPLY"
+        }
+        return AniListNotification(
+            id = item.notificationId.toLong(),
+            type = type,
+            createdAtEpochSec = EpisodeReleaseDatePlatform.nowEpochMs() / 1000L,
+            context = item.content,
+            mediaId = item.mediaId,
+            userName = item.username,
+            message = item.content,
+            source = NotificationSource.DANTOTSU,
+            commentId = item.commentId,
+            sourceNotificationId = item.notificationId,
+        )
     }
 
     private fun parseNotification(obj: JsonObject): AniListNotification? {

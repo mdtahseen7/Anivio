@@ -47,6 +47,7 @@ import coil3.compose.AsyncImage
 import com.nuvio.app.core.ui.NuvioLoadingIndicator
 import com.nuvio.app.core.ui.NuvioScreen
 import com.nuvio.app.core.ui.NuvioScreenHeader
+import com.nuvio.app.core.ui.NuvioSurfaceCard
 import com.nuvio.app.core.ui.nuvio
 import com.nuvio.app.core.time.EpisodeReleaseDatePlatform
 import kotlinx.coroutines.launch
@@ -108,6 +109,13 @@ fun AniListNotificationsScreen(
         }
 
         if (uiState.isAuthenticated && uiState.items.isNotEmpty()) {
+            item(key = "notification-summary") {
+                NotificationSummaryCard(
+                    total = uiState.items.size,
+                    unread = uiState.unreadCount,
+                    commentCount = uiState.items.count { it.source == NotificationSource.DANTOTSU },
+                )
+            }
             item(key = "notif-tabs") {
                 NotificationTabs(
                     selectedIndex = selectedTabIndex,
@@ -143,7 +151,7 @@ fun AniListNotificationsScreen(
                         EmptyState(text = "No ${selectedCategory.title.lowercase()} notifications yet.")
                     }
                 } else {
-                    items(rows, key = { it.id }) { notification ->
+                    items(rows, key = { "${it.source}:${it.id}" }) { notification ->
                         val isNew = uiState.isNew(notification)
                         NotificationRow(
                             notification = notification,
@@ -181,8 +189,13 @@ private fun NotificationRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(horizontal = tokens.spacing.screenHorizontal, vertical = 4.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(
+                if (isNew) tokens.colors.accent.copy(alpha = 0.09f) else tokens.colors.surface.copy(alpha = 0.46f),
+            )
             .clickable(enabled = onClick != null) { onClick?.invoke() }
-            .padding(horizontal = tokens.spacing.screenHorizontal, vertical = 10.dp),
+            .padding(horizontal = 12.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -262,7 +275,7 @@ private fun NotificationRow(
 
         notification.createdAtEpochSec?.let { created ->
             Text(
-                text = relativeTime(created),
+                text = if (notification.source == NotificationSource.DANTOTSU) "comment" else relativeTime(created),
                 style = MaterialTheme.typography.labelSmall,
                 color = tokens.colors.textSecondary,
                 maxLines = 1,
@@ -273,6 +286,48 @@ private fun NotificationRow(
     }
 }
 
+@Composable
+private fun NotificationSummaryCard(
+    total: Int,
+    unread: Int,
+    commentCount: Int,
+) {
+    val tokens = MaterialTheme.nuvio
+    NuvioSurfaceCard(
+        modifier = Modifier.padding(horizontal = tokens.spacing.screenHorizontal, vertical = 8.dp),
+        contentPadding = 16.dp,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (unread > 0) "$unread new notifications" else "You're all caught up",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = tokens.colors.textPrimary,
+                )
+                Text(
+                    text = "$total total · $commentCount comment updates",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = tokens.colors.textSecondary,
+                )
+            }
+            Text(
+                text = "LIVE",
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(tokens.colors.accent.copy(alpha = 0.16f))
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = tokens.colors.accent,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
 @Composable
 private fun NotificationTabs(
     selectedIndex: Int,
@@ -359,12 +414,14 @@ private fun EmptyState(text: String) {
 private enum class NotificationCategory(val title: String) {
     EPISODES("New Episodes"),
     ACTIVITY("Activity"),
+    COMMENTS("Comments"),
     FORUM("Forum"),
     UPDATES("Updates"),
 }
 
 private fun categoryOf(type: String): NotificationCategory = when (type) {
     "AIRING" -> NotificationCategory.EPISODES
+    "DANTOTSU_COMMENT_REPLY", "DANTOTSU_COMMENT_LIKE", "DANTOTSU_COMMENT_WARNING" -> NotificationCategory.COMMENTS
     "THREAD_COMMENT_MENTION", "THREAD_COMMENT_REPLY", "THREAD_COMMENT_SUBSCRIBED",
     "THREAD_COMMENT_LIKE", "THREAD_LIKE" -> NotificationCategory.FORUM
     "MEDIA_DELETION", "MEDIA_DATA_CHANGE", "MEDIA_MERGE" -> NotificationCategory.UPDATES
@@ -379,6 +436,9 @@ private fun typeGlyph(type: String): String = when (type) {
     "ACTIVITY_LIKE", "ACTIVITY_REPLY_LIKE" -> "♥"
     "THREAD_COMMENT_MENTION", "THREAD_COMMENT_REPLY", "THREAD_COMMENT_SUBSCRIBED" -> "💬"
     "THREAD_COMMENT_LIKE", "THREAD_LIKE" -> "♥"
+    "DANTOTSU_COMMENT_LIKE" -> "♥"
+    "DANTOTSU_COMMENT_REPLY" -> "↩"
+    "DANTOTSU_COMMENT_WARNING" -> "!"
     "AIRING" -> "▶"
     "MEDIA_DELETION", "MEDIA_DATA_CHANGE", "MEDIA_MERGE" -> "!"
     else -> "•"
@@ -387,6 +447,9 @@ private fun typeGlyph(type: String): String = when (type) {
 private fun describe(notification: AniListNotification): String {
     val show = notification.mediaTitle
     return when (notification.type) {
+        "DANTOTSU_COMMENT_REPLY" -> "replied to your comment"
+        "DANTOTSU_COMMENT_LIKE" -> "liked your comment"
+        "DANTOTSU_COMMENT_WARNING" -> notification.message ?: "Your comment received a warning"
         "AIRING" -> "Episode ${notification.episode} of $show just aired"
         "FOLLOWING" -> "started following you"
         "ACTIVITY_MESSAGE" -> notification.message ?: "sent you a message"

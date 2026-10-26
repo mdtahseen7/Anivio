@@ -51,6 +51,15 @@ data class DantotsuCommentPage(
     val totalPages: Int,
 )
 
+data class DantotsuCommentNotification(
+    val username: String,
+    val mediaId: Int,
+    val commentId: Int,
+    val type: Int? = null,
+    val content: String? = null,
+    val notificationId: Int,
+)
+
 data class DantotsuAuthSession(
     val token: String,
     val user: DantotsuUser?,
@@ -87,6 +96,12 @@ internal object DantotsuCommentsApi {
         raw("GET", "/comments/parent/$commentId/1", token = token)
             .requireSuccess()
             .toCommentPage().comments
+    }
+
+    suspend fun notifications(): List<DantotsuCommentNotification> = requestWithReauth { token ->
+        raw("GET", "/notification/reply", token = token)
+            .requireSuccess()
+            .toCommentNotifications()
     }
 
     suspend fun create(
@@ -237,6 +252,25 @@ internal object DantotsuCommentsApi {
             comments = comments,
             totalPages = root.int("totalPages") ?: 1,
         )
+    }
+
+    private fun String.toCommentNotifications(): List<DantotsuCommentNotification> {
+        val root = json.parseToJsonElement(this).jsonObject
+        return root["notifications"]?.jsonArray.orEmpty().mapNotNull { element ->
+            val item = element.jsonObject
+            val username = item.string("username") ?: return@mapNotNull null
+            val mediaId = item.int("media_id") ?: return@mapNotNull null
+            val commentId = item.int("comment_id") ?: return@mapNotNull null
+            val notificationId = item.int("notification_id") ?: return@mapNotNull null
+            DantotsuCommentNotification(
+                username = username,
+                mediaId = mediaId,
+                commentId = commentId,
+                type = item.int("type"),
+                content = item.string("content"),
+                notificationId = notificationId,
+            )
+        }
     }
 
     private fun String.toReturnedComment(): DantotsuComment {

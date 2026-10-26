@@ -5,6 +5,7 @@ import com.nuvio.app.core.anilist.AniListAiringPage
 import com.nuvio.app.core.anilist.AniListClient
 import com.nuvio.app.core.anilist.AniListMedia
 import com.nuvio.app.core.anilist.AniListPage
+import com.nuvio.app.core.anilist.ANILIST_MEDIA_FIELDS
 import com.nuvio.app.core.anilist.toMetaPreview
 import com.nuvio.app.features.catalog.CatalogPage
 import com.nuvio.app.features.catalog.dedupeCatalogItems
@@ -116,6 +117,31 @@ object AniListCatalogSource {
             ) ?: return@mapIndexedNotNull null
             catalog.id to page
         }.toMap()
+    }
+
+    /** Enriches ids supplied by an external ranking without changing their external order. */
+    suspend fun resolveMediaIds(
+        ids: List<Int>,
+        forceRefresh: Boolean = false,
+    ): Map<Int, MetaPreview> = withContext(Dispatchers.Default) {
+        val distinctIds = ids.distinct().filter { it > 0 }
+        if (distinctIds.isEmpty()) return@withContext emptyMap()
+        val data = AniListClient.query(
+            query = """
+                query {
+                    Page(page: 1, perPage: ${distinctIds.size.coerceAtMost(50)}) {
+                        media(id_in: [${distinctIds.joinToString(",")}], type: ANIME) {
+                            $ANILIST_MEDIA_FIELDS
+                        }
+                    }
+                }
+            """.trimIndent(),
+            forceRefresh = forceRefresh,
+        )
+        val page = data["Page"]?.let {
+            AniListClient.json.decodeFromJsonElement(AniListPage.serializer(), it)
+        } ?: return@withContext emptyMap()
+        page.media.mapNotNull { media -> media.toMetaPreview()?.let { media.id to it } }.toMap()
     }
 
     private fun AniListCatalog.pageSelection(

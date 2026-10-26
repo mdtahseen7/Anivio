@@ -6,10 +6,7 @@ import com.nuvio.app.features.addons.enabledAddons
 import com.nuvio.app.features.anime.PublicAnimeSource
 import com.nuvio.app.features.anilist.AniListHeroArtwork
 import com.nuvio.app.features.anilist.AniListCatalogSource
-import com.nuvio.app.core.anilist.AniZipClient
-import com.nuvio.app.core.anilist.KitsuClient
-import com.nuvio.app.core.anilist.anilistId
-import com.nuvio.app.core.anilist.malId
+import com.nuvio.app.core.anilist.DailyAnimeRankingsClient
 import com.nuvio.app.features.content.ContentMode
 import com.nuvio.app.features.content.ContentModeRepository
 import com.nuvio.app.features.catalog.CatalogPage
@@ -479,7 +476,7 @@ object HomeRepository {
                 forceRefresh = forceRefresh,
             )
 
-            HomeCatalogSource.KITSU -> fetchKitsuTopToday(
+            HomeCatalogSource.DAILY_RANKING -> fetchDailyTopToday(
                 forceRefresh = forceRefresh,
             )
         }
@@ -527,38 +524,27 @@ object HomeRepository {
                 supportsPagination = supportsPagination,
             )
 
-            HomeCatalogSource.KITSU -> CatalogTarget.AniList(
+            HomeCatalogSource.DAILY_RANKING -> CatalogTarget.AniList(
                 catalogId = "trending",
                 contentType = type,
                 supportsPagination = false,
             )
         }
 
-    private suspend fun fetchKitsuTopToday(forceRefresh: Boolean): CatalogPage {
-        val ranked = KitsuClient.trendingAnime(
-            contentType = "series",
-            limit = 20,
+    private suspend fun fetchDailyTopToday(forceRefresh: Boolean): CatalogPage {
+        val ranked = DailyAnimeRankingsClient.fetch(limit = 10, forceRefresh = forceRefresh)
+        val metadataById = AniListCatalogSource.resolveMediaIds(
+            ids = ranked.map { it.anilistId },
             forceRefresh = forceRefresh,
         )
-        val mapped = ranked.mapNotNull { anime ->
-            val kitsuId = anime.id.toIntOrNull() ?: return@mapNotNull null
-            val mapping = AniZipClient.mappingsByKitsuId(kitsuId, forceRefresh)
-            val canonicalId = mapping?.anilistId()?.takeIf { it.isNotBlank() }?.let { "anilist:$it" }
-                ?: mapping?.malId()?.takeIf { it.isNotBlank() }?.let { "mal:$it" }
-                ?: return@mapNotNull null
-            MetaPreview(
-                id = canonicalId,
-                type = "series",
-                name = anime.title,
-                poster = anime.posterUrl,
-                description = anime.synopsis,
-                releaseInfo = anime.startDate?.take(4),
-                rawReleaseDate = anime.startDate,
-                popularity = anime.userCount?.toDouble(),
-                voteCount = anime.userCount,
-                imdbRating = anime.rating?.toString(),
+        val mapped = ranked.mapNotNull { ranking ->
+            val metadata = metadataById[ranking.anilistId] ?: return@mapNotNull null
+            metadata.copy(
+                // The external feed owns the daily order and count; AniList supplies stable
+                // display metadata and the canonical detail route for each ranked id.
+                popularity = ranking.dailyCount.toDouble(),
             )
-        }.distinctBy(MetaPreview::stableKey).take(10)
+        }.take(10)
         return CatalogPage(
             items = mapped,
             rawItemCount = mapped.size,
