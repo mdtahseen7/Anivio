@@ -1,6 +1,7 @@
 package com.nuvio.app.features.addons
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -94,10 +96,17 @@ internal fun AddonsSettingsPageContent(
     var formMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var installModalState by remember { mutableStateOf<AddonInstallModalState?>(null) }
     var addonPendingDeletionUrl by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedProviderType by rememberSaveable { mutableStateOf<String?>(null) }
     val enterAddonUrlMessage = stringResource(Res.string.addons_error_enter_url)
     val usePersonalMediaCopy = AppFeaturePolicy.personalMediaAddonCopyEnabled
 
     val overview = remember(uiState.addons) { uiState.addons.toOverview() }
+    val providerTypes = remember(uiState.addons) { uiState.addons.contentTypes() }
+    LaunchedEffect(providerTypes) {
+        if (selectedProviderType !in providerTypes) {
+            selectedProviderType = providerTypes.firstOrNull()
+        }
+    }
 
     Column(
         modifier = modifier,
@@ -140,6 +149,32 @@ internal fun AddonsSettingsPageContent(
             },
         )
 
+        if (providerTypes.isNotEmpty()) {
+            SectionHeader(stringResource(Res.string.addons_section_provider_priority))
+            ProviderPriorityCard(
+                providerTypes = providerTypes,
+                selectedType = selectedProviderType ?: providerTypes.first(),
+                addons = AddonRepository.addonsForContentType(
+                    selectedProviderType ?: providerTypes.first(),
+                ),
+                onTypeSelected = { selectedProviderType = it },
+                onMoveUp = { index ->
+                    AddonRepository.movePreferredAddon(
+                        selectedProviderType ?: providerTypes.first(),
+                        index,
+                        index - 1,
+                    )
+                },
+                onMoveDown = { index ->
+                    AddonRepository.movePreferredAddon(
+                        selectedProviderType ?: providerTypes.first(),
+                        index,
+                        index + 1,
+                    )
+                },
+            )
+        }
+
         SectionHeader(stringResource(Res.string.addons_section_installed))
         if (uiState.addons.isEmpty()) {
             EmptyStateCard(usePersonalMediaCopy = usePersonalMediaCopy)
@@ -168,6 +203,8 @@ internal fun AddonsSettingsPageContent(
                             forceRefresh = true,
                         )
                     },
+                    onTestClick = { AddonRepository.testAddon(addon.manifestUrl) },
+                    onClearCacheClick = { AddonRepository.clearAddonCache(addon.manifestUrl) },
                     onEnabledChange = { enabled ->
                         AddonRepository.setAddonEnabled(addon.manifestUrl, enabled)
                     },
@@ -355,6 +392,116 @@ private fun AddAddonCard(
     }
 }
 
+@Composable
+private fun ProviderPriorityCard(
+    providerTypes: List<String>,
+    selectedType: String,
+    addons: List<ManagedAddon>,
+    onTypeSelected: (String) -> Unit,
+    onMoveUp: (Int) -> Unit,
+    onMoveDown: (Int) -> Unit,
+) {
+    NuvioSurfaceCard {
+        Text(
+            text = stringResource(Res.string.addons_provider_priority_title),
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = stringResource(Res.string.addons_provider_priority_description),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(modifier = Modifier.height(14.dp))
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            providerTypes.forEach { type ->
+                Surface(
+                    modifier = Modifier.clickable { onTypeSelected(type) },
+                    shape = RoundedCornerShape(50),
+                    color = if (type == selectedType) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    },
+                ) {
+                    Text(
+                        text = type.replaceFirstChar(Char::uppercase),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(14.dp))
+        if (addons.isEmpty()) {
+            Text(
+                text = stringResource(Res.string.addons_provider_priority_empty),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            addons.forEachIndexed { index, addon ->
+                ProviderPriorityRow(
+                    addon = addon,
+                    isFirst = index == 0,
+                    isLast = index == addons.lastIndex,
+                    onMoveUp = { onMoveUp(index) },
+                    onMoveDown = { onMoveDown(index) },
+                )
+                if (index != addons.lastIndex) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProviderPriorityRow(
+    addon: ManagedAddon,
+    isFirst: Boolean,
+    isLast: Boolean,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AddonIconBadge(
+            imageUrl = addon.manifest?.logoUrl,
+            icon = Icons.Rounded.Extension,
+            tint = MaterialTheme.colorScheme.primary,
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = addon.displayTitle,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            NuvioInfoBadge(text = addon.healthStatus.label())
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            TextButton(enabled = !isFirst, onClick = onMoveUp) {
+                Text(stringResource(Res.string.addons_move_up))
+            }
+            TextButton(enabled = !isLast, onClick = onMoveDown) {
+                Text(stringResource(Res.string.addons_move_down))
+            }
+        }
+    }
+}
+
 private sealed interface AddonInstallModalState {
     val isBusy: Boolean
 
@@ -412,6 +559,8 @@ private fun InstalledAddonCard(
     onMoveUpClick: (() -> Unit)?,
     onMoveDownClick: (() -> Unit)?,
     onRefreshClick: () -> Unit,
+    onTestClick: () -> Unit,
+    onClearCacheClick: () -> Unit,
     onEnabledChange: (Boolean) -> Unit,
     onConfigureClick: (() -> Unit)?,
     onDeleteClick: () -> Unit,
@@ -473,8 +622,16 @@ private fun InstalledAddonCard(
                             onDismissRequest = { actionsExpanded = false },
                         ) {
                             DropdownMenuItem(
-                                text = { Text("Refresh") },
+                                text = { Text(stringResource(Res.string.addons_test_provider)) },
+                                onClick = { actionsExpanded = false; onTestClick() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(Res.string.addons_refresh)) },
                                 onClick = { actionsExpanded = false; onRefreshClick() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(Res.string.addons_clear_cache)) },
+                                onClick = { actionsExpanded = false; onClearCacheClick() },
                             )
                             onConfigureClick?.let { onConfigure ->
                                 DropdownMenuItem(
@@ -515,12 +672,7 @@ private fun InstalledAddonCard(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     NuvioInfoBadge(
-                        text = when {
-                            !addon.enabled -> stringResource(Res.string.addons_badge_disabled)
-                            addon.isRefreshing -> stringResource(Res.string.addons_badge_refreshing)
-                            manifest != null -> stringResource(Res.string.addons_badge_active)
-                            else -> stringResource(Res.string.addons_badge_unavailable)
-                        },
+                        text = addon.healthStatus.label(),
                     )
                     manifest?.let {
                         NuvioInfoBadge(text = stringResource(Res.string.addons_badge_resources, it.resources.size))
@@ -575,11 +727,28 @@ private fun InstalledAddonCard(
                                 color = MaterialTheme.colorScheme.error,
                             )
                         }
+                        addon.lastFailureReason?.let { lastFailure ->
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = stringResource(Res.string.addons_last_failure, lastFailure),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun AddonHealthStatus.label(): String = when (this) {
+    AddonHealthStatus.Healthy -> stringResource(Res.string.addons_badge_healthy)
+    AddonHealthStatus.Checking -> stringResource(Res.string.addons_badge_refreshing)
+    AddonHealthStatus.Failed -> stringResource(Res.string.addons_badge_failed)
+    AddonHealthStatus.Disabled -> stringResource(Res.string.addons_badge_disabled)
+    AddonHealthStatus.Unavailable -> stringResource(Res.string.addons_badge_unavailable)
 }
 
 @Composable

@@ -70,6 +70,7 @@ object AddonRepository {
 
         val storedUrls = dedupeManifestUrls(AddonStorage.loadInstalledAddonUrls(currentProfileId))
         val enabledByUrl = loadLocalEnabledStates()
+        val failureReasonsByUrl = loadLocalFailureReasons()
         log.d { "initialize() — local addon count: ${storedUrls.size}" }
         if (storedUrls.isEmpty()) return
 
@@ -79,8 +80,10 @@ object AddonRepository {
                 existingByUrl[manifestUrl].toPendingAddon(
                     manifestUrl = manifestUrl,
                     enabled = enabledByUrl[manifestUrl],
+                    lastFailureReason = failureReasonsByUrl[manifestUrl],
                 )
             },
+            preferredAddonUrlsByType = AddonStorage.loadPreferredAddonUrls(currentProfileId),
         )
 
         storedUrls.forEach { manifestUrl ->
@@ -114,6 +117,12 @@ object AddonRepository {
 
     suspend fun pullFromServer(profileId: Int) {
         currentProfileId = resolveEffectiveProfileId(profileId)
+        val storedPreferences = AddonStorage.loadPreferredAddonUrls(currentProfileId)
+        if (storedPreferences.isNotEmpty()) {
+            _uiState.update { current ->
+                current.copy(preferredAddonUrlsByType = storedPreferences)
+            }
+        }
         log.i { "pullFromServer() — profileId=$profileId, initialized=$initialized, pulledFromServer=$pulledFromServer" }
         runCatching {
             val rows = SupabaseProvider.client.postgrest
@@ -172,12 +181,14 @@ object AddonRepository {
                 if (localUrls.isNotEmpty()) {
                     log.w { "pullFromServer() — remote empty while local has ${localUrls.size} addons; preserving local addons" }
                     val enabledByUrl = loadLocalEnabledStates()
+                    val failureReasonsByUrl = loadLocalFailureReasons()
                     val existingByUrl = _uiState.value.addons.associateBy(ManagedAddon::manifestUrl)
-                    _uiState.value = AddonsUiState(
+                    _uiState.value = _uiState.value.copy(
                         addons = localUrls.map { url ->
                             existingByUrl[url].toPendingAddon(
                                 manifestUrl = url,
                                 enabled = enabledByUrl[url],
+                                lastFailureReason = failureReasonsByUrl[url],
                             )
                         },
                     )
@@ -196,13 +207,15 @@ object AddonRepository {
             }
 
             val existingByUrl = _uiState.value.addons.associateBy(ManagedAddon::manifestUrl)
-            _uiState.value = AddonsUiState(
+            val failureReasonsByUrl = loadLocalFailureReasons()
+            _uiState.value = _uiState.value.copy(
                 addons = urls.map { url ->
                     val row = rowsByUrl[url]
                     existingByUrl[url].toPendingAddon(
                         manifestUrl = url,
                         userSetName = row?.name?.takeIf { it.isNotBlank() },
                         enabled = row?.enabled,
+                        lastFailureReason = failureReasonsByUrl[url],
                     )
                 },
             )
@@ -336,6 +349,59 @@ object AddonRepository {
         }
     }
 
+    fun testAddon(manifestUrl: String) {
+        refreshAddon(manifestUrl = manifestUrl, forceRefresh = true)
+    }
+
+    fun clearAddonCache(manifestUrl: String) {
+        clearAddonHttpCache()
+        refreshAddon(manifestUrl = manifestUrl, forceRefresh = true)
+    }
+
+    fun addonsForContentType(type: String): List<ManagedAddon> {
+        val normalizedType = type.trim().lowercase()
+        val matching = _uiState.value.addons.filter { it.supportsContentType(normalizedType) }
+        val preferredPosition = _uiState.value.preferredAddonUrlsByType[normalizedType]
+            .orEmpty()
+            .withIndex()
+            .associate { it.value to it.index }
+        return matching.sortedWith(
+            compareBy<ManagedAddon> { preferredPosition[it.manifestUrl] ?: Int.MAX_VALUE }
+                .thenBy { _uiState.value.addons.indexOf(it) },
+        )
+    }
+
+    fun setPreferredAddonOrder(type: String, manifestUrls: List<String>) {
+        if (isUsingPrimaryAddonsFromSecondaryProfile()) return
+        val normalizedType = type.trim().lowercase()
+        if (normalizedType.isBlank()) return
+        val installedUrls = _uiState.value.addons
+            .filter { it.supportsContentType(normalizedType) }
+            .map { it.manifestUrl }
+        val allowed = installedUrls.toSet()
+        val normalizedOrder = (manifestUrls.filter { it in allowed } + installedUrls)
+            .distinct()
+            .filter { it in allowed }
+        _uiState.update { current ->
+            current.copy(
+                preferredAddonUrlsByType = current.preferredAddonUrlsByType +
+                    (normalizedType to normalizedOrder),
+            )
+        }
+        AddonStorage.savePreferredAddonUrls(
+            currentProfileId,
+            _uiState.value.preferredAddonUrlsByType,
+        )
+    }
+
+    fun movePreferredAddon(type: String, fromIndex: Int, toIndex: Int) {
+        val ordered = addonsForContentType(type).toMutableList()
+        if (fromIndex !in ordered.indices || toIndex !in ordered.indices) return
+        val moving = ordered.removeAt(fromIndex)
+        ordered.add(toIndex, moving)
+        setPreferredAddonOrder(type, ordered.map { it.manifestUrl })
+    }
+
     fun refreshAll() {
         _uiState.value.addons.filter { it.enabled }.distinctBy { it.manifestUrl }.forEach { addon ->
             refreshAddon(
@@ -382,9 +448,11 @@ object AddonRepository {
                                         )
                                     },
                                     onFailure = { error ->
+                                        val reason = error.message ?: getString(Res.string.addon_load_manifest_failed)
                                         addon.copy(
                                             isRefreshing = false,
-                                            errorMessage = error.message ?: getString(Res.string.addon_load_manifest_failed),
+                                            errorMessage = reason,
+                                            lastFailureReason = reason,
                                         )
                                     },
                                 )
@@ -392,6 +460,7 @@ object AddonRepository {
                         },
                     )
                 }
+                persist()
             } finally {
                 if (activeRefreshJobs[manifestUrl] === refreshJob) {
                     activeRefreshJobs.remove(manifestUrl)
@@ -467,10 +536,20 @@ object AddonRepository {
             currentProfileId,
             addons.associate { it.manifestUrl to it.enabled },
         )
+        AddonStorage.saveAddonFailureReasons(
+            currentProfileId,
+            addons.mapNotNull { addon ->
+                addon.lastFailureReason?.let { addon.manifestUrl to it }
+            }.toMap(),
+        )
     }
 
     private fun loadLocalEnabledStates(): Map<String, Boolean> =
         AddonStorage.loadAddonEnabledStates(currentProfileId)
+            .mapKeys { (url, _) -> ensureManifestSuffix(url) }
+
+    private fun loadLocalFailureReasons(): Map<String, String> =
+        AddonStorage.loadAddonFailureReasons(currentProfileId)
             .mapKeys { (url, _) -> ensureManifestSuffix(url) }
 
     private fun cancelActiveRefreshes() {
@@ -493,6 +572,7 @@ private fun ManagedAddon?.toPendingAddon(
     manifestUrl: String,
     userSetName: String? = null,
     enabled: Boolean? = null,
+    lastFailureReason: String? = null,
 ): ManagedAddon =
     when {
         this == null -> ManagedAddon(
@@ -500,17 +580,20 @@ private fun ManagedAddon?.toPendingAddon(
             isRefreshing = enabled ?: true,
             userSetName = userSetName,
             enabled = enabled ?: true,
+            lastFailureReason = lastFailureReason,
         )
         manifest != null -> copy(
             manifestUrl = manifestUrl,
             isRefreshing = false,
             userSetName = userSetName ?: this.userSetName,
             enabled = enabled ?: this.enabled,
+            lastFailureReason = lastFailureReason ?: this.lastFailureReason,
         )
         isRefreshing -> copy(
             manifestUrl = manifestUrl,
             userSetName = userSetName ?: this.userSetName,
             enabled = enabled ?: this.enabled,
+            lastFailureReason = lastFailureReason ?: this.lastFailureReason,
         )
         else -> copy(
             manifestUrl = manifestUrl,
@@ -518,6 +601,7 @@ private fun ManagedAddon?.toPendingAddon(
             errorMessage = null,
             userSetName = userSetName ?: this.userSetName,
             enabled = enabled ?: this.enabled,
+            lastFailureReason = lastFailureReason ?: this.lastFailureReason,
         )
     }
 

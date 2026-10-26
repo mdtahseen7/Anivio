@@ -28,6 +28,8 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.BookmarkBorder
+import androidx.compose.material.icons.rounded.Brightness6
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.MoreVert
@@ -41,7 +43,9 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -73,6 +77,7 @@ import com.nuvio.app.core.ui.NuvioTheme
 import com.nuvio.app.core.ui.PlatformBackHandler
 import com.nuvio.app.features.anilist.recordAniListMangaChapterRead
 import com.nuvio.app.features.details.MangaReaderSettingsRepository
+import com.nuvio.app.features.details.MangaImageScaleMode
 import com.nuvio.app.features.details.MangaReadingMode
 import com.nuvio.app.features.details.MangaReaderBookmark
 import com.nuvio.app.features.details.MangaReaderProgressRepository
@@ -92,6 +97,8 @@ import coil3.network.NetworkHeaders
 import coil3.network.httpHeaders
 import coil3.request.ImageRequest
 import com.nuvio.app.features.player.EnterImmersivePlayerMode
+import com.nuvio.app.features.player.rememberPlayerGestureController
+import kotlin.math.roundToInt
 
 private const val CONTROLS_AUTO_HIDE_MS = 3000L
 private const val READER_SHEET_SCRIM = 0xFF16181D
@@ -137,6 +144,14 @@ internal fun MangaReaderHost(request: MangaReaderRequest) {
         providerId = request.providerId,
         chapterId = request.chapter.id,
     )
+    LaunchedEffect(progressKey) {
+        MangaReaderProgressRepository.recordChapterOpened(
+            key = progressKey,
+            title = request.title,
+            chapterId = request.chapter.id,
+            chapterNumber = request.chapter.number,
+        )
+    }
     MangaReaderDialog(
         title = request.title,
         sourceName = request.provider?.name ?: "Offline",
@@ -150,6 +165,9 @@ internal fun MangaReaderHost(request: MangaReaderRequest) {
         onChapterCompleted = { completed ->
             scope.launch { recordAniListMangaChapterRead(request.metaId, completed.number) }
         },
+        recentHistory = MangaReaderProgressRepository.recentHistory(
+            contentKeyPrefix = progressKey.substringBeforeLast('|') + "|",
+        ),
     )
 }
 
@@ -166,6 +184,7 @@ internal fun MangaReaderDialog(
     onDismiss: () -> Unit,
     onSelectChapter: (MangaPluginChapter) -> Unit,
     onChapterCompleted: (MangaPluginChapter) -> Unit,
+    recentHistory: List<com.nuvio.app.features.details.MangaReaderHistoryEntry> = emptyList(),
 ) {
     MangaReaderSettingsRepository.ensureLoaded()
     // Reuse the existing platform immersive abstraction. Android hides system bars;
@@ -173,6 +192,10 @@ internal fun MangaReaderDialog(
     EnterImmersivePlayerMode(keepScreenAwake = false)
     val readerSettings by MangaReaderSettingsRepository.uiState.collectAsStateWithLifecycle()
     val mode = readerSettings.readingMode
+    val brightnessController = rememberPlayerGestureController()
+    var brightness by remember(brightnessController) {
+        mutableStateOf(brightnessController?.currentBrightness() ?: 1f)
+    }
     val isPager = mode != MangaReadingMode.WEBTOON
 
     val scope = rememberCoroutineScope()
@@ -269,9 +292,18 @@ internal fun MangaReaderDialog(
         onChapterCompleted(chapter)
     }
 
+    val chapterIndex = chapters.indexOfFirst { it.id == chapter.id }
+    val previous = chapters.getOrNull(chapterIndex - 1)
+    val next = chapters.getOrNull(chapterIndex + 1)
+
     LaunchedEffect(currentPage, webtoonAtEnd, pages.size, progressKey, positionRestored) {
         if (positionRestored && pages.isNotEmpty() && (isPager && currentPage == pages.size || !isPager && webtoonAtEnd)) {
+            val wasNewlyCompleted = !completionReported
             reportChapterCompletedOnce()
+            if (wasNewlyCompleted && readerSettings.autoAdvanceChapters && next != null) {
+                delay(700)
+                onSelectChapter(next)
+            }
         }
     }
 
@@ -317,10 +349,6 @@ internal fun MangaReaderDialog(
         MangaReaderProgressRepository.isBookmarked(progressKey, currentPage - 1, currentOffset)
     }
 
-    val chapterIndex = chapters.indexOfFirst { it.id == chapter.id }
-    val previous = chapters.getOrNull(chapterIndex - 1)
-    val next = chapters.getOrNull(chapterIndex + 1)
-
     // Advancing to a later chapter counts the current one as read even when the
     // last page was never reached (picker jump, next button). Backward moves
     // never report.
@@ -363,12 +391,16 @@ internal fun MangaReaderDialog(
                                     zoomedPages.remove(index)
                                 }
                             },
+                            scaleMode = readerSettings.imageScaleMode,
+                            dataSaverEnabled = readerSettings.dataSaverEnabled,
+                            fillHeight = true,
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
                     else -> LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         state = listState,
+                        userScrollEnabled = zoomedPages.isEmpty(),
                     ) {
                         itemsIndexed(pages, key = { index, page -> "${page.url}-$index" }) { index, page ->
                             ZoomableMangaPage(
@@ -381,6 +413,9 @@ internal fun MangaReaderDialog(
                                         zoomedPages.remove(index)
                                     }
                                 },
+                                scaleMode = readerSettings.imageScaleMode,
+                                dataSaverEnabled = readerSettings.dataSaverEnabled,
+                                fillHeight = false,
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }
@@ -412,6 +447,12 @@ internal fun MangaReaderDialog(
                     ReaderBottomBar(
                         currentPage = currentPage,
                         totalPages = pages.size,
+                        progressFraction = readerProgressFraction(
+                            isPager = isPager,
+                            currentPage = currentPage,
+                            totalPages = pages.size,
+                            listState = listState,
+                        ),
                         previous = previous,
                         next = next,
                         rightToLeft = mode == MangaReadingMode.RIGHT_TO_LEFT,
@@ -424,6 +465,17 @@ internal fun MangaReaderDialog(
     if (settingsOpen) {
         ReaderSettingsSheet(
             bookmarks = MangaReaderProgressRepository.bookmarksFor(progressKey),
+            recentHistory = recentHistory,
+            onSelectHistory = { entry ->
+                chapters.firstOrNull { it.id == entry.chapterId }?.let {
+                    goToChapter(it)
+                    settingsOpen = false
+                }
+            },
+            brightness = brightness,
+            onBrightnessChange = { value ->
+                brightness = brightnessController?.setBrightness(value) ?: value
+            },
             onDismiss = { settingsOpen = false },
             onSelectBookmark = { bookmark ->
                 if (pages.isNotEmpty()) {
@@ -450,6 +502,9 @@ private fun ZoomableMangaPage(
     page: MangaPluginPage,
     onTap: (Float) -> Unit,
     onZoomChanged: (Boolean) -> Unit,
+    scaleMode: MangaImageScaleMode,
+    dataSaverEnabled: Boolean,
+    fillHeight: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val url = page.url
@@ -458,6 +513,7 @@ private fun ZoomableMangaPage(
     var offset by remember(url) { mutableStateOf(Offset.Zero) }
     var size by remember(url) { mutableStateOf(IntSize.Zero) }
     var retryAttempt by remember(url) { mutableStateOf(0) }
+    var hasFailed by remember(url) { mutableStateOf(false) }
 
     fun applyZoom(next: Float) {
         val clamped = next.coerceIn(MIN_ZOOM, MAX_ZOOM)
@@ -472,7 +528,7 @@ private fun ZoomableMangaPage(
         offset = if (next <= MIN_ZOOM) Offset.Zero else offset + panChange
         onZoomChanged(next > MIN_ZOOM)
     }
-    val imageRequest = remember(url, page.headers, retryAttempt) {
+    val imageRequest = remember(url, page.headers, retryAttempt, dataSaverEnabled) {
         ImageRequest.Builder(platformContext)
             .data(url)
             .httpHeaders(
@@ -484,39 +540,88 @@ private fun ZoomableMangaPage(
             )
             // Keep provider headers in the cache identity so a cached anonymous response
             // cannot mask an authenticated image request.
-            .memoryCacheKey("manga:$url:${page.headers.toSortedMap()}:$retryAttempt")
-            .diskCacheKey("manga:$url:${page.headers.toSortedMap()}:$retryAttempt")
+            .memoryCacheKey("manga:$url:${page.headers.toSortedMap()}:$retryAttempt:${if (dataSaverEnabled) "small" else "full"}")
+            .diskCacheKey("manga:$url:${page.headers.toSortedMap()}:$retryAttempt:${if (dataSaverEnabled) "small" else "full"}")
+            .apply {
+                if (dataSaverEnabled && fillHeight) size(1600, 2400)
+            }
             .build()
     }
-    AsyncImage(
-        model = imageRequest,
-        contentDescription = null,
-        modifier = modifier
-            .onSizeChanged { size = it }
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-                translationX = offset.x
-                translationY = offset.y
-            }
-            // Let the pager/list win ordinary one-finger drags at 1x. The
-            // transform gesture still receives pinch gestures, and takes over
-            // panning after the page has been zoomed.
-            .transformable(
-                state = transformable,
-                canPan = { scale > MIN_ZOOM },
-            )
-            .pointerInput(url) {
-                detectTapGestures(
-                    onTap = {
-                        if (size.width > 0) onTap((it.x / size.width).coerceIn(0f, 1f))
-                    },
-                    onDoubleTap = { if (scale > MIN_ZOOM) applyZoom(MIN_ZOOM) else applyZoom(DOUBLE_TAP_ZOOM) },
+    Box(modifier = modifier) {
+        AsyncImage(
+            model = imageRequest,
+            contentDescription = null,
+            modifier = (if (fillHeight) Modifier.fillMaxSize() else Modifier.fillMaxWidth())
+                .onSizeChanged { size = it }
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    translationX = offset.x
+                    translationY = offset.y
+                }
+                // Let the pager/list win ordinary one-finger drags at 1x. The
+                // transform gesture still receives pinch gestures, and takes over
+                // panning after the page has been zoomed.
+                .transformable(
+                    state = transformable,
+                    canPan = { scale > MIN_ZOOM },
                 )
+                .pointerInput(url) {
+                    detectTapGestures(
+                        onTap = {
+                            if (size.width > 0) onTap((it.x / size.width).coerceIn(0f, 1f))
+                        },
+                        onDoubleTap = { if (scale > MIN_ZOOM) applyZoom(MIN_ZOOM) else applyZoom(DOUBLE_TAP_ZOOM) },
+                    )
+                },
+            contentScale = when (scaleMode) {
+                MangaImageScaleMode.FIT_WIDTH -> ContentScale.FillWidth
+                MangaImageScaleMode.FIT_SCREEN -> ContentScale.Fit
+                MangaImageScaleMode.ORIGINAL -> ContentScale.None
             },
-        contentScale = ContentScale.FillWidth,
-        onError = { if (retryAttempt < 2) retryAttempt++ },
-    )
+            onError = {
+                if (retryAttempt < 2) {
+                    retryAttempt++
+                } else {
+                    hasFailed = true
+                }
+            },
+        )
+        if (hasFailed) {
+            Surface(
+                modifier = Modifier.align(Alignment.Center).clickable {
+                    retryAttempt = 0
+                    hasFailed = false
+                },
+                color = Color.Black.copy(alpha = 0.76f),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+            ) {
+                Text(
+                    text = "Retry image",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                )
+            }
+        }
+    }
+}
+
+private fun readerProgressFraction(
+    isPager: Boolean,
+    currentPage: Int,
+    totalPages: Int,
+    listState: androidx.compose.foundation.lazy.LazyListState,
+): Float {
+    if (totalPages <= 0) return 0f
+    if (isPager) return (currentPage.toFloat() / totalPages).coerceIn(0f, 1f)
+    val first = listState.layoutInfo.visibleItemsInfo.firstOrNull() ?: return 0f
+    val withinPage = if (first.size > 0) {
+        (-first.offset).coerceIn(0, first.size).toFloat() / first.size.toFloat()
+    } else {
+        0f
+    }
+    return ((first.index + withinPage) / totalPages.toFloat()).coerceIn(0f, 1f)
 }
 
 @Composable
@@ -608,13 +713,14 @@ private fun ReaderTopBar(
 private fun ReaderBottomBar(
     currentPage: Int,
     totalPages: Int,
+    progressFraction: Float,
     previous: MangaPluginChapter?,
     next: MangaPluginChapter?,
     rightToLeft: Boolean,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
 ) {
-    val progress = if (totalPages == 0) 0f else currentPage.toFloat() / totalPages
+    val progress = progressFraction.coerceIn(0f, 1f)
     val previousIcon = if (rightToLeft) Icons.Rounded.KeyboardArrowRight else Icons.Rounded.KeyboardArrowLeft
     val nextIcon = if (rightToLeft) Icons.Rounded.KeyboardArrowLeft else Icons.Rounded.KeyboardArrowRight
     Box(
@@ -640,7 +746,7 @@ private fun ReaderBottomBar(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
-                    text = "Page $currentPage of $totalPages",
+                    text = "Page $currentPage of $totalPages · ${(progress * 100).roundToInt()}%",
                     color = Color.White,
                     style = MaterialTheme.typography.labelMedium,
                 )
@@ -740,6 +846,10 @@ internal fun ChapterPickerDropdown(
 @Composable
 private fun ReaderSettingsSheet(
     bookmarks: List<MangaReaderBookmark>,
+    recentHistory: List<com.nuvio.app.features.details.MangaReaderHistoryEntry>,
+    onSelectHistory: (com.nuvio.app.features.details.MangaReaderHistoryEntry) -> Unit,
+    brightness: Float,
+    onBrightnessChange: (Float) -> Unit,
     onDismiss: () -> Unit,
     onSelectBookmark: (MangaReaderBookmark) -> Unit,
 ) {
@@ -786,6 +896,97 @@ private fun ReaderSettingsSheet(
                 }
             }
             Text(
+                "Brightness",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Icon(Icons.Rounded.Brightness6, contentDescription = null, tint = Color.White.copy(alpha = 0.8f))
+                Slider(
+                    value = brightness,
+                    onValueChange = onBrightnessChange,
+                    valueRange = 0.05f..1f,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    "${(brightness * 100).roundToInt()}%",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+            Text(
+                "Image scaling",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+            MangaImageScaleMode.entries.forEach { scaleMode ->
+                val selected = readerSettings.imageScaleMode == scaleMode
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .selectable(selected = selected, role = Role.RadioButton) {
+                            MangaReaderSettingsRepository.setImageScaleMode(scaleMode)
+                        }
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RadioButton(selected = selected, onClick = null)
+                    Text(scaleMode.title, color = Color.White, style = MaterialTheme.typography.bodyLarge)
+                }
+            }
+            ReaderToggleRow(
+                title = "Auto-advance chapters",
+                description = "Open the next chapter after reaching the end.",
+                checked = readerSettings.autoAdvanceChapters,
+                onCheckedChange = MangaReaderSettingsRepository::setAutoAdvanceChapters,
+            )
+            ReaderToggleRow(
+                title = "Data saver",
+                description = "Reduce speculative page loading while reading.",
+                checked = readerSettings.dataSaverEnabled,
+                onCheckedChange = MangaReaderSettingsRepository::setDataSaverEnabled,
+            )
+            if (recentHistory.isNotEmpty()) {
+                Text(
+                    "Recent chapters",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+                recentHistory.forEach { entry ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelectHistory(entry) }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Icon(Icons.Rounded.History, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Chapter ${entry.chapterNumber}", color = Color.White, style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                entry.title,
+                                color = Color.White.copy(alpha = 0.6f),
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
+            Text(
                 "Bookmarks",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
@@ -827,6 +1028,26 @@ private fun ReaderSettingsSheet(
     }
 }
 
+@Composable
+private fun ReaderToggleRow(
+    title: String,
+    description: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, color = Color.White, style = MaterialTheme.typography.bodyLarge)
+            Text(description, color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
 private val MangaReadingMode.title: String
     get() = when (this) {
         MangaReadingMode.WEBTOON -> "Webtoon"
@@ -839,6 +1060,13 @@ private val MangaReadingMode.description: String
         MangaReadingMode.WEBTOON -> "Continuous vertical scroll, one long strip."
         MangaReadingMode.LEFT_TO_RIGHT -> "Swipe pages left to right."
         MangaReadingMode.RIGHT_TO_LEFT -> "Classic manga direction, swipe right to left."
+    }
+
+private val MangaImageScaleMode.title: String
+    get() = when (this) {
+        MangaImageScaleMode.FIT_WIDTH -> "Fit width"
+        MangaImageScaleMode.FIT_SCREEN -> "Fit screen"
+        MangaImageScaleMode.ORIGINAL -> "Original size"
     }
 
 @Preview

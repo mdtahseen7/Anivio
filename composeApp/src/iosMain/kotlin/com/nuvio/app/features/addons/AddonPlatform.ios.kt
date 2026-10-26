@@ -25,6 +25,8 @@ import platform.Foundation.NSUserDefaults
 actual object AddonStorage {
     private const val addonUrlsKey = "installed_manifest_urls"
     private const val addonEnabledStatesKey = "installed_manifest_enabled_states"
+    private const val addonFailureReasonsKey = "installed_manifest_failure_reasons"
+    private const val preferredAddonUrlsKey = "preferred_addon_urls"
 
     actual fun loadInstalledAddonUrls(profileId: Int): List<String> =
         NSUserDefaults.standardUserDefaults
@@ -59,7 +61,62 @@ actual object AddonStorage {
             forKey = "${addonEnabledStatesKey}_$profileId",
         )
     }
+
+    actual fun loadAddonFailureReasons(profileId: Int): Map<String, String> =
+        NSUserDefaults.standardUserDefaults
+            .stringForKey("${addonFailureReasonsKey}_$profileId")
+            .orEmpty()
+            .lineSequence()
+            .mapNotNull { line ->
+                val separator = line.indexOf('\t')
+                if (separator <= 0) null else {
+                    val url = line.substring(0, separator).trim()
+                    val reason = line.substring(separator + 1).trim()
+                    url.takeIf { it.isNotEmpty() }?.let { it to reason }
+                }
+            }
+            .toMap()
+
+    actual fun saveAddonFailureReasons(profileId: Int, reasons: Map<String, String>) {
+        val payload = reasons.entries.joinToString(separator = "\n") { (url, reason) ->
+            "$url\t${reason.replace("\n", " ")}"
+        }
+        NSUserDefaults.standardUserDefaults.setObject(
+            payload,
+            forKey = "${addonFailureReasonsKey}_$profileId",
+        )
+    }
+
+    actual fun loadPreferredAddonUrls(profileId: Int): Map<String, List<String>> =
+        NSUserDefaults.standardUserDefaults
+            .stringForKey("${preferredAddonUrlsKey}_$profileId")
+            .orEmpty()
+            .lineSequence()
+            .mapNotNull { line ->
+                val separator = line.indexOf('\t')
+                if (separator <= 0) null else {
+                    val type = line.substring(0, separator).trim()
+                    val urls = line.substring(separator + 1)
+                        .split('|')
+                        .map(String::trim)
+                        .filter(String::isNotEmpty)
+                    type.takeIf { it.isNotEmpty() }?.let { it to urls }
+                }
+            }
+            .toMap()
+
+    actual fun savePreferredAddonUrls(profileId: Int, preferences: Map<String, List<String>>) {
+        val payload = preferences.entries.joinToString(separator = "\n") { (type, urls) ->
+            "$type\t${urls.joinToString("|")}"
+        }
+        NSUserDefaults.standardUserDefaults.setObject(
+            payload,
+            forKey = "${preferredAddonUrlsKey}_$profileId",
+        )
+    }
 }
+
+internal actual fun clearAddonHttpCache() = Unit
 
 private fun parseEnabledStateLine(line: String): Pair<String, Boolean>? {
     val url = line.substringBefore("\t").trim().takeIf { it.isNotEmpty() } ?: return null

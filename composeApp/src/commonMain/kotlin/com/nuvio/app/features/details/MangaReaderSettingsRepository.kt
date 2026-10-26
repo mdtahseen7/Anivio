@@ -20,13 +20,25 @@ enum class MangaReadingMode {
     RIGHT_TO_LEFT,
 }
 
+enum class MangaImageScaleMode {
+    FIT_WIDTH,
+    FIT_SCREEN,
+    ORIGINAL,
+}
+
 data class MangaReaderSettingsUiState(
     val readingMode: MangaReadingMode = MangaReadingMode.WEBTOON,
+    val imageScaleMode: MangaImageScaleMode = MangaImageScaleMode.FIT_WIDTH,
+    val autoAdvanceChapters: Boolean = false,
+    val dataSaverEnabled: Boolean = false,
 )
 
 @Serializable
 private data class StoredMangaReaderSettings(
     val readingMode: MangaReadingMode = MangaReadingMode.WEBTOON,
+    val imageScaleMode: MangaImageScaleMode = MangaImageScaleMode.FIT_WIDTH,
+    val autoAdvanceChapters: Boolean = false,
+    val dataSaverEnabled: Boolean = false,
 )
 
 /**
@@ -56,10 +68,36 @@ object MangaReaderSettingsRepository {
         persist()
     }
 
+    fun setImageScaleMode(mode: MangaImageScaleMode) {
+        ensureLoaded()
+        if (_uiState.value.imageScaleMode == mode) return
+        _uiState.value = _uiState.value.copy(imageScaleMode = mode)
+        persist()
+    }
+
+    fun setAutoAdvanceChapters(enabled: Boolean) {
+        ensureLoaded()
+        if (_uiState.value.autoAdvanceChapters == enabled) return
+        _uiState.value = _uiState.value.copy(autoAdvanceChapters = enabled)
+        persist()
+    }
+
+    fun setDataSaverEnabled(enabled: Boolean) {
+        ensureLoaded()
+        if (_uiState.value.dataSaverEnabled == enabled) return
+        _uiState.value = _uiState.value.copy(dataSaverEnabled = enabled)
+        persist()
+    }
+
     fun exportPayload(): String {
         ensureLoaded()
         return json.encodeToString(
-            StoredMangaReaderSettings(readingMode = _uiState.value.readingMode),
+            StoredMangaReaderSettings(
+                readingMode = _uiState.value.readingMode,
+                imageScaleMode = _uiState.value.imageScaleMode,
+                autoAdvanceChapters = _uiState.value.autoAdvanceChapters,
+                dataSaverEnabled = _uiState.value.dataSaverEnabled,
+            ),
         )
     }
 
@@ -74,7 +112,12 @@ object MangaReaderSettingsRepository {
             json.decodeFromString<StoredMangaReaderSettings>(payload)
         }.getOrNull() ?: return false
         hasLoaded = true
-        _uiState.value = MangaReaderSettingsUiState(readingMode = stored.readingMode)
+        _uiState.value = MangaReaderSettingsUiState(
+            readingMode = stored.readingMode,
+            imageScaleMode = stored.imageScaleMode,
+            autoAdvanceChapters = stored.autoAdvanceChapters,
+            dataSaverEnabled = stored.dataSaverEnabled,
+        )
         persist()
         return true
     }
@@ -92,7 +135,12 @@ object MangaReaderSettingsRepository {
             json.decodeFromString<StoredMangaReaderSettings>(payload)
         }.getOrNull()
         _uiState.value = if (stored != null) {
-            MangaReaderSettingsUiState(readingMode = stored.readingMode)
+            MangaReaderSettingsUiState(
+                readingMode = stored.readingMode,
+                imageScaleMode = stored.imageScaleMode,
+                autoAdvanceChapters = stored.autoAdvanceChapters,
+                dataSaverEnabled = stored.dataSaverEnabled,
+            )
         } else {
             MangaReaderSettingsUiState()
         }
@@ -101,7 +149,12 @@ object MangaReaderSettingsRepository {
     private fun persist() {
         MangaReaderSettingsStorage.savePayload(
             json.encodeToString(
-                StoredMangaReaderSettings(readingMode = _uiState.value.readingMode),
+                StoredMangaReaderSettings(
+                    readingMode = _uiState.value.readingMode,
+                    imageScaleMode = _uiState.value.imageScaleMode,
+                    autoAdvanceChapters = _uiState.value.autoAdvanceChapters,
+                    dataSaverEnabled = _uiState.value.dataSaverEnabled,
+                ),
             ),
         )
     }

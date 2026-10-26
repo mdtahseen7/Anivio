@@ -154,7 +154,8 @@ object StreamsRepository {
             return
         }
 
-        val installedAddons = AddonRepository.uiState.value.addons.enabledAddons()
+        val installedAddons = AddonRepository.addonsForContentType(type)
+            .filter { it.enabled }
         val pluginScrapers = if (AppFeaturePolicy.pluginsEnabled) {
             PluginRepository.getEnabledScrapersForType(type)
         } else {

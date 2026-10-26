@@ -53,6 +53,7 @@ data class ManagedAddon(
     val enabled: Boolean = true,
     val isRefreshing: Boolean = false,
     val errorMessage: String? = null,
+    val lastFailureReason: String? = null,
 ) {
     val isActive: Boolean
         get() = enabled && manifest != null
@@ -63,10 +64,28 @@ data class ManagedAddon(
             ?: manifestUrl.substringBefore("?").substringAfterLast("/").ifBlank {
                 runBlocking { getString(Res.string.generic_addon) }
             }
+
+    val healthStatus: AddonHealthStatus
+        get() = when {
+            !enabled -> AddonHealthStatus.Disabled
+            isRefreshing -> AddonHealthStatus.Checking
+            manifest != null && errorMessage == null -> AddonHealthStatus.Healthy
+            errorMessage != null -> AddonHealthStatus.Failed
+            else -> AddonHealthStatus.Unavailable
+        }
+}
+
+enum class AddonHealthStatus {
+    Healthy,
+    Checking,
+    Failed,
+    Disabled,
+    Unavailable,
 }
 
 data class AddonsUiState(
     val addons: List<ManagedAddon> = emptyList(),
+    val preferredAddonUrlsByType: Map<String, List<String>> = emptyMap(),
 )
 
 data class AddonOverview(
@@ -84,6 +103,25 @@ internal fun List<ManagedAddon>.toOverview(): AddonOverview =
 
 internal fun List<ManagedAddon>.enabledAddons(): List<ManagedAddon> =
     filter { it.enabled }
+
+internal fun ManagedAddon.supportsContentType(type: String): Boolean {
+    val normalizedType = type.trim().lowercase()
+    val manifest = manifest ?: return false
+    return manifest.types.any { it.equals(normalizedType, ignoreCase = true) } ||
+        manifest.resources.any { resource ->
+            resource.types.any { it.equals(normalizedType, ignoreCase = true) }
+        }
+}
+
+internal fun List<ManagedAddon>.contentTypes(): List<String> =
+    flatMap { addon ->
+        val manifest = addon.manifest ?: return@flatMap emptyList()
+        (manifest.types + manifest.resources.flatMap { it.types })
+            .map { it.trim().lowercase() }
+    }
+        .filter { it.isNotBlank() }
+        .distinct()
+        .sorted()
 
 sealed interface AddAddonResult {
     data class Success(val manifest: AddonManifest) : AddAddonResult

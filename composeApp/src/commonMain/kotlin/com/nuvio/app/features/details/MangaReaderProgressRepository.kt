@@ -27,6 +27,15 @@ data class MangaReaderBookmark(
     val createdAtEpochMs: Long = 0L,
 )
 
+@Serializable
+data class MangaReaderHistoryEntry(
+    val key: String,
+    val title: String,
+    val chapterId: String,
+    val chapterNumber: String,
+    val updatedAtEpochMs: Long = 0L,
+)
+
 /** Pure bookmark toggle used by the repository and common tests. */
 fun toggleMangaReaderBookmark(
     bookmarks: List<MangaReaderBookmark>,
@@ -68,6 +77,7 @@ object MangaReaderProgressRepository {
     private var hasLoaded = false
     private val entries = linkedMapOf<String, MangaReaderProgressEntry>()
     private val bookmarks = linkedMapOf<String, MutableList<MangaReaderBookmark>>()
+    private val history = linkedMapOf<String, MangaReaderHistoryEntry>()
     private val _changes = MutableStateFlow(0L)
     val changes: StateFlow<Long> = _changes.asStateFlow()
 
@@ -76,6 +86,7 @@ object MangaReaderProgressRepository {
         hasLoaded = true
         entries.clear()
         bookmarks.clear()
+        history.clear()
         val payload = MangaReaderProgressStorage.loadPayload().orEmpty().trim()
         if (payload.isBlank()) return
         val stored = runCatching {
@@ -89,12 +100,16 @@ object MangaReaderProgressRepository {
                 bookmarks.getOrPut(bookmark.key) { mutableListOf() }.add(bookmark)
             }
         }
+        stored.history.forEach { entry ->
+            if (entry.key.isNotBlank() && entry.chapterId.isNotBlank()) history[entry.key] = entry
+        }
     }
 
     fun onProfileChanged() {
         hasLoaded = false
         entries.clear()
         bookmarks.clear()
+        history.clear()
         ensureLoaded()
     }
 
@@ -102,6 +117,7 @@ object MangaReaderProgressRepository {
         hasLoaded = false
         entries.clear()
         bookmarks.clear()
+        history.clear()
     }
 
     /** Returns the complete profile-scoped reader payload for backup or account sync. */
@@ -111,6 +127,7 @@ object MangaReaderProgressRepository {
             StoredMangaReaderProgress(
                 entries = entries.values.toList(),
                 bookmarks = bookmarks.values.flatten(),
+                history = history.values.toList(),
             ),
         )
     }
@@ -121,6 +138,7 @@ object MangaReaderProgressRepository {
             hasLoaded = true
             entries.clear()
             bookmarks.clear()
+            history.clear()
             persist()
             _changes.value += 1L
             return true
@@ -135,6 +153,9 @@ object MangaReaderProgressRepository {
         stored.bookmarks.filter { it.key.isNotBlank() && it.pageIndex >= 0 }.forEach { bookmark ->
             bookmarks.getOrPut(bookmark.key) { mutableListOf() }.add(bookmark)
         }
+        stored.history.filter { it.key.isNotBlank() && it.chapterId.isNotBlank() }.forEach { entry ->
+            history[entry.key] = entry
+        }
         persist()
         _changes.value += 1L
         return true
@@ -143,6 +164,33 @@ object MangaReaderProgressRepository {
     fun progressFor(key: String): MangaReaderProgressEntry? {
         ensureLoaded()
         return entries[key]
+    }
+
+    fun recordChapterOpened(
+        key: String,
+        title: String,
+        chapterId: String,
+        chapterNumber: String,
+    ) {
+        ensureLoaded()
+        if (key.isBlank() || chapterId.isBlank()) return
+        history[key] = MangaReaderHistoryEntry(
+            key = key,
+            title = title,
+            chapterId = chapterId,
+            chapterNumber = chapterNumber,
+            updatedAtEpochMs = DownloadsClock.nowEpochMs(),
+        )
+        persist()
+        _changes.value += 1L
+    }
+
+    fun recentHistory(contentKeyPrefix: String, limit: Int = 8): List<MangaReaderHistoryEntry> {
+        ensureLoaded()
+        return history.values
+            .filter { it.key.startsWith(contentKeyPrefix) }
+            .sortedByDescending(MangaReaderHistoryEntry::updatedAtEpochMs)
+            .take(limit)
     }
 
     fun save(
@@ -208,6 +256,7 @@ object MangaReaderProgressRepository {
                 StoredMangaReaderProgress(
                     entries = entries.values.toList(),
                     bookmarks = bookmarks.values.flatten(),
+                    history = history.values.toList(),
                 ),
             ),
         )
@@ -218,4 +267,5 @@ object MangaReaderProgressRepository {
 private data class StoredMangaReaderProgress(
     val entries: List<MangaReaderProgressEntry> = emptyList(),
     val bookmarks: List<MangaReaderBookmark> = emptyList(),
+    val history: List<MangaReaderHistoryEntry> = emptyList(),
 )

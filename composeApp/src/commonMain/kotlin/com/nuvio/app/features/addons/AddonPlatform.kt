@@ -5,7 +5,13 @@ internal expect object AddonStorage {
     fun saveInstalledAddonUrls(profileId: Int, urls: List<String>)
     fun loadAddonEnabledStates(profileId: Int): Map<String, Boolean>
     fun saveAddonEnabledStates(profileId: Int, states: Map<String, Boolean>)
+    fun loadAddonFailureReasons(profileId: Int): Map<String, String>
+    fun saveAddonFailureReasons(profileId: Int, reasons: Map<String, String>)
+    fun loadPreferredAddonUrls(profileId: Int): Map<String, List<String>>
+    fun savePreferredAddonUrls(profileId: Int, preferences: Map<String, List<String>>)
 }
+
+internal expect fun clearAddonHttpCache()
 
 data class RawHttpResponse(
     val status: Int,

@@ -36,6 +36,38 @@ class AddonModelsTest {
         assertEquals(listOf(enabled), listOf(enabled, disabled).enabledAddons())
         assertTrue(enabled.isActive)
     }
+
+    @Test
+    fun `content type helpers expose manifest types`() {
+        val movieAddon = ManagedAddon(
+            manifestUrl = "https://movie.example/manifest.json",
+            manifest = manifest(id = "movie"),
+        )
+        val mangaAddon = ManagedAddon(
+            manifestUrl = "https://manga.example/manifest.json",
+            manifest = manifest(id = "manga").copy(
+                types = listOf("manga"),
+                resources = listOf(AddonResource(name = "stream", types = listOf("manga"))),
+            ),
+        )
+
+        assertTrue(movieAddon.supportsContentType("MOVIE"))
+        assertTrue(mangaAddon.supportsContentType("manga"))
+        assertEquals(listOf("manga", "movie"), listOf(movieAddon, mangaAddon).contentTypes())
+    }
+
+    @Test
+    fun `failed addon keeps a failed health status and reason`() {
+        val addon = ManagedAddon(
+            manifestUrl = "https://broken.example/manifest.json",
+            manifest = manifest(),
+            errorMessage = "timeout",
+            lastFailureReason = "timeout",
+        )
+
+        assertEquals(AddonHealthStatus.Failed, addon.healthStatus)
+        assertEquals("timeout", addon.lastFailureReason)
+    }
 }
 
 private fun manifest(id: String = "addon") = AddonManifest(

@@ -55,6 +55,8 @@
     <string name="addon_installing">Installing</string>
     <string name="addon_title">Addons</string>
     <string name="addons_badge_active">Active</string>
+    <string name="addons_badge_healthy">Healthy</string>
+    <string name="addons_badge_failed">Failed</string>
     <string name="addons_badge_catalogs">%1$d catalogs</string>
     <string name="addons_badge_configurable">Configurable</string>
     <string name="addons_badge_disabled">Disabled</string>
@@ -64,6 +66,7 @@
     <string name="addons_configure">Configure addon</string>
     <string name="addons_delete">Delete addon</string>
     <string name="addons_delete_confirm_title">Delete addon?</string>
+    <string name="addons_clear_cache">Clear provider cache</string>
     <string name="addons_appstore_add_description">Bring your library into Anivio with the addons you use.</string>
     <string name="addons_appstore_empty_subtitle">Add an addon to start building your library.</string>
     <string name="addons_appstore_empty_title">Make Anivio yours.</string>
@@ -88,6 +91,12 @@
     <string name="addons_overview_addons">Addons</string>
     <string name="addons_overview_catalogs">Catalogs</string>
     <string name="addons_refresh">Refresh addon</string>
+    <string name="addons_test_provider">Test provider</string>
+    <string name="addons_last_failure">Last failure: %1$s</string>
+    <string name="addons_section_provider_priority">Provider priority</string>
+    <string name="addons_provider_priority_title">Preferred providers</string>
+    <string name="addons_provider_priority_description">Choose which provider is tried first for each content type. Disabled providers stay out of requests.</string>
+    <string name="addons_provider_priority_empty">No installed provider supports this content type.</string>
     <string name="addons_section_add_addon">Add Addon</string>
     <string name="addons_section_installed">Installed Addons</string>
     <string name="addons_section_overview">Overview</string>
