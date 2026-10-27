@@ -10,27 +10,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Sync
-import androidx.compose.material.icons.rounded.AccountCircle
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.CollectionsBookmark
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.CloudDownload
-import androidx.compose.material.icons.rounded.CollectionsBookmark
-import androidx.compose.material.icons.rounded.Extension
-import androidx.compose.material.icons.rounded.Hub
-import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material.icons.rounded.Language
-import androidx.compose.material.icons.rounded.Info
-import androidx.compose.material.icons.rounded.Link
-import androidx.compose.material.icons.rounded.MenuBook
-import androidx.compose.material.icons.rounded.Notifications
-import androidx.compose.material.icons.rounded.Policy
-import androidx.compose.material.icons.rounded.Palette
-import androidx.compose.material.icons.rounded.People
-import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.Style
-import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -38,15 +24,18 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.core.ui.NuvioTokens
 import com.nuvio.app.core.ui.nuvio
-import com.nuvio.app.features.discord.discordRichPresenceSupported
+import com.nuvio.app.features.p2p.P2pSettingsRepository
+import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.isIos
 import com.nuvio.app.supportsPosterNavigationMotion
 import nuvio.composeapp.generated.resources.*
@@ -54,11 +43,18 @@ import org.jetbrains.compose.resources.stringResource
 
 internal sealed class SettingsSearchTarget {
     data class Page(val page: SettingsPage) : SettingsSearchTarget()
-    object Downloads : SettingsSearchTarget()
     object Collections : SettingsSearchTarget()
     object SwitchProfile : SettingsSearchTarget()
     object CheckForUpdates : SettingsSearchTarget()
 }
+
+internal val SettingsSearchTarget.icon: ImageVector
+    get() = when (this) {
+        is SettingsSearchTarget.Page -> page.icon
+        SettingsSearchTarget.Collections -> Icons.Default.CollectionsBookmark
+        SettingsSearchTarget.SwitchProfile -> Icons.Default.People
+        SettingsSearchTarget.CheckForUpdates -> Icons.Default.CloudDownload
+    }
 
 internal data class SettingsSearchEntry(
     val key: String,
@@ -82,32 +78,31 @@ internal data class SettingsSearchEntry(
 
 @Composable
 internal fun settingsSearchEntries(
+    isTablet: Boolean,
     pluginsEnabled: Boolean,
-    aboutPageEnabled: Boolean,
+    supportersContributorsPageEnabled: Boolean,
     accountDeletionEnabled: Boolean,
     personalMediaAddonCopyEnabled: Boolean,
     liquidGlassNativeTabBarSupported: Boolean,
     switchProfileAvailable: Boolean,
     checkForUpdatesAvailable: Boolean,
 ): List<SettingsSearchEntry> {
-    val accountCategory = stringResource(SettingsCategory.Account.labelRes)
-    val generalCategory = stringResource(SettingsCategory.General.labelRes)
-    val aboutCategory = stringResource(SettingsCategory.About.labelRes)
-    val advancedCategory = stringResource(SettingsCategory.Advanced.labelRes)
+    val accountCategory = stringResource(SettingsCategory.You.labelRes)
+    val generalCategory = stringResource(SettingsCategory.Look.labelRes)
+    val aboutCategory = stringResource(SettingsCategory.System.labelRes)
+    val advancedCategory = stringResource(SettingsCategory.System.labelRes)
 
     val accountPage = stringResource(Res.string.compose_settings_page_account)
     val trackingPage = stringResource(Res.string.compose_settings_page_tracking)
-    val layoutPage = stringResource(Res.string.compose_settings_page_appearance)
+    val appearancePage = stringResource(Res.string.settings_appearance_title)
+    val layoutPage = stringResource(Res.string.compose_settings_page_layout)
     val advancedPage = stringResource(Res.string.compose_settings_page_advanced)
     val contentDiscoveryPage = stringResource(Res.string.compose_settings_page_content_discovery)
-    val downloadsPage = stringResource(Res.string.compose_settings_root_downloads_title)
     val playbackPage = stringResource(Res.string.compose_settings_page_playback)
-    val readerPage = stringResource(Res.string.compose_settings_page_reader)
     val streamsPage = stringResource(Res.string.compose_settings_page_streams)
     val integrationsPage = stringResource(Res.string.compose_settings_page_integrations)
     val notificationsPage = stringResource(Res.string.compose_settings_page_notifications)
-    val aboutPage = stringResource(Res.string.compose_settings_page_about)
-    val privacyPage = stringResource(Res.string.compose_settings_page_privacy_policy)
+    val supportersPage = stringResource(Res.string.compose_settings_page_supporters_contributors)
     val licensesPage = stringResource(Res.string.compose_settings_page_licenses_attributions)
     val homeLayoutPage = stringResource(Res.string.compose_settings_page_homescreen)
     val detailPage = stringResource(Res.string.compose_settings_page_meta_screen)
@@ -119,6 +114,13 @@ internal fun settingsSearchEntries(
     val tmdbPage = stringResource(Res.string.compose_settings_page_tmdb_enrichment)
     val mdbListPage = stringResource(Res.string.compose_settings_page_mdblist_ratings)
 
+    val categories = SettingsCategory.entries.associateWith { stringResource(it.labelRes) }
+    val pageTitles = SettingsPage.entries.associateWith { stringResource(it.titleRes) }
+    val playerSettings by remember {
+        PlayerSettingsRepository.ensureLoaded()
+        PlayerSettingsRepository.uiState
+    }.collectAsStateWithLifecycle()
+    val playbackSections = visiblePlaybackSections(isIos, playerSettings.androidPlaybackEngine, P2pSettingsRepository.isVisible)
     val entries = mutableListOf<SettingsSearchEntry>()
 
     fun add(
@@ -128,7 +130,6 @@ internal fun settingsSearchEntries(
         page: String = title,
         section: String = "",
         category: String = generalCategory,
-        icon: ImageVector,
         target: SettingsSearchTarget,
     ) {
         entries += SettingsSearchEntry(
@@ -137,8 +138,8 @@ internal fun settingsSearchEntries(
             description = description,
             page = page,
             section = section,
-            category = category,
-            icon = icon,
+            category = (target as? SettingsSearchTarget.Page)?.page?.category?.let(categories::getValue) ?: category,
+            icon = target.icon,
             target = target,
         )
     }
@@ -149,7 +150,6 @@ internal fun settingsSearchEntries(
         title: String,
         description: String,
         category: String = generalCategory,
-        icon: ImageVector,
     ) {
         add(
             key = key,
@@ -157,7 +157,6 @@ internal fun settingsSearchEntries(
             description = description,
             page = title,
             category = category,
-            icon = icon,
             target = SettingsSearchTarget.Page(page),
         )
     }
@@ -170,16 +169,15 @@ internal fun settingsSearchEntries(
         pageLabel: String,
         section: String,
         category: String = generalCategory,
-        icon: ImageVector,
     ) {
+        if (page.parentPage == SettingsPage.Playback && playbackSections.none { it.page == page }) return
         add(
             key = key,
             title = title,
             description = description,
-            page = pageLabel,
-            section = section,
+            page = if (page.parentPage == SettingsPage.Playback) playbackPage else pageLabel,
+            section = if (page.parentPage == SettingsPage.Playback) pageTitles.getValue(page) else section,
             category = category,
-            icon = icon,
             target = SettingsSearchTarget.Page(page),
         )
     }
@@ -192,7 +190,6 @@ internal fun settingsSearchEntries(
             page = accountPage,
             section = stringResource(Res.string.compose_settings_root_account_section),
             category = accountCategory,
-            icon = Icons.Rounded.People,
             target = SettingsSearchTarget.SwitchProfile,
         )
     }
@@ -202,7 +199,6 @@ internal fun settingsSearchEntries(
         title = accountPage,
         description = stringResource(Res.string.compose_settings_root_account_description),
         category = accountCategory,
-        icon = Icons.Rounded.AccountCircle,
     )
     addPage(
         page = SettingsPage.TraktAuthentication,
@@ -210,117 +206,98 @@ internal fun settingsSearchEntries(
         title = trackingPage,
         description = stringResource(Res.string.compose_settings_root_tracking_description),
         category = accountCategory,
-        icon = Icons.Default.Sync,
     )
     addPage(
         page = SettingsPage.Appearance,
+        key = "appearance",
+        title = appearancePage,
+        description = stringResource(Res.string.settings_appearance_description),
+    )
+    addPage(
+        page = SettingsPage.Layout,
         key = "layout",
         title = layoutPage,
-        description = stringResource(Res.string.compose_settings_root_appearance_description),
-        icon = Icons.Rounded.Palette,
+        description = stringResource(Res.string.compose_settings_root_layout_description),
     )
+    addPage(
+        page = SettingsPage.About,
+        key = "about",
+        title = pageTitles.getValue(SettingsPage.About),
+        description = stringResource(Res.string.compose_settings_root_about_description),
+    )
+    playbackSections.forEach { section ->
+        addRow(
+            page = section.page,
+            key = "playback-page-${section.name}",
+            title = pageTitles.getValue(section.page),
+            description = stringResource(section.descriptionRes),
+            pageLabel = playbackPage,
+            section = pageTitles.getValue(section.page),
+        )
+    }
     addPage(
         page = SettingsPage.Advanced,
         key = "advanced",
         title = advancedPage,
         description = stringResource(Res.string.compose_settings_root_advanced_description),
         category = advancedCategory,
-        icon = Icons.Rounded.Tune,
     )
     addPage(
         page = SettingsPage.ContentDiscovery,
         key = "content-discovery",
         title = contentDiscoveryPage,
         description = stringResource(Res.string.compose_settings_root_content_discovery_description),
-        icon = Icons.Rounded.Extension,
     )
-    add(
-        key = "downloads",
-        title = downloadsPage,
-        description = stringResource(Res.string.compose_settings_root_downloads_description),
-        category = generalCategory,
-        icon = Icons.Rounded.CloudDownload,
-        target = SettingsSearchTarget.Downloads,
+    addRow(
+        page = SettingsPage.ContentDiscovery,
+        key = "recent-searches",
+        title = stringResource(Res.string.settings_content_discovery_recent_searches),
+        description = stringResource(Res.string.settings_content_discovery_recent_searches_description),
+        pageLabel = contentDiscoveryPage,
+        section = stringResource(Res.string.settings_content_discovery_section_search),
     )
     addPage(
         page = SettingsPage.Playback,
         key = "playback",
         title = playbackPage,
         description = stringResource(Res.string.settings_playback_subtitle),
-        icon = Icons.Rounded.PlayArrow,
-    )
-    addPage(
-        page = SettingsPage.Reader,
-        key = "reader",
-        title = readerPage,
-        description = stringResource(Res.string.compose_settings_root_reader_description),
-        icon = Icons.Rounded.MenuBook,
     )
     addPage(
         page = SettingsPage.Streams,
         key = "streams",
         title = streamsPage,
         description = stringResource(Res.string.compose_settings_root_streams_description),
-        icon = Icons.Rounded.Style,
     )
     addPage(
         page = SettingsPage.Integrations,
         key = "integrations",
         title = integrationsPage,
         description = stringResource(Res.string.compose_settings_root_integrations_description),
-        icon = Icons.Rounded.Link,
     )
-    if (discordRichPresenceSupported) {
-        addRow(
-            page = SettingsPage.Integrations,
-            key = "discord-rich-presence",
-            title = stringResource(Res.string.discord_search_entry_title),
-            description = stringResource(Res.string.discord_search_entry_description),
-            pageLabel = integrationsPage,
-            section = stringResource(Res.string.settings_integrations_discord_section),
-            icon = Icons.Rounded.Link,
-        )
-    }
     addPage(
         page = SettingsPage.Notifications,
         key = "notifications",
         title = notificationsPage,
         description = stringResource(Res.string.compose_settings_root_notifications_description),
-        icon = Icons.Rounded.Notifications,
     )
-    if (aboutPageEnabled) {
+    if (supportersContributorsPageEnabled) {
         addPage(
-            page = SettingsPage.About,
-            key = "about",
-            title = aboutPage,
-            description = stringResource(Res.string.about_page_subtitle),
+            page = SettingsPage.SupportersContributors,
+            key = "supporters",
+            title = supportersPage,
+            description = stringResource(Res.string.about_supporters_contributors_subtitle),
             category = aboutCategory,
-            icon = Icons.Rounded.Info,
         )
     }
-    addPage(
-        page = SettingsPage.PrivacyPolicy,
-        key = "privacy-policy",
-        title = privacyPage,
-        description = stringResource(Res.string.compose_settings_root_privacy_policy_description),
-        category = aboutCategory,
-        icon = Icons.Rounded.Policy,
-    )
     addPage(
         page = SettingsPage.LicensesAttributions,
         key = "licenses-attributions",
         title = licensesPage,
         description = stringResource(Res.string.about_licenses_attributions_subtitle),
         category = aboutCategory,
-        icon = Icons.Rounded.Info,
     )
     listOf(
-        PlaybackSearchRow("anivio-license", stringResource(Res.string.settings_licenses_attributions_anivio_title), stringResource(Res.string.settings_licenses_attributions_anivio_license)),
-        PlaybackSearchRow("anilist-attribution", stringResource(Res.string.settings_licenses_attributions_anilist_title), stringResource(Res.string.settings_licenses_attributions_anilist_body)),
-        PlaybackSearchRow("anizip-attribution", stringResource(Res.string.settings_licenses_attributions_anizip_title), stringResource(Res.string.settings_licenses_attributions_anizip_body)),
-        PlaybackSearchRow("kitsu-attribution", stringResource(Res.string.settings_licenses_attributions_kitsu_title), stringResource(Res.string.settings_licenses_attributions_kitsu_body)),
-        PlaybackSearchRow("tvdb-attribution", stringResource(Res.string.settings_licenses_attributions_tvdb_title), stringResource(Res.string.settings_licenses_attributions_tvdb_body)),
-        PlaybackSearchRow("fanart-attribution", stringResource(Res.string.settings_licenses_attributions_fanart_title), stringResource(Res.string.settings_licenses_attributions_fanart_body)),
+        PlaybackSearchRow("nuvio-license", stringResource(Res.string.settings_licenses_attributions_nuvio_title), stringResource(Res.string.settings_licenses_attributions_nuvio_license)),
         PlaybackSearchRow("tmdb-attribution", stringResource(Res.string.settings_licenses_attributions_tmdb_title), stringResource(Res.string.settings_licenses_attributions_tmdb_body)),
         PlaybackSearchRow("trakt-attribution", stringResource(Res.string.settings_licenses_attributions_trakt_title), stringResource(Res.string.settings_licenses_attributions_trakt_body)),
         PlaybackSearchRow("simkl-attribution", stringResource(Res.string.settings_licenses_attributions_simkl_title), stringResource(Res.string.settings_licenses_attributions_simkl_body)),
@@ -329,7 +306,6 @@ internal fun settingsSearchEntries(
         PlaybackSearchRow("mdblist-attribution", stringResource(Res.string.settings_licenses_attributions_mdblist_title), stringResource(Res.string.settings_licenses_attributions_mdblist_body)),
         PlaybackSearchRow("introdb-attribution", stringResource(Res.string.settings_licenses_attributions_introdb_title), stringResource(Res.string.settings_licenses_attributions_introdb_body)),
         PlaybackSearchRow("imdb-datasets", stringResource(Res.string.settings_licenses_attributions_imdb_title), stringResource(Res.string.settings_licenses_attributions_imdb_body)),
-        PlaybackSearchRow("discord-attribution", stringResource(Res.string.settings_licenses_attributions_discord_title), stringResource(Res.string.settings_licenses_attributions_discord_body)),
         PlaybackSearchRow(
             if (isIos) "mpvkit-license" else "exoplayer-license",
             if (isIos) {
@@ -352,7 +328,6 @@ internal fun settingsSearchEntries(
             pageLabel = licensesPage,
             section = stringResource(Res.string.compose_settings_root_about_section),
             category = aboutCategory,
-            icon = Icons.Rounded.Info,
         )
     }
     if (checkForUpdatesAvailable) {
@@ -360,10 +335,9 @@ internal fun settingsSearchEntries(
             key = "check-updates",
             title = stringResource(Res.string.compose_settings_root_check_updates_title),
             description = stringResource(Res.string.compose_settings_root_check_updates_description),
-            page = if (aboutPageEnabled) aboutPage else licensesPage,
+            page = if (supportersContributorsPageEnabled) supportersPage else licensesPage,
             section = stringResource(Res.string.compose_settings_root_about_section),
             category = aboutCategory,
-            icon = Icons.Rounded.CloudDownload,
             target = SettingsSearchTarget.CheckForUpdates,
         )
     }
@@ -375,7 +349,6 @@ internal fun settingsSearchEntries(
         pageLabel = accountPage,
         section = accountPage,
         category = accountCategory,
-        icon = Icons.Rounded.AccountCircle,
     )
     addRow(
         page = SettingsPage.Account,
@@ -384,7 +357,6 @@ internal fun settingsSearchEntries(
         pageLabel = accountPage,
         section = accountPage,
         category = accountCategory,
-        icon = Icons.Rounded.AccountCircle,
     )
     if (accountDeletionEnabled) {
         addRow(
@@ -395,7 +367,6 @@ internal fun settingsSearchEntries(
             pageLabel = accountPage,
             section = accountPage,
             category = accountCategory,
-            icon = Icons.Rounded.AccountCircle,
         )
     }
 
@@ -403,37 +374,49 @@ internal fun settingsSearchEntries(
         page = SettingsPage.Appearance,
         key = "theme",
         title = stringResource(Res.string.settings_appearance_section_theme),
-        pageLabel = layoutPage,
+        pageLabel = appearancePage,
         section = stringResource(Res.string.settings_appearance_section_theme),
-        icon = Icons.Rounded.Palette,
     )
     addRow(
         page = SettingsPage.Appearance,
         key = "amoled",
         title = stringResource(Res.string.settings_appearance_amoled_black),
         description = stringResource(Res.string.settings_appearance_amoled_description),
-        pageLabel = layoutPage,
+        pageLabel = appearancePage,
         section = stringResource(Res.string.settings_appearance_section_display),
-        icon = Icons.Rounded.Palette,
     )
     if (liquidGlassNativeTabBarSupported) {
         addRow(
-            page = SettingsPage.Appearance,
+            page = SettingsPage.Layout,
             key = "liquid-glass",
             title = stringResource(Res.string.settings_appearance_liquid_glass),
             description = stringResource(Res.string.settings_appearance_liquid_glass_description),
             pageLabel = layoutPage,
-            section = stringResource(Res.string.settings_appearance_section_display),
-            icon = Icons.Rounded.Palette,
+            section = stringResource(Res.string.settings_appearance_nav_bar_style),
+        )
+    }
+    addRow(
+        page = SettingsPage.Appearance,
+        key = "app-icon",
+        title = stringResource(Res.string.settings_appearance_app_icon),
+        pageLabel = appearancePage,
+        section = stringResource(Res.string.settings_appearance_section_display),
+    )
+    if (!isIos) {
+        addRow(
+            page = SettingsPage.Layout,
+            key = "navigation-bar",
+            title = stringResource(Res.string.settings_appearance_nav_bar_style),
+            pageLabel = layoutPage,
+            section = stringResource(Res.string.settings_appearance_nav_bar_style),
         )
     }
     addRow(
         page = SettingsPage.Appearance,
         key = "app-language",
         title = stringResource(Res.string.settings_appearance_app_language),
-        pageLabel = layoutPage,
+        pageLabel = appearancePage,
         section = stringResource(Res.string.settings_appearance_section_display),
-        icon = Icons.Rounded.Language,
     )
     addRow(
         page = SettingsPage.Advanced,
@@ -443,7 +426,6 @@ internal fun settingsSearchEntries(
         pageLabel = advancedPage,
         section = stringResource(Res.string.settings_advanced_section_startup),
         category = advancedCategory,
-        icon = Icons.Rounded.Tune,
     )
     if (SentrySettingsRepository.isSupported) {
         addRow(
@@ -454,7 +436,6 @@ internal fun settingsSearchEntries(
             pageLabel = advancedPage,
             section = stringResource(Res.string.settings_advanced_section_diagnostics),
             category = advancedCategory,
-            icon = Icons.Rounded.Tune,
         )
     }
     addRow(
@@ -465,21 +446,18 @@ internal fun settingsSearchEntries(
         pageLabel = advancedPage,
         section = stringResource(Res.string.settings_advanced_section_cache),
         category = advancedCategory,
-        icon = Icons.Rounded.Tune,
     )
     addPage(
         page = SettingsPage.ContinueWatching,
         key = "continue-watching",
         title = continueWatchingPage,
         description = stringResource(Res.string.settings_appearance_continue_watching_description),
-        icon = Icons.Rounded.Style,
     )
     addPage(
         page = SettingsPage.PosterCustomization,
         key = "poster-card-style",
         title = posterStylePage,
         description = stringResource(Res.string.settings_appearance_poster_customization_description),
-        icon = Icons.Rounded.Tune,
     )
 
     addPage(
@@ -493,7 +471,12 @@ internal fun settingsSearchEntries(
                 Res.string.settings_content_discovery_addons_description
             },
         ),
-        icon = Icons.Rounded.Extension,
+    )
+    addPage(
+        page = SettingsPage.MediaServers,
+        key = "media-servers",
+        title = stringResource(Res.string.compose_settings_page_media_servers),
+        description = stringResource(Res.string.settings_content_discovery_media_servers_description),
     )
     if (pluginsEnabled) {
         addPage(
@@ -501,7 +484,6 @@ internal fun settingsSearchEntries(
             key = "plugins",
             title = pluginsPage,
             description = stringResource(Res.string.settings_content_discovery_plugins_description),
-            icon = Icons.Rounded.Hub,
         )
     }
     addPage(
@@ -509,14 +491,12 @@ internal fun settingsSearchEntries(
         key = "home-layout",
         title = homeLayoutPage,
         description = stringResource(Res.string.settings_content_discovery_homescreen_description),
-        icon = Icons.Rounded.Home,
     )
     addPage(
         page = SettingsPage.MetaScreen,
         key = "detail-page",
         title = detailPage,
         description = stringResource(Res.string.settings_content_discovery_meta_screen_description),
-        icon = Icons.Rounded.Tune,
     )
     add(
         key = "collections",
@@ -525,7 +505,6 @@ internal fun settingsSearchEntries(
         page = layoutPage,
         section = stringResource(Res.string.settings_appearance_section_home),
         category = generalCategory,
-        icon = Icons.Rounded.CollectionsBookmark,
         target = SettingsSearchTarget.Collections,
     )
 
@@ -544,8 +523,17 @@ internal fun settingsSearchEntries(
         description = stringResource(Res.string.settings_stream_addon_logo_description),
         pageLabel = streamsPage,
         section = stringResource(Res.string.settings_stream_display_section),
-        icon = Icons.Rounded.Style,
     )
+    if (!isTablet) {
+        addRow(
+            page = SettingsPage.Streams,
+            key = "stream-background",
+            title = stringResource(Res.string.settings_stream_background_title),
+            description = stringResource(Res.string.settings_stream_background_description),
+            pageLabel = streamsPage,
+            section = stringResource(Res.string.settings_stream_display_section),
+        )
+    }
     addRow(
         page = SettingsPage.Streams,
         key = "stream-size-badges",
@@ -553,7 +541,6 @@ internal fun settingsSearchEntries(
         description = stringResource(Res.string.settings_stream_size_badges_description),
         pageLabel = streamsPage,
         section = stringResource(Res.string.settings_stream_badges_section),
-        icon = Icons.Rounded.Style,
     )
     addRow(
         page = SettingsPage.Streams,
@@ -562,7 +549,6 @@ internal fun settingsSearchEntries(
         description = stringResource(Res.string.settings_stream_badge_position_description),
         pageLabel = streamsPage,
         section = stringResource(Res.string.settings_stream_badges_section),
-        icon = Icons.Rounded.Style,
     )
     addRow(
         page = SettingsPage.Streams,
@@ -571,27 +557,38 @@ internal fun settingsSearchEntries(
         description = stringResource(Res.string.settings_stream_badge_urls_search_description),
         pageLabel = streamsPage,
         section = stringResource(Res.string.settings_stream_badges_section),
-        icon = Icons.Rounded.Style,
     )
     addPlaybackRows(
         addRow = ::addRow,
         pageLabel = playbackPage,
         section = playbackPlayer,
-        icon = Icons.Rounded.PlayArrow,
+        page = SettingsPage.PlaybackInterface,
         rows = listOfNotNull(
+            PlaybackSearchRow(
+                "legacy-player-layout",
+                stringResource(Res.string.settings_playback_legacy_layout),
+                stringResource(Res.string.settings_playback_legacy_layout_description),
+            ),
             PlaybackSearchRow(
                 "loading-overlay",
                 stringResource(Res.string.settings_playback_show_loading_overlay),
                 stringResource(Res.string.settings_playback_show_loading_overlay_description),
             ),
             PlaybackSearchRow(
+                "pause-overlay",
+                stringResource(Res.string.settings_playback_pause_overlay),
+                stringResource(Res.string.settings_playback_pause_overlay_description),
+            ),
+            PlaybackSearchRow(
                 "external-player",
                 stringResource(Res.string.settings_playback_external_player),
                 stringResource(Res.string.settings_playback_external_player_description_android),
+                page = SettingsPage.PlaybackPlayer,
             ),
             if (isIos) PlaybackSearchRow(
                 "external-player-app",
                 stringResource(Res.string.settings_playback_external_player_app),
+                page = SettingsPage.PlaybackPlayer,
             ) else null,
             PlaybackSearchRow(
                 "hold-to-speed",
@@ -610,10 +607,10 @@ internal fun settingsSearchEntries(
         addRow = ::addRow,
         pageLabel = playbackPage,
         section = playbackSubtitleAudio,
-        icon = Icons.Rounded.PlayArrow,
+        page = SettingsPage.PlaybackSubtitles,
         rows = listOf(
-            PlaybackSearchRow("preferred-audio", stringResource(Res.string.settings_playback_preferred_audio_language)),
-            PlaybackSearchRow("secondary-audio", stringResource(Res.string.settings_playback_secondary_audio_language)),
+            PlaybackSearchRow("preferred-audio", stringResource(Res.string.settings_playback_preferred_audio_language), page = SettingsPage.PlaybackAudio),
+            PlaybackSearchRow("secondary-audio", stringResource(Res.string.settings_playback_secondary_audio_language), page = SettingsPage.PlaybackAudio),
             PlaybackSearchRow("preferred-subtitles", stringResource(Res.string.settings_playback_preferred_subtitle_language)),
             PlaybackSearchRow("secondary-subtitles", stringResource(Res.string.settings_playback_secondary_subtitle_language)),
         ),
@@ -622,7 +619,7 @@ internal fun settingsSearchEntries(
         addRow = ::addRow,
         pageLabel = playbackPage,
         section = playbackStreamSelection,
-        icon = Icons.Rounded.PlayArrow,
+        page = SettingsPage.PlaybackStreamSelection,
         rows = listOf(
             PlaybackSearchRow(
                 "reuse-last-link",
@@ -636,7 +633,7 @@ internal fun settingsSearchEntries(
         addRow = ::addRow,
         pageLabel = playbackPage,
         section = playbackStreamAutoPlay,
-        icon = Icons.Rounded.PlayArrow,
+        page = SettingsPage.PlaybackStreamSelection,
         rows = buildList {
             add(PlaybackSearchRow("stream-mode", stringResource(Res.string.settings_playback_stream_selection_mode)))
             add(PlaybackSearchRow("regex-pattern", stringResource(Res.string.settings_playback_regex_pattern)))
@@ -651,21 +648,25 @@ internal fun settingsSearchEntries(
             addRow = ::addRow,
             pageLabel = playbackPage,
             section = playbackDecoder,
-            icon = Icons.Rounded.PlayArrow,
+            page = SettingsPage.PlaybackVideo,
             rows = listOf(
                 PlaybackSearchRow("decoder-priority", stringResource(Res.string.settings_playback_decoder_priority)),
                 PlaybackSearchRow("dv7-hevc", stringResource(Res.string.settings_playback_map_dv7_to_hevc), stringResource(Res.string.settings_playback_map_dv7_to_hevc_description)),
                 PlaybackSearchRow("tunneled-playback", stringResource(Res.string.settings_playback_tunneled_playback), stringResource(Res.string.settings_playback_tunneled_playback_description)),
+                PlaybackSearchRow("exo-native-memory", stringResource(Res.string.settings_playback_exo_native_memory), stringResource(Res.string.settings_playback_exo_native_memory_description), page = SettingsPage.PlaybackBuffer),
+                PlaybackSearchRow("custom-buffers", stringResource(Res.string.settings_playback_buffer_custom), stringResource(Res.string.settings_playback_buffer_custom_description), page = SettingsPage.PlaybackBuffer),
+                PlaybackSearchRow("vod-cache", stringResource(Res.string.settings_playback_vod_cache), stringResource(Res.string.settings_playback_vod_cache_description), page = SettingsPage.PlaybackBuffer),
+                PlaybackSearchRow("exo-chapters", stringResource(Res.string.settings_playback_exo_chapters), stringResource(Res.string.settings_playback_exo_chapters_description), page = SettingsPage.PlaybackInterface),
             ),
         )
         addPlaybackRows(
             addRow = ::addRow,
             pageLabel = playbackPage,
             section = playbackSubtitleRendering,
-            icon = Icons.Rounded.PlayArrow,
+            page = SettingsPage.PlaybackSubtitles,
             rows = listOf(
                 PlaybackSearchRow("libass", stringResource(Res.string.settings_playback_enable_libass), stringResource(Res.string.settings_playback_enable_libass_description)),
-                PlaybackSearchRow("libass-render", stringResource(Res.string.settings_playback_render_type)),
+                PlaybackSearchRow("libass-render", stringResource(Res.string.settings_playback_render_scale)),
             ),
         )
     }
@@ -673,7 +674,7 @@ internal fun settingsSearchEntries(
         addRow = ::addRow,
         pageLabel = playbackPage,
         section = playbackSkipSegments,
-        icon = Icons.Rounded.PlayArrow,
+        page = SettingsPage.PlaybackSkipSegments,
         rows = listOf(
             PlaybackSearchRow("skip-intro", stringResource(Res.string.settings_playback_skip_intro_outro_recap), stringResource(Res.string.settings_playback_skip_intro_outro_recap_description)),
             PlaybackSearchRow("anime-skip", stringResource(Res.string.settings_playback_anime_skip), stringResource(Res.string.settings_playback_anime_skip_description)),
@@ -686,7 +687,7 @@ internal fun settingsSearchEntries(
         addRow = ::addRow,
         pageLabel = playbackPage,
         section = playbackNextEpisode,
-        icon = Icons.Rounded.PlayArrow,
+        page = SettingsPage.PlaybackUpNext,
         rows = listOf(
             PlaybackSearchRow("auto-play-next", stringResource(Res.string.settings_playback_auto_play_next_episode), stringResource(Res.string.settings_playback_auto_play_next_episode_description)),
             PlaybackSearchRow("prefer-binge", stringResource(Res.string.settings_playback_prefer_binge_group), stringResource(Res.string.settings_playback_prefer_binge_group_description)),
@@ -700,7 +701,6 @@ internal fun settingsSearchEntries(
         addRow = ::addRow,
         pageLabel = continueWatchingPage,
         section = stringResource(Res.string.settings_continue_watching_section_visibility),
-        icon = Icons.Rounded.Style,
         rows = listOf(
             PlaybackSearchRow(
                 "show-continue-watching",
@@ -713,7 +713,6 @@ internal fun settingsSearchEntries(
         addRow = ::addRow,
         pageLabel = continueWatchingPage,
         section = stringResource(Res.string.settings_continue_watching_section_up_next_behavior),
-        icon = Icons.Rounded.Style,
         rows = listOf(
             PlaybackSearchRow("episode-thumbnails", stringResource(Res.string.settings_continue_watching_use_episode_thumbnails_title), stringResource(Res.string.settings_continue_watching_use_episode_thumbnails_description)),
             PlaybackSearchRow("up-next", stringResource(Res.string.settings_continue_watching_up_next_title), stringResource(Res.string.settings_continue_watching_up_next_description)),
@@ -725,7 +724,6 @@ internal fun settingsSearchEntries(
         addRow = ::addRow,
         pageLabel = continueWatchingPage,
         section = stringResource(Res.string.settings_continue_watching_section_on_launch),
-        icon = Icons.Rounded.Style,
         rows = listOf(
             PlaybackSearchRow("resume-prompt", stringResource(Res.string.settings_continue_watching_resume_prompt_title), stringResource(Res.string.settings_continue_watching_resume_prompt_description)),
         ),
@@ -745,7 +743,6 @@ internal fun settingsSearchEntries(
             description = row.description,
             pageLabel = posterStylePage,
             section = posterSection,
-            icon = Icons.Rounded.Tune,
         )
     }
 
@@ -762,7 +759,6 @@ internal fun settingsSearchEntries(
             description = row.description,
             pageLabel = posterStylePage,
             section = cardDepthSection,
-            icon = Icons.Rounded.Tune,
         )
     }
 
@@ -781,7 +777,6 @@ internal fun settingsSearchEntries(
             description = row.description,
             pageLabel = homeLayoutPage,
             section = homeLayoutSection,
-            icon = Icons.Rounded.Home,
         )
     }
 
@@ -794,13 +789,29 @@ internal fun settingsSearchEntries(
             description = stringResource(Res.string.settings_meta_poster_transition_description),
             pageLabel = detailPage,
             section = detailAppearanceSection,
-            icon = Icons.Rounded.Tune,
         )
     }
     listOf(
         PlaybackSearchRow("meta-background-mode", stringResource(Res.string.settings_meta_background_mode), stringResource(Res.string.settings_meta_background_mode_description)),
         PlaybackSearchRow("meta-tabs", stringResource(Res.string.settings_meta_tab_layout), stringResource(Res.string.settings_meta_tab_layout_description)),
+        PlaybackSearchRow(
+            "meta-overall-ratings",
+            stringResource(Res.string.layout_overall_ratings),
+            stringResource(Res.string.layout_overall_ratings_sub_on) + " " +
+                stringResource(Res.string.layout_overall_ratings_sub_off),
+        ),
+        PlaybackSearchRow(
+            "meta-episode-ratings",
+            stringResource(Res.string.layout_episode_ratings),
+            listOf(
+                stringResource(Res.string.layout_episode_ratings_sub),
+                stringResource(Res.string.layout_ratings_show),
+                stringResource(Res.string.layout_ratings_hide),
+                stringResource(Res.string.layout_ratings_hide_unwatched),
+            ).joinToString(" "),
+        ),
         PlaybackSearchRow("meta-episode-cards", stringResource(Res.string.settings_meta_episode_cards), stringResource(Res.string.settings_meta_episode_cards_description)),
+        PlaybackSearchRow("meta-shuffle", stringResource(Res.string.random_episode_title), stringResource(Res.string.layout_random_episode_sub)),
         PlaybackSearchRow("meta-blur-episodes", stringResource(Res.string.settings_meta_blur_unwatched_episodes), stringResource(Res.string.settings_meta_blur_unwatched_episodes_description)),
     ).forEach { row ->
         addRow(
@@ -810,7 +821,6 @@ internal fun settingsSearchEntries(
             description = row.description,
             pageLabel = detailPage,
             section = detailAppearanceSection,
-            icon = Icons.Rounded.Tune,
         )
     }
     val detailSectionsSection = stringResource(Res.string.settings_meta_section_sections)
@@ -833,7 +843,6 @@ internal fun settingsSearchEntries(
             description = row.description,
             pageLabel = detailPage,
             section = detailSectionsSection,
-            icon = Icons.Rounded.Tune,
         )
     }
 
@@ -842,19 +851,17 @@ internal fun settingsSearchEntries(
         key = "tmdb",
         title = tmdbPage,
         description = stringResource(Res.string.settings_integrations_tmdb_description),
-        icon = Icons.Rounded.Link,
     )
     addPage(
         page = SettingsPage.MdbListRatings,
         key = "mdblist",
         title = mdbListPage,
         description = stringResource(Res.string.settings_integrations_mdblist_description),
-        icon = Icons.Rounded.Link,
     )
     val tmdbModulesSection = stringResource(Res.string.settings_tmdb_section_modules)
     listOf(
         PlaybackSearchRow("tmdb-enable", stringResource(Res.string.settings_tmdb_enable_enrichment), stringResource(Res.string.settings_tmdb_enable_enrichment_description), stringResource(Res.string.settings_tmdb_section_title)),
-        PlaybackSearchRow("tmdb-api-key", stringResource(Res.string.settings_tmdb_personal_api_key), "", stringResource(Res.string.settings_tmdb_section_credentials)),
+        PlaybackSearchRow("tmdb-api-key", stringResource(Res.string.settings_tmdb_personal_api_key), stringResource(Res.string.settings_tmdb_api_key_override_description), stringResource(Res.string.settings_tmdb_section_title)),
         PlaybackSearchRow("tmdb-language", stringResource(Res.string.settings_tmdb_preferred_language), stringResource(Res.string.settings_tmdb_preferred_language_description), stringResource(Res.string.settings_tmdb_section_localization)),
         PlaybackSearchRow("tmdb-trailers", stringResource(Res.string.settings_tmdb_module_trailers), stringResource(Res.string.settings_tmdb_module_trailers_description), tmdbModulesSection),
         PlaybackSearchRow("tmdb-artwork", stringResource(Res.string.settings_tmdb_module_artwork), stringResource(Res.string.settings_tmdb_module_artwork_description), tmdbModulesSection),
@@ -875,12 +882,12 @@ internal fun settingsSearchEntries(
             description = row.description,
             pageLabel = tmdbPage,
             section = row.sectionOverride ?: tmdbModulesSection,
-            icon = Icons.Rounded.Link,
         )
     }
 
     listOf(
         PlaybackSearchRow("mdb-enable", stringResource(Res.string.settings_mdb_enable_ratings), stringResource(Res.string.settings_mdb_enable_ratings_description), stringResource(Res.string.settings_mdb_section_title)),
+        PlaybackSearchRow("mdb-show-on-hero", stringResource(Res.string.settings_mdb_show_on_hero), stringResource(Res.string.settings_mdb_show_on_hero_description), stringResource(Res.string.settings_mdb_section_title)),
         PlaybackSearchRow("mdb-api-key", stringResource(Res.string.settings_mdb_api_key_title), stringResource(Res.string.settings_mdb_api_key_description), stringResource(Res.string.settings_mdb_section_api_key)),
         PlaybackSearchRow("mdb-imdb", stringResource(Res.string.source_imdb), "", stringResource(Res.string.settings_mdb_section_rating_providers)),
         PlaybackSearchRow("mdb-tmdb", stringResource(Res.string.source_tmdb), "", stringResource(Res.string.settings_mdb_section_rating_providers)),
@@ -897,7 +904,6 @@ internal fun settingsSearchEntries(
             description = row.description,
             pageLabel = mdbListPage,
             section = row.sectionOverride ?: stringResource(Res.string.settings_mdb_section_title),
-            icon = Icons.Rounded.Link,
         )
     }
 
@@ -909,7 +915,6 @@ internal fun settingsSearchEntries(
         description = stringResource(Res.string.settings_notifications_episode_release_alerts_description),
         pageLabel = notificationsPage,
         section = notificationsAlerts,
-        icon = Icons.Rounded.Notifications,
     )
     addRow(
         page = SettingsPage.Notifications,
@@ -917,33 +922,41 @@ internal fun settingsSearchEntries(
         title = stringResource(Res.string.settings_notifications_test_title),
         pageLabel = notificationsPage,
         section = stringResource(Res.string.settings_notifications_section_test),
-        icon = Icons.Rounded.Notifications,
     )
 
     addRow(
         page = SettingsPage.TraktAuthentication,
-        key = "anilist-authentication",
-        title = stringResource(Res.string.anilist_source_name),
-        description = stringResource(Res.string.settings_anilist_sign_in_description),
+        key = "trakt-authentication",
+        title = stringResource(Res.string.trakt_library_source_trakt),
+        description = stringResource(Res.string.settings_trakt_intro_description),
         pageLabel = trackingPage,
         section = stringResource(Res.string.settings_tracking_services),
         category = accountCategory,
-        icon = Icons.Rounded.Link,
     )
     addRow(
         page = SettingsPage.TraktAuthentication,
-        key = "mal-authentication",
-        title = stringResource(Res.string.tracking_source_mal),
-        description = stringResource(Res.string.settings_mal_sign_in_description),
+        key = "simkl-authentication",
+        title = stringResource(Res.string.tracking_source_simkl),
+        description = stringResource(Res.string.settings_simkl_sign_in_description),
         pageLabel = trackingPage,
         section = stringResource(Res.string.settings_tracking_services),
         category = accountCategory,
-        icon = Icons.Rounded.Link,
+    )
+    addRow(
+        page = SettingsPage.TraktAuthentication,
+        key = "mdblist-authentication",
+        title = stringResource(Res.string.tracking_source_mdblist),
+        description = stringResource(Res.string.settings_mdblist_sign_in_description),
+        pageLabel = trackingPage,
+        section = stringResource(Res.string.settings_tracking_services),
+        category = accountCategory,
     )
     listOf(
-        PlaybackSearchRow("tracking-library-source", stringResource(Res.string.trakt_library_source_title), stringResource(Res.string.trakt_library_source_subtitle)),
-        PlaybackSearchRow("tracking-watch-progress", stringResource(Res.string.trakt_watch_progress_title), stringResource(Res.string.trakt_watch_progress_subtitle)),
-        PlaybackSearchRow("tracking-continue-watching-window", stringResource(Res.string.trakt_continue_watching_window), stringResource(Res.string.trakt_continue_watching_subtitle)),
+        PlaybackSearchRow("trakt-library-source", stringResource(Res.string.trakt_library_source_title), stringResource(Res.string.trakt_library_source_subtitle)),
+        PlaybackSearchRow("trakt-watch-progress", stringResource(Res.string.trakt_watch_progress_title), stringResource(Res.string.trakt_watch_progress_subtitle)),
+        PlaybackSearchRow("trakt-continue-watching-window", stringResource(Res.string.trakt_continue_watching_window), stringResource(Res.string.trakt_continue_watching_subtitle)),
+        PlaybackSearchRow("trakt-comments", stringResource(Res.string.settings_trakt_comments), stringResource(Res.string.settings_trakt_comments_description)),
+        PlaybackSearchRow("trakt-more-like-this-source", stringResource(Res.string.trakt_more_like_this_source_title), stringResource(Res.string.trakt_more_like_this_source_subtitle)),
     ).forEach { row ->
         addRow(
             page = SettingsPage.TraktAuthentication,
@@ -953,7 +966,6 @@ internal fun settingsSearchEntries(
             pageLabel = trackingPage,
             section = stringResource(Res.string.settings_tracking_features),
             category = accountCategory,
-            icon = Icons.Rounded.Link,
         )
     }
 
@@ -965,6 +977,7 @@ private data class PlaybackSearchRow(
     val title: String,
     val description: String = "",
     val sectionOverride: String? = null,
+    val page: SettingsPage? = null,
 )
 
 private fun addPlaybackRows(
@@ -976,23 +989,21 @@ private fun addPlaybackRows(
         pageLabel: String,
         section: String,
         category: String,
-        icon: ImageVector,
     ) -> Unit,
+    page: SettingsPage,
     pageLabel: String,
     section: String,
-    icon: ImageVector,
     rows: List<PlaybackSearchRow>,
 ) {
     rows.forEach { row ->
         addRow(
-            SettingsPage.Playback,
+            row.page ?: page,
             "playback-${row.key}",
             row.title,
             row.description,
             pageLabel,
             section,
             "",
-            icon,
         )
     }
 }
@@ -1006,11 +1017,9 @@ private fun addContinueWatchingRows(
         pageLabel: String,
         section: String,
         category: String,
-        icon: ImageVector,
     ) -> Unit,
     pageLabel: String,
     section: String,
-    icon: ImageVector,
     rows: List<PlaybackSearchRow>,
 ) {
     rows.forEach { row ->
@@ -1022,14 +1031,13 @@ private fun addContinueWatchingRows(
             pageLabel,
             section,
             "",
-            icon,
         )
     }
 }
 
 internal fun LazyListScope.settingsSearchRootContent(
     query: String,
-    entries: List<SettingsSearchEntry>,
+    entries: @Composable () -> List<SettingsSearchEntry>,
     isTablet: Boolean,
     showSearchField: Boolean,
     animateSearchField: Boolean,
@@ -1049,12 +1057,11 @@ internal fun LazyListScope.settingsSearchRootContent(
 
     if (query.isBlank()) return
 
-    val results = settingsSearchResults(
-        query = query,
-        entries = entries,
-    )
-
     item(key = "settings-search-results") {
+        val results = settingsSearchResults(
+            query = query,
+            entries = entries(),
+        )
         if (results.isEmpty()) {
             SettingsSearchEmptyState(isTablet = isTablet)
         } else {
@@ -1123,7 +1130,7 @@ private fun SettingsSearchField(
         onValueChange = onQueryChange,
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
-        shape = tokens.shapes.compactCard,
+        shape = RoundedCornerShape(NuvioTokens.Radius.xl),
         leadingIcon = {
             Icon(
                 imageVector = Icons.Rounded.Search,
