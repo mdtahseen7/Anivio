@@ -2,6 +2,7 @@ package com.nuvio.app.features.home
 
 import com.nuvio.app.features.addons.ManagedAddon
 import com.nuvio.app.features.catalog.CatalogTarget
+import com.nuvio.app.features.details.MetaExternalRating
 import kotlinx.serialization.Serializable
 
 /** Serializable so the home rows can be cached on disk between launches (`HomeCatalogCache`). */
@@ -22,6 +23,11 @@ data class MetaPreview(
     val imdbRating: String? = null,
     val genres: List<String> = emptyList(),
     val airingStatus: String? = null,
+    val runtime: String? = null,
+    val status: String? = null,
+    val ageRating: String? = null,
+    val language: String? = null,
+    val externalRatings: List<MetaExternalRating> = emptyList(),
 )
 
 fun MetaPreview.stableKey(): String = "$type:$id"

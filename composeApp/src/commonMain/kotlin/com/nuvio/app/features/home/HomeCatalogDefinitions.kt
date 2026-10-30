@@ -24,7 +24,7 @@ enum class HomeCatalogSource {
     /** AniList, queried directly by the app — no addon required. */
     ANILIST,
 
-    /** External daily search ranking, enriched with stable app metadata. */
+    /** Ranked projection of the active provider's current trending feed. */
     DAILY_RANKING,
 }
 
@@ -58,7 +58,7 @@ data class HomeCatalogDefinition(
 }
 
 /**
- * Every home row: built-in AniList rows first, followed by the external daily ranking and whatever
+ * Every home row: built-in AniList rows first, followed by the ranked current trend and whatever
  * addon catalogs the user has installed. Distinct by key, so an addon whose manifest id happened to
  * be `anilist` could not shadow a built-in row.
  */
@@ -114,12 +114,13 @@ private fun buildDailyRankingCatalogDefinitions(): List<HomeCatalogDefinition> =
         key = "daily-ranking:series:top-today",
         defaultTitle = runBlocking { getString(Res.string.home_catalog_top_today) },
         catalogName = runBlocking { getString(Res.string.home_catalog_top_today) },
-        addonName = "Daily ranking",
+        addonName = "Current trending",
         manifestUrl = "",
         type = "series",
         catalogId = "top-today",
         supportsPagination = false,
-        descriptorSignature = "daily-ranking-top-today-v1",
+        // Versioned so installs discard the old row populated by the broken historical-count feed.
+        descriptorSignature = "daily-ranking-top-today-v2-current-trending",
         source = HomeCatalogSource.DAILY_RANKING,
         defaultHeroSourceEnabled = false,
         isRecencyBased = true,

@@ -157,7 +157,11 @@ internal fun aniListNowBucketSeconds(): Long {
  * days and should keep the longer default so they cost nothing to revisit.
  */
 internal fun AniListCatalog.cacheTtlMs(): Long =
-    if (isAiringFeed) AniListClient.VOLATILE_CACHE_TTL_MS else AniListClient.DEFAULT_CACHE_TTL_MS
+    if (isAiringFeed || id == "trending") {
+        AniListClient.VOLATILE_CACHE_TTL_MS
+    } else {
+        AniListClient.DEFAULT_CACHE_TTL_MS
+    }
 
 /**
  * Signature contribution for the AniList rows. Deliberately string-resource free: this is called

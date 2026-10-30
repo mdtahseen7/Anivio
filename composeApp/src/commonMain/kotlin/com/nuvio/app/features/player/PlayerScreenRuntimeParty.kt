@@ -45,7 +45,6 @@ import com.nuvio.app.core.sync.AppVisibility
 import com.nuvio.app.core.ui.NuvioToastController
 import com.nuvio.app.features.party.ActiveParty
 import com.nuvio.app.features.party.AvatarStack
-import com.nuvio.app.features.party.OwnSeek
 import com.nuvio.app.features.party.PartyAction
 import com.nuvio.app.features.party.PartyChat
 import com.nuvio.app.features.party.PartyCorrection
@@ -109,13 +108,16 @@ internal fun PlayerScreenRuntime.openPartyPanel() {
 }
 
 internal fun PlayerScreenRuntime.ownSeekTarget(targetMs: Long): Long? {
-    val playback = PartyRepository.playback.value ?: return targetMs
-    val partyPositionMs = PartySync.expectedPositionMs(playback, PartyRepository.nowMs(), playbackSnapshot.durationMs)
-    return when (val seek = PartySync.ownSeek(targetMs, partyPositionMs, partyBehind)) {
-        is OwnSeek.Behind -> { partyBehind = true; seek.positionMs }
-        OwnSeek.CatchUp -> { partyBehind = false; null }
-        OwnSeek.Blocked -> { partyBlocksControl(); null }
-    }
+    if (!isPartySynced) return targetMs
+    if (partyBlocksControl()) return null
+    val durationMs = playbackSnapshot.durationMs
+    val positionMs = targetMs
+        .coerceAtLeast(0L)
+        .let { if (durationMs > 0L) it.coerceAtMost(durationMs) else it }
+    partyBehind = false
+    partyBehindMs = null
+    publishPartyPlayback(positionMs = positionMs)
+    return positionMs
 }
 
 internal fun PlayerScreenRuntime.currentPartyMedia(): PartyMedia = PartyMedia(
@@ -178,8 +180,14 @@ internal fun PlayerScreenRuntime.publishPartyPlayback(
 
 internal fun PlayerScreenRuntime.startParty() {
     scope.launch {
-        val error = PartyRepository.create(currentPartyMedia()) ?: return@launch
-        NuvioToastController.show(getString(error.messageRes))
+        val error = PartyRepository.create(currentPartyMedia())
+        if (error != null) {
+            NuvioToastController.show(getString(error.messageRes))
+            return@launch
+        }
+        // Seed the room immediately so a participant joining right after creation receives the
+        // host's current play/pause state and position instead of starting from zero.
+        publishPartyPlayback()
     }
 }
 
@@ -199,6 +207,29 @@ internal fun PlayerScreenRuntime.BindPartyEffects() {
 
     LaunchedEffect(sharing, sharedStream) {
         if (sharing) PartyRepository.shareStream(sharedStream)
+    }
+    LaunchedEffect(
+        partyId,
+        key,
+        initialLoadCompleted,
+        playbackSnapshot.isLoading,
+        errorMessage,
+        partyBehind,
+        partyBehindMs,
+    ) {
+        val party = PartyRepository.state.value.party ?: return@LaunchedEffect
+        val status = when {
+            party.media.key != key -> PartyMemberStatus.Ready
+            partyBehind -> PartyMemberStatus.Behind
+            errorMessage != null || !initialLoadCompleted -> PartyMemberStatus.Loading
+            playbackSnapshot.isLoading -> PartyMemberStatus.Buffering
+            else -> PartyMemberStatus.Ready
+        }
+        PartyRepository.setLocalStatus(
+            status = status,
+            mediaKey = key,
+            behindMs = partyBehindMs.takeIf { partyBehind },
+        )
     }
     LaunchedEffect(Unit) {
         PartyRepository.events.collect { event ->
@@ -226,7 +257,7 @@ internal fun PlayerScreenRuntime.BindPartyEffects() {
             val identity = playback.seq to playback.memberId
             if (identity != lastSeq) {
                 lastSeq = identity
-                shouldPlay = !playback.paused
+                applyPartyPaused(paused = playback.paused, force = true)
                 if (abs(snapshot.positionMs - expected) > PartySync.PAUSED_TOLERANCE_MS) controller.seekTo(expected)
                 if (abs(snapshot.playbackSpeed - playback.rate) > 0.01f) controller.setPlaybackSpeed(playback.rate)
                 continue

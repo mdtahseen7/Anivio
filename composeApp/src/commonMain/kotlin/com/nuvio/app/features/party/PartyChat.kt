@@ -179,6 +179,10 @@ object PartyChat {
             setStatus(message.key, PartyChatStatus.Failed)
             return
         }
+        // Do not rely solely on the RPC/database hook to emit the realtime event. Sending the
+        // confirmed payload from the client also keeps custom servers and reconnecting rooms in
+        // sync; message ids make duplicate deliveries harmless.
+        PartyRepository.broadcastChat(sent)
         apply(listOf(sent), replaceOlder = false, notify = false)
     }
 

@@ -47,6 +47,7 @@ import com.nuvio.app.features.streams.LocalSharedStream
 import com.nuvio.app.features.streams.LocalStreamHighlight
 import com.nuvio.app.features.streams.SharedStream
 import com.nuvio.app.navigation.*
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
@@ -626,6 +627,15 @@ internal fun StreamDestination(
         season = launch.seasonNumber,
         episode = launch.episodeNumber,
     )
+    LaunchedEffect(party?.id, contentKey) {
+        if (party != null) {
+            // A party participant is waiting for the host's stream, not choosing independently.
+            PartyRepository.setLocalStatus(
+                status = com.nuvio.app.features.party.PartyMemberStatus.Loading,
+                mediaKey = contentKey,
+            )
+        }
+    }
     val partySource = party?.media?.takeIf { it.key == contentKey }?.source
     val partySourceLabel = stringResource(Res.string.party_source)
     val streamHighlight: (StreamItem) -> String? = remember(partySource, partySourceLabel) {
@@ -640,6 +650,48 @@ internal fun StreamDestination(
         partyStream
             ?.takeIf { !isHost && it.mediaKey == contentKey }
             ?.let { SharedStream(label = sharedLabel, stream = it.toStreamItem()) }
+    }
+    var sharedStreamHandled by rememberSaveable(route.launchId) { mutableStateOf(false) }
+    LaunchedEffect(sharedStream?.stream, sharedStreamHandled) {
+        val hostStream = sharedStream?.stream ?: return@LaunchedEffect
+        if (sharedStreamHandled) return@LaunchedEffect
+        sharedStreamHandled = true
+        openSelectedStream(
+            stream = hostStream,
+            resolvedResumePositionMs = launch.resumePositionMs,
+            resolvedResumeProgressFraction = launch.resumeProgressFraction,
+            forceExternal = false,
+            // Party playback synchronization only works with the in-app player.
+            forceInternal = true,
+        )
+    }
+    val matchedPartyStream = remember(partySource, streamsUiState.filteredGroups, isHost) {
+        if (isHost || partySource == null) {
+            null
+        } else {
+            streamsUiState.filteredGroups
+                .asSequence()
+                .flatMap { it.streams.asSequence() }
+                .firstOrNull(partySource::matches)
+        }
+    }
+    LaunchedEffect(matchedPartyStream, sharedStreamHandled) {
+        val hostSource = matchedPartyStream ?: return@LaunchedEffect
+        if (sharedStreamHandled) return@LaunchedEffect
+        // Prefer the exact URL sent by the host. If it cannot be shared, resolve the same
+        // provider/source locally instead of asking the participant to choose a server.
+        delay(PARTY_SHARED_STREAM_GRACE_MS)
+        if (sharedStreamHandled || PartyRepository.sharedStream.value?.mediaKey == contentKey) {
+            return@LaunchedEffect
+        }
+        sharedStreamHandled = true
+        openSelectedStream(
+            stream = hostSource,
+            resolvedResumePositionMs = launch.resumePositionMs,
+            resolvedResumeProgressFraction = launch.resumeProgressFraction,
+            forceExternal = false,
+            forceInternal = true,
+        )
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -729,3 +781,5 @@ internal fun StreamDestination(
         }
     }
 }
+
+private const val PARTY_SHARED_STREAM_GRACE_MS = 1_500L

@@ -31,6 +31,8 @@ import nuvio.composeapp.generated.resources.settings_mdb_enable_ratings_descript
 import nuvio.composeapp.generated.resources.settings_mdb_section_api_key
 import nuvio.composeapp.generated.resources.settings_mdb_section_rating_providers
 import nuvio.composeapp.generated.resources.settings_mdb_section_title
+import nuvio.composeapp.generated.resources.settings_mdb_show_on_hero
+import nuvio.composeapp.generated.resources.settings_mdb_show_on_hero_description
 import nuvio.composeapp.generated.resources.source_audience_score
 import nuvio.composeapp.generated.resources.source_imdb
 import nuvio.composeapp.generated.resources.source_letterboxd
@@ -61,6 +63,15 @@ internal fun LazyListScope.mdbListSettingsContent(
                     enabled = settings.hasApiKey,
                     isTablet = isTablet,
                     onCheckedChange = MdbListSettingsRepository::setEnabled,
+                )
+                SettingsGroupDivider(isTablet = isTablet)
+                SettingsSwitchRow(
+                    title = stringResource(Res.string.settings_mdb_show_on_hero),
+                    description = stringResource(Res.string.settings_mdb_show_on_hero_description),
+                    checked = settings.showOnHero,
+                    enabled = providerControlsEnabled,
+                    isTablet = isTablet,
+                    onCheckedChange = MdbListSettingsRepository::setShowOnHero,
                 )
                 if (!settings.hasApiKey) {
                     SettingsGroupDivider(isTablet = isTablet)

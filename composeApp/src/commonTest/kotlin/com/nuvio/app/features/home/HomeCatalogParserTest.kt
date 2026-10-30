@@ -71,4 +71,32 @@ class HomeCatalogParserTest {
         assertEquals("2027", result.items.single().releaseInfo)
         assertEquals("2027-05-12T00:00:00.000Z", result.items.single().rawReleaseDate)
     }
+
+    @Test
+    fun `parse catalog response keeps hero rating metadata`() {
+        val item = HomeCatalogParser.parseCatalog(
+            """
+                {
+                  "metas": [
+                    {
+                      "id": "tt1",
+                      "type": "movie",
+                      "name": "Rated Movie",
+                      "imdbRating": "8.2",
+                      "runtime": "118 min",
+                      "status": "Released",
+                      "ageRating": "PG-13",
+                      "language": "en"
+                    }
+                  ]
+                }
+            """.trimIndent(),
+        ).single()
+
+        assertEquals("8.2", item.imdbRating)
+        assertEquals("118 min", item.runtime)
+        assertEquals("Released", item.status)
+        assertEquals("PG-13", item.ageRating)
+        assertEquals("en", item.language)
+    }
 }

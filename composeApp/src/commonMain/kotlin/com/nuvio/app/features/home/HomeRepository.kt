@@ -6,7 +6,6 @@ import com.nuvio.app.features.addons.enabledAddons
 import com.nuvio.app.features.anime.PublicAnimeSource
 import com.nuvio.app.features.anilist.AniListHeroArtwork
 import com.nuvio.app.features.anilist.AniListCatalogSource
-import com.nuvio.app.core.anilist.DailyAnimeRankingsClient
 import com.nuvio.app.features.content.ContentMode
 import com.nuvio.app.features.content.ContentModeRepository
 import com.nuvio.app.features.catalog.CatalogPage
@@ -36,6 +35,7 @@ import kotlin.math.absoluteValue
 import kotlin.random.Random
 
 object HomeRepository {
+    private const val TOP_TODAY_LIMIT = 10
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
@@ -476,7 +476,8 @@ object HomeRepository {
                 forceRefresh = forceRefresh,
             )
 
-            HomeCatalogSource.DAILY_RANKING -> fetchDailyTopToday(
+            HomeCatalogSource.DAILY_RANKING -> fetchCurrentTopToday(
+                trendingPage = aniListPages["trending"],
                 forceRefresh = forceRefresh,
             )
         }
@@ -531,23 +532,25 @@ object HomeRepository {
             )
         }
 
-    private suspend fun fetchDailyTopToday(forceRefresh: Boolean): CatalogPage {
-        val ranked = DailyAnimeRankingsClient.fetch(limit = 10, forceRefresh = forceRefresh)
-        val metadataById = AniListCatalogSource.resolveMediaIds(
-            ids = ranked.map { it.anilistId },
+    private suspend fun fetchCurrentTopToday(
+        trendingPage: CatalogPage?,
+        forceRefresh: Boolean,
+    ): CatalogPage {
+        // The former external "daily" endpoint currently returns accumulated historical counts
+        // (daily, weekly, monthly and yearly values are identical), which puts long-finished anime
+        // in this row. Use the active anime provider's live trending feed instead. For AniList that
+        // feed is constrained to RELEASING titles; the MAL fallback uses Kitsu's editorial trend.
+        val current = trendingPage ?: PublicAnimeSource.catalog(
+            catalogId = "trending",
+            contentType = "series",
+            page = 1,
+            maxItems = TOP_TODAY_LIMIT,
             forceRefresh = forceRefresh,
         )
-        val mapped = ranked.mapNotNull { ranking ->
-            val metadata = metadataById[ranking.anilistId] ?: return@mapNotNull null
-            metadata.copy(
-                // The external feed owns the daily order and count; AniList supplies stable
-                // display metadata and the canonical detail route for each ranked id.
-                popularity = ranking.dailyCount.toDouble(),
-            )
-        }.take(10)
+        val items = current.items.take(TOP_TODAY_LIMIT)
         return CatalogPage(
-            items = mapped,
-            rawItemCount = mapped.size,
+            items = items,
+            rawItemCount = items.size,
             nextSkip = null,
         )
     }

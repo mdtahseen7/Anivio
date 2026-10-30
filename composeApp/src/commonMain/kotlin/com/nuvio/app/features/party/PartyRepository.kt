@@ -44,7 +44,6 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
-import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeMark
 
@@ -259,9 +258,10 @@ object PartyRepository {
     }
 
     private fun startSession(party: ActiveParty, playback: PartyPlayback?) {
+        val activeParty = if (party.isHost) party.copy(sharing = true) else party
         val job = SupervisorJob(scope.coroutineContext[Job])
         val session = CoroutineScope(dispatcher + job)
-        val partyChannel = PartyChannel(party.id, party.memberId)
+        val partyChannel = PartyChannel(activeParty.id, activeParty.memberId)
         sessionJob = job
         sessionScope = session
         channel = partyChannel
@@ -269,8 +269,8 @@ object PartyRepository {
         ignoredWaiting.clear()
         waitStartedAt = null
         resumedAt = null
-        _playback.value = playback?.takeIf { it.mediaKey == null || it.mediaKey == party.media.key }
-        _state.value = PartyUiState(party = party)
+        _playback.value = playback?.takeIf { it.mediaKey == null || it.mediaKey == activeParty.media.key }
+        _state.value = PartyUiState(party = activeParty)
         session.launch {
             runCatching {
                 partyChannel.open(
@@ -284,7 +284,7 @@ object PartyRepository {
         session.launch { heartbeatLoop() }
         session.launch { refineClock() }
         session.launch { coordinatorLoop() }
-        PartyChat.start(PartyChatRoom(party.id, party.memberId, party.members))
+        PartyChat.start(PartyChatRoom(activeParty.id, activeParty.memberId, activeParty.members))
     }
 
     private suspend fun stopSession() {
@@ -377,6 +377,8 @@ object PartyRepository {
     private fun onPresence(joins: Map<String, Presence>, leaves: Map<String, Presence>) {
         val party = _state.value.party ?: return
         val presence = party.presence.toMutableMap()
+        val knownMemberIds = party.members.mapTo(mutableSetOf()) { it.id }
+        val unknownJoins = joins.keys.filter { it != party.memberId && it !in knownMemberIds }
         val left = leaves.keys.filter { it != party.memberId && it !in joins }
         presence -= left.toSet()
         joins.forEach { (key, value) ->
@@ -386,6 +388,11 @@ object PartyRepository {
             if (decoded.status == PartyMemberStatus.Ready) ignoredWaiting.remove(key)
         }
         updateParty { it.copy(presence = presence) }
+        // Presence can arrive before (or instead of) the database's member_joined broadcast.
+        // Refreshing here makes the new seat visible to clients that were already in the room.
+        if (unknownJoins.isNotEmpty()) {
+            sessionScope?.launch { refreshMembers(announceMemberId = unknownJoins.first()) }
+        }
         if (left.isNotEmpty()) sessionScope?.launch { requestState(party) }
     }
 
@@ -548,6 +555,9 @@ object PartyRepository {
             val party = _state.value.party ?: return
             val snapshot = runRemote { PartyApi.heartbeat(party.id, deviceId()) } ?: continue
             applySnapshot(snapshot)
+            // Realtime is the fast path. History polling is the reliable fallback for a
+            // broadcast missed while a phone was reconnecting or in the background.
+            PartyChat.refresh()
         }
     }
 
@@ -663,6 +673,17 @@ object PartyRepository {
         runCatching { channel?.send("stream", payload) }
     }
 
+    internal suspend fun broadcastChat(message: PartyChatPayload) {
+        val party = _state.value.party ?: return
+        if (message.memberId != party.memberId) return
+        val payload = PartyApi.json.encodeToJsonElement(
+            PartyChatPayload.serializer(),
+            // `mine` is response-specific. Other members must not render this as their own.
+            message.copy(mine = false),
+        ).jsonObject
+        runCatching { channel?.send("chat", payload) }
+    }
+
     private fun encodePlayback(playback: PartyPlayback): JsonObject =
         PartyApi.json.encodeToJsonElement(PartyPlayback.serializer(), playback).jsonObject
 
@@ -694,7 +715,7 @@ object PartyRepository {
 
     private const val DEFAULT_NAME = "Nuvio"
     private val COLOR_PATTERN = Regex("^#[0-9A-Fa-f]{6}$")
-    private val HEARTBEAT_INTERVAL = 2.minutes
+    private val HEARTBEAT_INTERVAL = 5.seconds
     private val PERSIST_DELAY = 1.5.seconds
     private val COORDINATOR_TICK = 0.5.seconds
     private val RESUME_GRACE = 3.seconds
