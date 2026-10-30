@@ -3,6 +3,7 @@ package com.nuvio.app
 import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -90,6 +91,11 @@ open class MainActivity : AppCompatActivity() {
         SentrySettingsStorage.initialize(applicationContext)
         SentryInitializer.start(application)
         super.onCreate(savedInstanceState)
+        // Compose's IME padding needs a resized viewport. Without this Android falls back to
+        // panning the fullscreen player, which moves the watch-party chat composer off-screen in
+        // landscape when the keyboard opens. This also covers every launcher-icon activity because
+        // they inherit MainActivity.
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         window.setBackgroundDrawableResource(R.color.nuvio_background)
         pipRemoteActionReceiver = PipRemoteActionReceiver.register(this)
         SyncClientIdentityStorage.initialize(applicationContext)

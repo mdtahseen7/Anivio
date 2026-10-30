@@ -42,7 +42,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
-import com.nuvio.app.core.network.ServerConfigurationRepository
 import com.nuvio.app.core.ui.nuvio
 import com.nuvio.app.features.profiles.AvatarRepository
 import com.nuvio.app.features.profiles.ProfileRepository
@@ -89,10 +88,9 @@ internal fun PartyAvatar(
     presence: PartyPresenceState? = null,
     ringColor: Color = MaterialTheme.nuvio.colors.background,
 ) {
-    val storage = "${ServerConfigurationRepository.active.value.backendUrl}/storage/v1/object/"
     PartyAvatar(
         name = member.displayName,
-        imageUrl = member.avatarUrl?.takeIf { it.startsWith(storage) },
+        imageUrl = partyAvatarImageUrl(member.avatarUrl),
         color = member.avatarColor,
         modifier = modifier,
         size = size,
@@ -100,6 +98,13 @@ internal fun PartyAvatar(
         ringColor = ringColor,
     )
 }
+
+internal fun partyAvatarImageUrl(url: String?): String? =
+    url?.trim()?.takeIf { value ->
+        value.length <= 2_048 &&
+            value.startsWith("https://", ignoreCase = true) &&
+            value.none(Char::isWhitespace)
+    }
 
 @Composable
 internal fun PartyAvatar(

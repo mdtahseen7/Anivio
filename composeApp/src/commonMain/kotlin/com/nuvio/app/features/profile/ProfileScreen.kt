@@ -11,9 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -42,7 +39,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -54,24 +50,18 @@ import com.nuvio.app.core.ui.nuvio
 import com.nuvio.app.features.anilist.AniListStatisticsRepository
 import com.nuvio.app.features.anilist.AniListAuthRepository
 import com.nuvio.app.features.mal.MalAuthSettings
-import com.nuvio.app.features.profile.components.AchievementBadge
-import com.nuvio.app.features.profile.components.AchievementDetail
 import com.nuvio.app.features.profile.components.ActivityHeatmap
 import com.nuvio.app.features.profile.components.LevelRing
 import com.nuvio.app.features.profile.components.ProfileBarRow
 import com.nuvio.app.features.profile.components.ProfilePill
 import com.nuvio.app.features.profile.components.ProfileStatTile
 import com.nuvio.app.features.profile.components.ProfileVerticalBar
-import com.nuvio.app.features.profile.components.tierColor
 import com.nuvio.app.features.profiles.ActiveProfileMiniAvatar
 import com.nuvio.app.features.profiles.AvatarRepository
 import com.nuvio.app.features.profiles.ProfileRepository
 
 /**
- * The gamified profile dashboard: identity + level, streak, activity heatmap, lifetime totals,
- * watch-habit analytics and the achievements grid. Reads everything from [ProfileStatsRepository]
- * (which recomputes from local history + AniList) and layers in a share action and celebration
- * popups for level-ups / freshly-unlocked badges.
+ * Profile dashboard: identity, activity heatmap, lifetime totals and watch-habit analytics.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -105,12 +95,17 @@ fun ProfileScreen(
     }
 
     val stats = uiState.stats
-    var selectedAchievement by remember { mutableStateOf<Achievement?>(null) }
     var showShareCard by remember { mutableStateOf(false) }
-    var showAllAchievements by remember { mutableStateOf(false) }
 
-    // Surface one-shot celebrations.
-    val celebration = uiState.pendingCelebrations.firstOrNull()
+    // Achievement UI is intentionally absent from the profile. Consume those one-shot events so
+    // they do not block later level celebrations in the repository queue.
+    val hiddenAchievementCelebrations = uiState.pendingCelebrations
+        .filterIsInstance<ProfileCelebration.AchievementUnlocked>()
+    LaunchedEffect(hiddenAchievementCelebrations) {
+        hiddenAchievementCelebrations.forEach(ProfileStatsRepository::consumeCelebration)
+    }
+    val celebration = uiState.pendingCelebrations
+        .firstOrNull { it !is ProfileCelebration.AchievementUnlocked }
 
     NuvioScreen(modifier = modifier) {
         stickyHeader {
@@ -164,13 +159,10 @@ fun ProfileScreen(
             )
         }
 
-        item("streak") { StreakCard(stats.streak, stats.totals) }
-
         item("heatmap") {
             HeatmapCard(
                 intensities = stats.heatmap.map { it.intensity },
                 activeDays = stats.totals.activeDays,
-                currentStreak = stats.streak.currentDays,
             )
         }
 
@@ -183,31 +175,6 @@ fun ProfileScreen(
                 val aniStats by AniListStatisticsRepository.uiState.collectAsStateWithLifecycle()
                 aniStats.statistics?.anime?.let { TasteBreakdownCard(it) }
             }
-        }
-
-        item("achievements-header") {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                val unlockedCount = stats.achievements.count { it.unlocked }
-                Text(
-                    "Achievements",
-                    color = tokens.colors.textPrimary,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                )
-                ProfilePill("$unlockedCount / ${stats.achievements.size}")
-            }
-        }
-
-        item("achievements-grid") {
-            AchievementsPreview(
-                achievements = stats.achievements,
-                onAchievementClick = { selectedAchievement = it },
-                onSeeAll = { showAllAchievements = true },
-            )
         }
 
         item("footer-space") {
@@ -228,33 +195,6 @@ fun ProfileScreen(
                 }
             }
             Spacer(Modifier.height(16.dp))
-        }
-    }
-
-    // Achievement detail sheet.
-    selectedAchievement?.let { ach ->
-        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        com.nuvio.app.core.ui.NuvioModalBottomSheet(
-            onDismissRequest = { selectedAchievement = null },
-            sheetState = sheetState,
-        ) {
-            AchievementDetail(ach)
-            Spacer(Modifier.height(24.dp))
-        }
-    }
-
-    // Full achievements sheet.
-    if (showAllAchievements) {
-        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        com.nuvio.app.core.ui.NuvioModalBottomSheet(
-            onDismissRequest = { showAllAchievements = false },
-            sheetState = sheetState,
-            fullHeight = true,
-        ) {
-            AllAchievementsContent(
-                achievements = stats.achievements,
-                onAchievementClick = { selectedAchievement = it },
-            )
         }
     }
 
@@ -336,61 +276,7 @@ private fun IdentityCard(
 }
 
 @Composable
-private fun StreakCard(streak: ProfileStreak, totals: ProfileTotals) {
-    val tokens = MaterialTheme.nuvio
-    NuvioSurfaceCard {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            Box(
-                modifier = Modifier.size(56.dp).clip(CircleShape)
-                    .background(
-                        if (streak.currentDays > 0) {
-                            Brush.linearGradient(listOf(Color(0xFFFB923C), Color(0xFFF43F5E)))
-                        } else {
-                            Brush.linearGradient(listOf(tokens.colors.surfaceElevated, tokens.colors.surfaceElevated))
-                        },
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.Rounded.LocalFireDepartment,
-                    contentDescription = null,
-                    tint = if (streak.currentDays > 0) Color.White else tokens.colors.textMuted,
-                    modifier = Modifier.size(28.dp),
-                )
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        "${streak.currentDays}",
-                        color = tokens.colors.textPrimary,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 28.sp,
-                    )
-                    Text(
-                        "day streak",
-                        color = tokens.colors.textSecondary,
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(bottom = 5.dp),
-                    )
-                }
-                val sub = when {
-                    streak.watchedToday -> "You've watched today — keep it going!"
-                    streak.freezeActive -> "Streak freeze active · watch today to secure it"
-                    streak.currentDays > 0 -> "Watch something today to extend it"
-                    else -> "Watch an episode to start a new streak"
-                }
-                Text(sub, color = tokens.colors.textMuted, fontSize = 12.sp)
-            }
-            Column(horizontalAlignment = Alignment.End) {
-                Text("${streak.longestDays}", color = tokens.colors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                Text("best", color = tokens.colors.textMuted, fontSize = 11.sp)
-            }
-        }
-    }
-}
-
-@Composable
-private fun HeatmapCard(intensities: List<Int>, activeDays: Int, currentStreak: Int) {
+private fun HeatmapCard(intensities: List<Int>, activeDays: Int) {
     val tokens = MaterialTheme.nuvio
     NuvioSurfaceCard {
         Row(
@@ -400,9 +286,7 @@ private fun HeatmapCard(intensities: List<Int>, activeDays: Int, currentStreak: 
         ) {
             Text("Activity", color = tokens.colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
             if (activeDays > 0) {
-                ProfilePill(
-                    if (currentStreak > 0) "$activeDays active · $currentStreak-day streak" else "$activeDays active days",
-                )
+                ProfilePill("$activeDays active days")
             }
         }
         Spacer(Modifier.height(12.dp))
@@ -535,75 +419,6 @@ private fun TasteBreakdownCard(anime: com.nuvio.app.core.anilist.AniListAnimeSta
             }
         }
     }
-}
-
-@Composable
-private fun AchievementsPreview(
-    achievements: List<Achievement>,
-    onAchievementClick: (Achievement) -> Unit,
-    onSeeAll: () -> Unit,
-) {
-    val tokens = MaterialTheme.nuvio
-    // Show unlocked first, then nearest-to-unlock.
-    val ordered = achievements.sortedWith(
-        compareByDescending<Achievement> { it.unlocked }.thenByDescending { it.progress },
-    )
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        items(ordered.take(10)) { ach ->
-            AchievementBadge(achievement = ach, modifier = Modifier.width(96.dp)) { onAchievementClick(ach) }
-        }
-        item {
-            Box(
-                modifier = Modifier.width(96.dp).height(120.dp).clip(RoundedCornerShape(16.dp))
-                    .background(tokens.colors.surfaceElevated)
-                    .clickable { onSeeAll() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Rounded.ChevronRight, null, tint = tokens.colors.accent)
-                    Text("See all", color = tokens.colors.textSecondary, fontSize = 11.sp)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AllAchievementsContent(
-    achievements: List<Achievement>,
-    onAchievementClick: (Achievement) -> Unit,
-) {
-    val tokens = MaterialTheme.nuvio
-    Text(
-        "Achievements",
-        color = tokens.colors.textPrimary,
-        fontWeight = FontWeight.Bold,
-        fontSize = 18.sp,
-        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-    )
-    AchievementCategory.entries.forEach { category ->
-        val inCategory = achievements.filter { it.category == category }
-        if (inCategory.isEmpty()) return@forEach
-        Text(
-            category.label,
-            color = tokens.colors.textSecondary,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 13.sp,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
-        )
-        inCategory.chunked(3).forEach { rowItems ->
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                rowItems.forEach { ach ->
-                    AchievementBadge(achievement = ach, modifier = Modifier.weight(1f)) { onAchievementClick(ach) }
-                }
-                repeat(3 - rowItems.size) { Spacer(Modifier.weight(1f)) }
-            }
-        }
-    }
-    Spacer(Modifier.height(32.dp))
 }
 
 private fun formatDaysCompact(days: Double): String = when {

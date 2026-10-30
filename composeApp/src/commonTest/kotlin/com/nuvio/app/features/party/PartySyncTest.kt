@@ -177,6 +177,15 @@ class PartySyncTest {
         assertFalse(first.key == first.copy(episode = 3).key)
     }
 
+    @Test
+    fun partyAvatarAcceptsSafeHttpsCatalogImages() {
+        val url = "https://s4.anilist.co/file/anilistcdn/character/large/avatar.jpg"
+
+        assertEquals(url, partyAvatarImageUrl(url))
+        assertEquals(null, partyAvatarImageUrl("http://example.com/avatar.jpg"))
+        assertEquals(null, partyAvatarImageUrl("https://example.com/bad avatar.jpg"))
+    }
+
     private fun party(memberId: String, hostMemberId: String, online: List<String>) = ActiveParty(
         id = "p",
         code = "ABC234",

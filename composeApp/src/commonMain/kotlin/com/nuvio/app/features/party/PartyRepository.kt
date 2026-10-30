@@ -9,6 +9,7 @@ import com.nuvio.app.core.sync.AppVisibility
 import com.nuvio.app.core.sync.SyncClientIdentity
 import com.nuvio.app.features.profiles.AvatarRepository
 import com.nuvio.app.features.profiles.ProfileRepository
+import com.nuvio.app.features.profiles.profileAvatarImageUrl
 import io.github.jan.supabase.realtime.Presence
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -84,6 +85,7 @@ object PartyRepository {
     private var waitStartedAt: TimeMark? = null
     private var resumedAt: TimeMark? = null
     private val ignoredWaiting = mutableSetOf<String>()
+    private val pendingMemberProfiles = mutableMapOf<String, PartyMember>()
     private var rejoining = false
 
     init {
@@ -267,6 +269,7 @@ object PartyRepository {
         channel = partyChannel
         localPresence = null
         ignoredWaiting.clear()
+        pendingMemberProfiles.clear()
         waitStartedAt = null
         resumedAt = null
         _playback.value = playback?.takeIf { it.mediaKey == null || it.mediaKey == activeParty.media.key }
@@ -297,6 +300,7 @@ object PartyRepository {
         channel?.close()
         channel = null
         localPresence = null
+        pendingMemberProfiles.clear()
         _playback.value = null
         _sharedStream.value = null
         _state.value = PartyUiState()
@@ -324,6 +328,7 @@ object PartyRepository {
         val presence = encodePresence(ownPresence(party))
         runCatching { channel?.track(presence) }
         runCatching { channel?.send("status", presence) }
+        sendProfile(party)
         _playback.value?.let { current -> runCatching { channel?.send("state", encodePlayback(current)) } }
         if (party.isHost && party.sharing) _sharedStream.value?.let { sendStream(it) }
         requestState(party)
@@ -337,11 +342,13 @@ object PartyRepository {
             "state_request" -> {
                 if (payload.string("member_id") == party.memberId) return
                 runCatching { channel?.send("status", encodePresence(ownPresence(party))) }
+                sendProfile(party)
                 if (party.isHost && party.sharing) _sharedStream.value?.let { sendStream(it) }
                 val current = _playback.value ?: return
                 runCatching { channel?.send("state", encodePlayback(current)) }
             }
             "status" -> decode(payload, PartyPresence.serializer())?.let(::applyStatus)
+            "profile" -> decode(payload, PartyMember.serializer())?.let(::applyMemberProfile)
             "control" -> {
                 val hostOnly = (payload["host_only"] as? JsonPrimitive)?.booleanOrNull ?: return
                 if (party.hostOnly == hostOnly) return
@@ -419,6 +426,7 @@ object PartyRepository {
         }
         val name = party.member(memberId)?.displayName
         if (memberId == party.hostMemberId) _sharedStream.value = null
+        pendingMemberProfiles.remove(memberId)
         updateParty { current ->
             current.copy(
                 members = current.members.filterNot { it.id == memberId },
@@ -455,14 +463,16 @@ object PartyRepository {
         }
         val info = snapshot.party ?: return
         updateParty { current ->
+            val members = snapshot.members.map { member -> pendingMemberProfiles[member.id] ?: member }
             current.copy(
-                members = snapshot.members,
+                members = members,
                 hostMemberId = info.hostMemberId,
                 maxMembers = info.maxMembers,
                 hostOnly = info.hostOnly,
                 presence = current.presence.filterKeys { key -> snapshot.members.any { it.id == key } },
             )
         }
+        _state.value.party?.members?.let(PartyChat::updateMembers)
         if (info.media.key != _state.value.party?.media?.key) applyMedia(info.media, info.playback)
         info.playback?.let(::accept)
     }
@@ -652,10 +662,17 @@ object PartyRepository {
 
     private suspend fun identity(): PartyIdentity {
         val profile = ProfileRepository.state.value.activeProfile
+        val catalogAvatar = profile?.avatarId?.let { avatarId ->
+            AvatarRepository.avatars.value.firstOrNull { it.id == avatarId }
+        }
+        val resolvedAvatarUrl = profile
+            ?.let { profileAvatarImageUrl(it, catalogAvatar) }
+            ?.let(::partyAvatarImageUrl)
+            ?.takeIf { it.length <= PARTY_AVATAR_URL_LIMIT }
         return PartyIdentity(
             deviceId = deviceId(),
             displayName = profile?.name?.trim()?.takeIf { it.isNotEmpty() }?.take(40) ?: DEFAULT_NAME,
-            avatarUrl = profile?.avatarUrl?.takeIf { it.startsWith("https://") && it.length <= 512 },
+            avatarUrl = resolvedAvatarUrl,
             avatarColor = profile?.avatarColorHex?.takeIf { COLOR_PATTERN.matches(it) },
             profileIndex = profile?.profileIndex,
         )
@@ -671,6 +688,36 @@ object PartyRepository {
             put("stream", stream?.let { PartyApi.json.encodeToJsonElement(PartyStream.serializer(), it) } ?: JsonNull)
         }
         runCatching { channel?.send("stream", payload) }
+    }
+
+    private suspend fun sendProfile(party: ActiveParty) {
+        val identity = identity()
+        val member = PartyMember(
+            id = party.memberId,
+            displayName = identity.displayName,
+            avatarUrl = identity.avatarUrl,
+            avatarColor = identity.avatarColor,
+        )
+        applyMemberProfile(member)
+        val payload = PartyApi.json.encodeToJsonElement(PartyMember.serializer(), member).jsonObject
+        runCatching { channel?.send("profile", payload) }
+    }
+
+    private fun applyMemberProfile(candidate: PartyMember) {
+        val party = _state.value.party ?: return
+        val member = candidate.copy(
+            displayName = candidate.displayName.trim().take(40).ifBlank {
+                party.member(candidate.id)?.displayName ?: DEFAULT_NAME
+            },
+            avatarUrl = partyAvatarImageUrl(candidate.avatarUrl)?.take(PARTY_AVATAR_URL_LIMIT),
+            avatarColor = candidate.avatarColor?.takeIf(COLOR_PATTERN::matches),
+        )
+        pendingMemberProfiles[member.id] = member
+        if (party.members.none { it.id == member.id }) return
+        updateParty { current ->
+            current.copy(members = current.members.map { if (it.id == member.id) member else it })
+        }
+        _state.value.party?.members?.let(PartyChat::updateMembers)
     }
 
     internal suspend fun broadcastChat(message: PartyChatPayload) {
@@ -714,6 +761,7 @@ object PartyRepository {
     }
 
     private const val DEFAULT_NAME = "Nuvio"
+    private const val PARTY_AVATAR_URL_LIMIT = 512
     private val COLOR_PATTERN = Regex("^#[0-9A-Fa-f]{6}$")
     private val HEARTBEAT_INTERVAL = 5.seconds
     private val PERSIST_DELAY = 1.5.seconds

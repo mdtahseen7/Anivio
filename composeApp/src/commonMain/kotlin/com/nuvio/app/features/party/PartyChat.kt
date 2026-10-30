@@ -132,6 +132,12 @@ object PartyChat {
         }
     }
 
+    internal fun updateMembers(members: List<PartyMember>) {
+        scope.launch {
+            room = room?.copy(members = members)
+        }
+    }
+
     internal fun receive(payload: JsonObject) {
         scope.launch {
             if (room == null) return@launch

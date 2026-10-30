@@ -42,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -104,6 +105,34 @@ private val log = Logger.withTag("SeriesContent")
  * rather than "disabled".
  */
 private const val UnreleasedEpisodeAlpha = 0.45f
+private const val EPISODE_RANGE_SIZE = 50
+
+internal data class EpisodeRange(
+    val firstEpisode: Int,
+    val lastEpisode: Int,
+) {
+    operator fun contains(episode: Int): Boolean = episode in firstEpisode..lastEpisode
+}
+
+internal fun buildEpisodeRanges(
+    episodes: List<MetaVideo>,
+    rangeSize: Int = EPISODE_RANGE_SIZE,
+): List<EpisodeRange> {
+    if (rangeSize <= 0) return emptyList()
+    val episodeNumbers = episodes.mapNotNull(MetaVideo::episode).filter { it > 0 }
+    if (episodeNumbers.size <= rangeSize) return emptyList()
+    val firstNumber = episodeNumbers.minOrNull() ?: return emptyList()
+    val lastNumber = episodeNumbers.maxOrNull() ?: return emptyList()
+    val firstRangeStart = ((firstNumber - 1) / rangeSize) * rangeSize + 1
+    return generateSequence(firstRangeStart) { previous ->
+        (previous + rangeSize).takeIf { it <= lastNumber }
+    }.map { start ->
+        EpisodeRange(
+            firstEpisode = start,
+            lastEpisode = minOf(start + rangeSize - 1, lastNumber),
+        )
+    }.toList()
+}
 
 @Composable
 fun DetailSeriesContent(
@@ -308,35 +337,65 @@ fun DetailSeriesContent(
                         title = sectionTitle,
                     )
                     val seasonEpisodes = groupedEpisodes.getValue(seasonForContent)
+                    val preferredEpisode = preferredEpisodeNumberForSeason(
+                        displayedSeasonNumber = seasonForContent,
+                        preferredSeasonNumber = preferredSeasonNumber,
+                        preferredEpisodeNumber = preferredEpisodeNumber,
+                    )
+                    val episodeRanges = remember(seasonEpisodes) { buildEpisodeRanges(seasonEpisodes) }
+                    val preferredRange = episodeRanges.firstOrNull { range ->
+                        preferredEpisode?.let { it in range } == true
+                    }
+                    var selectedRangeStart by rememberSaveable(meta.id, seasonForContent) {
+                        mutableStateOf(preferredRange?.firstEpisode ?: episodeRanges.firstOrNull()?.firstEpisode)
+                    }
+                    LaunchedEffect(episodeRanges, preferredEpisode) {
+                        selectedRangeStart = when {
+                            preferredRange != null -> preferredRange.firstEpisode
+                            episodeRanges.none { it.firstEpisode == selectedRangeStart } ->
+                                episodeRanges.firstOrNull()?.firstEpisode
+                            else -> selectedRangeStart
+                        }
+                    }
+                    val selectedRange = episodeRanges.firstOrNull { it.firstEpisode == selectedRangeStart }
+                    val displayedEpisodes = selectedRange?.let { range ->
+                        seasonEpisodes.filter { episode -> episode.episode?.let { it in range } == true }
+                    } ?: seasonEpisodes
+                    if (episodeRanges.isNotEmpty() && selectedRange != null) {
+                        EpisodeRangeChipRow(
+                            ranges = episodeRanges,
+                            selectedRange = selectedRange,
+                            horizontalScrollPadding = horizontalScrollPadding,
+                            onSelect = { selectedRangeStart = it.firstEpisode },
+                        )
+                    }
                     // Recomputed here rather than passed in: it is only ever a display concern, and
                     // it has to re-evaluate as the day rolls over while the screen is open.
                     val todayIsoDate = CurrentDateProvider.todayIsoDate()
                     if (episodeCardStyle == MetaEpisodeCardStyle.Horizontal) {
-                        EpisodeHorizontalRow(
-                            episodes = seasonEpisodes,
-                            todayIsoDate = todayIsoDate,
-                            maxWidthDp = containerWidthDp,
-                            horizontalScrollPadding = horizontalScrollPadding,
-                            parentMetaId = meta.id,
-                            metaType = meta.type,
-                            watchedKeys = watchedKeys,
-                            fallbackImage = meta.background ?: meta.poster,
-                            progressByVideoId = progressByVideoId,
-                            episodeRatings = episodeRatings,
-                            blurUnwatchedEpisodes = blurUnwatchedEpisodes,
-                            preferredEpisodeNumber = preferredEpisodeNumberForSeason(
-                                displayedSeasonNumber = seasonForContent,
-                                preferredSeasonNumber = preferredSeasonNumber,
-                                preferredEpisodeNumber = preferredEpisodeNumber,
-                            ),
-                            onEpisodeClick = onEpisodeClick,
-                            onEpisodeLongPress = onEpisodeLongPress,
-                        )
+                        key(selectedRange?.firstEpisode) {
+                            EpisodeHorizontalRow(
+                                episodes = displayedEpisodes,
+                                todayIsoDate = todayIsoDate,
+                                maxWidthDp = containerWidthDp,
+                                horizontalScrollPadding = horizontalScrollPadding,
+                                parentMetaId = meta.id,
+                                metaType = meta.type,
+                                watchedKeys = watchedKeys,
+                                fallbackImage = meta.background ?: meta.poster,
+                                progressByVideoId = progressByVideoId,
+                                episodeRatings = episodeRatings,
+                                blurUnwatchedEpisodes = blurUnwatchedEpisodes,
+                                preferredEpisodeNumber = preferredEpisode,
+                                onEpisodeClick = onEpisodeClick,
+                                onEpisodeLongPress = onEpisodeLongPress,
+                            )
+                        }
                     } else {
                         Column(
                             verticalArrangement = Arrangement.spacedBy(sizing.cardGap),
                         ) {
-                            seasonEpisodes.forEach { episode ->
+                            displayedEpisodes.forEach { episode ->
                                 val episodeVideoId = buildPlaybackVideoId(
                                     parentMetaId = meta.id,
                                     seasonNumber = episode.season,
@@ -365,6 +424,52 @@ fun DetailSeriesContent(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EpisodeRangeChipRow(
+    ranges: List<EpisodeRange>,
+    selectedRange: EpisodeRange,
+    horizontalScrollPadding: Dp,
+    onSelect: (EpisodeRange) -> Unit,
+) {
+    val listState = rememberLazyListState()
+    LaunchedEffect(ranges, selectedRange) {
+        val selectedIndex = ranges.indexOf(selectedRange)
+        if (selectedIndex >= 0) listState.animateScrollToItem(selectedIndex)
+    }
+    LazyRow(
+        state = listState,
+        modifier = Modifier
+            .nuvioHorizontalScrollBleed(horizontalScrollPadding)
+            .fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = horizontalScrollPadding),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        items(ranges, key = EpisodeRange::firstEpisode) { range ->
+            val selected = range == selectedRange
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(
+                        if (selected) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.surfaceVariant,
+                    )
+                    .clickable { onSelect(range) }
+                    .padding(horizontal = 16.dp, vertical = 9.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "${range.firstEpisode}-${range.lastEpisode}",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                    color = if (selected) MaterialTheme.colorScheme.onPrimary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
             }
         }
     }

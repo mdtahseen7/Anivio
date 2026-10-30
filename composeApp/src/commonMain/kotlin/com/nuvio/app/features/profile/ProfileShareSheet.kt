@@ -265,8 +265,8 @@ private fun ShareCard(
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     ShareStat("${stats.totals.episodesWatched}", "episodes")
                     ShareStat("${stats.totals.seriesCompleted}", "completed")
-                    ShareStat("${stats.streak.longestDays}", "best streak")
-                    ShareStat("${stats.achievements.count { it.unlocked }}", "badges")
+                    ShareStat("${stats.totals.seriesTouched}", "series")
+                    ShareStat("${stats.totals.activeDays}", "active days")
                 }
                 Spacer(Modifier.height(16.dp))
                 val days = stats.totals.minutesWatched / 1440.0

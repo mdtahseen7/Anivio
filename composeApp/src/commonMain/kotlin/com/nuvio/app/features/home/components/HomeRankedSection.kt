@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.nuvio.app.features.home.HomeCatalogSection
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.home.stableKey
@@ -112,6 +113,9 @@ private fun RankedHomeCard(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(bottom = 28.dp)
+                // The poster intentionally overlaps the outlined rank. Keep the outline above it
+                // so both digits of rank 10 remain readable instead of hiding the zero.
+                .zIndex(1f)
                 .graphicsLayer {
                     scaleX = pulse
                     scaleY = pulse

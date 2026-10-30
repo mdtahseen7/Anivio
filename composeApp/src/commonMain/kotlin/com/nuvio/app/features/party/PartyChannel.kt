@@ -79,7 +79,7 @@ internal class PartyChannel(
     }
 
     companion object {
-        val PARTY_EVENTS = listOf("state", "state_request", "status", "control", "member_joined", "member_left", "ended", "media", "stream", "chat")
+        val PARTY_EVENTS = listOf("state", "state_request", "status", "profile", "control", "member_joined", "member_left", "ended", "media", "stream", "chat")
         val COMPANION_EVENTS = listOf("chat", "media", "member_left", "ended")
     }
 }
