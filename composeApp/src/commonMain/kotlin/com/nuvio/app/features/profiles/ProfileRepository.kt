@@ -162,6 +162,7 @@ object ProfileRepository {
         WatchedRepository.onProfileChanged(profileIndex)
         ProfileStatsRepository.onProfileChanged()
         ProfileShareSettingsRepository.onProfileChanged()
+        ProfileBackgroundAppearanceRepository.onProfileChanged(profileIndex)
         TrackingSettingsRepository.onProfileChanged()
         ensureTrackingProvidersRegistered()
         TrackingProviderRegistry.onProfileChanged()

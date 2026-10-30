@@ -6,12 +6,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -44,7 +44,6 @@ import nuvio.composeapp.generated.resources.profile_background_custom
 import nuvio.composeapp.generated.resources.profile_background_normal
 import org.jetbrains.compose.resources.stringResource
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ProfileBackgroundPicker(
     backgrounds: List<ProfileBackgroundCatalogItem>,
@@ -52,59 +51,66 @@ internal fun ProfileBackgroundPicker(
     selectedBackgroundUrl: String?,
     customBackgroundUrl: String?,
     standardBackgroundColor: Color,
+    imageOverlayAlpha: Float,
     onSelectionChange: (String?, String?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    FlowRow(
+    LazyRow(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        ProfileBackgroundItem(
-            label = stringResource(Res.string.profile_background_normal),
-            isSelected = selectedBackgroundId == null && selectedBackgroundUrl == null,
-            onClick = { onSelectionChange(null, null) },
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(
-                                lerp(MaterialTheme.colorScheme.surface, standardBackgroundColor, 0.3f),
-                                lerp(MaterialTheme.colorScheme.background, standardBackgroundColor, 0.14f),
-                                MaterialTheme.colorScheme.background,
+        item(key = "normal") {
+            ProfileBackgroundItem(
+                label = stringResource(Res.string.profile_background_normal),
+                isSelected = selectedBackgroundId == null && selectedBackgroundUrl == null,
+                onClick = { onSelectionChange(null, null) },
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    lerp(MaterialTheme.colorScheme.surface, standardBackgroundColor, 0.3f),
+                                    lerp(MaterialTheme.colorScheme.background, standardBackgroundColor, 0.14f),
+                                    MaterialTheme.colorScheme.background,
+                                ),
                             ),
                         ),
-                    ),
-            )
-        }
-        customBackgroundUrl?.trim()?.takeIf { it.isNotBlank() }?.let { imageUrl ->
-            ProfileBackgroundItem(
-                label = stringResource(Res.string.profile_background_custom),
-                isSelected = selectedBackgroundId == null && selectedBackgroundUrl == imageUrl,
-                onClick = { onSelectionChange(null, imageUrl) },
-            ) {
-                val context = LocalPlatformContext.current
-                AsyncImage(
-                    model = ImageRequest.Builder(context)
-                        .data(imageUrl)
-                        .memoryCacheKey("custom-profile-background-$imageUrl")
-                        .diskCacheKey("custom-profile-background-$imageUrl")
-                        .diskCachePolicy(CachePolicy.ENABLED)
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
                 )
             }
         }
-        backgrounds.forEach { background ->
+        val customImageUrl = customBackgroundUrl?.trim()?.takeIf { it.isNotBlank() }
+        if (customImageUrl != null) {
+            item(key = "custom") {
+                ProfileBackgroundItem(
+                    label = stringResource(Res.string.profile_background_custom),
+                    isSelected = selectedBackgroundId == null && selectedBackgroundUrl == customImageUrl,
+                    onClick = { onSelectionChange(null, customImageUrl) },
+                    imageOverlayAlpha = imageOverlayAlpha,
+                ) {
+                    val context = LocalPlatformContext.current
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(customImageUrl)
+                            .memoryCacheKey("custom-profile-background-$customImageUrl")
+                            .diskCacheKey("custom-profile-background-$customImageUrl")
+                            .diskCachePolicy(CachePolicy.ENABLED)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                    )
+                }
+            }
+        }
+        items(backgrounds, key = ProfileBackgroundCatalogItem::id) { background ->
             ProfileBackgroundItem(
                 label = background.displayName,
                 isSelected = selectedBackgroundUrl == null && selectedBackgroundId == background.id,
                 onClick = { onSelectionChange(background.id, null) },
+                imageOverlayAlpha = imageOverlayAlpha,
             ) {
                 AsyncImage(
                     model = background.landscapeImageBytes,
@@ -122,6 +128,7 @@ private fun ProfileBackgroundItem(
     label: String,
     isSelected: Boolean,
     onClick: () -> Unit,
+    imageOverlayAlpha: Float = 0f,
     content: @Composable () -> Unit,
 ) {
     val palette = MaterialTheme.themePalette
@@ -146,6 +153,13 @@ private fun ProfileBackgroundItem(
                 ),
         ) {
             content()
+            if (imageOverlayAlpha > 0f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = imageOverlayAlpha.coerceIn(0f, 1f))),
+                )
+            }
             if (isSelected) {
                 Box(
                     modifier = Modifier

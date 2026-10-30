@@ -73,6 +73,7 @@ internal actual object PlatformLocalAccountDataCleaner {
         "pending_watch_progress_source",
         "collection_mobile_settings_payload",
         "collections_payload",
+        "profile_background_brightness",
     )
 
     actual fun wipe() {

@@ -27,6 +27,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -39,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -50,6 +52,8 @@ import com.nuvio.app.core.ui.nuvio
 import com.nuvio.app.features.anilist.AniListStatisticsRepository
 import com.nuvio.app.features.anilist.AniListAuthRepository
 import com.nuvio.app.features.mal.MalAuthSettings
+import com.nuvio.app.features.membership.MemberAccessRepository
+import com.nuvio.app.features.membership.resolveProfileBackground
 import com.nuvio.app.features.profile.components.ActivityHeatmap
 import com.nuvio.app.features.profile.components.LevelRing
 import com.nuvio.app.features.profile.components.ProfileBarRow
@@ -58,7 +62,11 @@ import com.nuvio.app.features.profile.components.ProfileStatTile
 import com.nuvio.app.features.profile.components.ProfileVerticalBar
 import com.nuvio.app.features.profiles.ActiveProfileMiniAvatar
 import com.nuvio.app.features.profiles.AvatarRepository
+import com.nuvio.app.features.profiles.ProfileBackgroundAppearanceRepository
+import com.nuvio.app.features.profiles.ProfileBackgroundBackdrop
 import com.nuvio.app.features.profiles.ProfileRepository
+import com.nuvio.app.features.profiles.NuvioProfile
+import com.nuvio.app.features.profiles.profileBackgroundOverlayAlpha
 
 /**
  * Profile dashboard: identity, activity heatmap, lifetime totals and watch-habit analytics.
@@ -74,7 +82,13 @@ fun ProfileScreen(
     val tokens = MaterialTheme.nuvio
     val uiState by ProfileStatsRepository.uiState.collectAsStateWithLifecycle()
     val profileState by ProfileRepository.state.collectAsStateWithLifecycle()
+    val activeProfile = profileState.activeProfile
     val avatars by AvatarRepository.avatars.collectAsStateWithLifecycle()
+    val memberAccess by remember {
+        MemberAccessRepository.ensureStarted()
+        MemberAccessRepository.access
+    }.collectAsStateWithLifecycle()
+    val backgroundBrightness by ProfileBackgroundAppearanceRepository.brightness.collectAsStateWithLifecycle()
     val shareSettings by remember {
         ProfileShareSettingsRepository.ensureLoaded()
         ProfileShareSettingsRepository.settings
@@ -93,6 +107,9 @@ fun ProfileScreen(
         AniListStatisticsRepository.refresh()
         AvatarRepository.refreshAvatars()
     }
+    LaunchedEffect(activeProfile?.profileIndex) {
+        activeProfile?.profileIndex?.let(ProfileBackgroundAppearanceRepository::ensureLoaded)
+    }
 
     val stats = uiState.stats
     var showShareCard by remember { mutableStateOf(false) }
@@ -106,6 +123,13 @@ fun ProfileScreen(
     }
     val celebration = uiState.pendingCelebrations
         .firstOrNull { it !is ProfileCelebration.AchievementUnlocked }
+    val hasIdentityBackground = remember(
+        activeProfile?.profileBackgroundId,
+        activeProfile?.profileBackgroundUrl,
+        memberAccess.entitlements,
+    ) {
+        activeProfile?.let { resolveProfileBackground(it, memberAccess.entitlements) } != null
+    }
 
     NuvioScreen(modifier = modifier) {
         stickyHeader {
@@ -146,11 +170,14 @@ fun ProfileScreen(
         item("identity") {
             IdentityCard(
                 levelInfo = stats.level,
-                profileName = profileState.activeProfile?.name ?: "You",
+                profileName = activeProfile?.name ?: "You",
                 habit = stats.habit,
+                profile = activeProfile,
+                backgroundBrightness = backgroundBrightness,
+                hasBackground = hasIdentityBackground,
                 avatarSlot = {
                     ActiveProfileMiniAvatar(
-                        profile = profileState.activeProfile,
+                        profile = activeProfile,
                         avatars = avatars,
                         selected = false,
                         size = 56,
@@ -231,45 +258,84 @@ private fun IdentityCard(
     levelInfo: ProfileLevel,
     profileName: String,
     habit: WatchHabitType,
+    profile: NuvioProfile?,
+    backgroundBrightness: Float,
+    hasBackground: Boolean,
     avatarSlot: @Composable () -> Unit,
 ) {
     val tokens = MaterialTheme.nuvio
-    NuvioSurfaceCard {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            LevelRing(progress = levelInfo.progress, ringSize = 84.dp, stroke = 7.dp) {
-                avatarSlot()
-            }
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(profileName, color = tokens.colors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                Text(
-                    "Lv. ${levelInfo.level} · ${levelInfo.title}",
-                    color = tokens.colors.accent,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp,
+    val primaryTextColor = if (hasBackground) Color.White else tokens.colors.textPrimary
+    val secondaryTextColor = if (hasBackground) Color.White.copy(alpha = 0.78f) else tokens.colors.textSecondary
+    val mutedTextColor = if (hasBackground) Color.White.copy(alpha = 0.64f) else tokens.colors.textMuted
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = if (hasBackground) Color.Black else tokens.colors.surface,
+        shape = tokens.shapes.card,
+    ) {
+        Box {
+            if (hasBackground) {
+                ProfileBackgroundBackdrop(
+                    profile = profile,
+                    modifier = Modifier.matchParentSize(),
+                    imageOverlayAlpha = profileBackgroundOverlayAlpha(backgroundBrightness),
+                    showFallback = false,
                 )
-                Text(habit.label, color = tokens.colors.textSecondary, fontSize = 12.sp)
-            }
-        }
-        Spacer(Modifier.height(14.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("XP", color = tokens.colors.textMuted, fontSize = 11.sp)
-                Text(
-                    "${levelInfo.xp} total XP · ${levelInfo.xpIntoLevel} / ${levelInfo.xpForNextLevel}",
-                    color = tokens.colors.textMuted,
-                    fontSize = 11.sp,
-                )
-            }
-            Box(
-                modifier = Modifier.fillMaxWidth().height(6.dp).clip(CircleShape)
-                    .background(tokens.colors.surfaceElevated),
-            ) {
+                // The brightness slider controls the image itself; this fixed vignette keeps text
+                // readable even at 100% without making the artwork uniformly muddy.
                 Box(
-                    modifier = Modifier.fillMaxWidth(levelInfo.progress).height(6.dp).clip(CircleShape)
+                    modifier = Modifier
+                        .matchParentSize()
                         .background(
-                            Brush.horizontalGradient(listOf(tokens.colors.accent, tokens.colors.accentStrong)),
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color.Black.copy(alpha = 0.20f),
+                                    Color.Black.copy(alpha = 0.50f),
+                                ),
+                            ),
                         ),
                 )
+            }
+            Column(modifier = Modifier.padding(tokens.spacing.cardPadding)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    LevelRing(progress = levelInfo.progress, ringSize = 84.dp, stroke = 7.dp) {
+                        avatarSlot()
+                    }
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(profileName, color = primaryTextColor, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                        Text(
+                            "Lv. ${levelInfo.level} · ${levelInfo.title}",
+                            color = if (hasBackground) Color.White else tokens.colors.accent,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp,
+                        )
+                        Text(habit.label, color = secondaryTextColor, fontSize = 12.sp)
+                    }
+                }
+                Spacer(Modifier.height(14.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("XP", color = mutedTextColor, fontSize = 11.sp)
+                        Text(
+                            "${levelInfo.xp} total XP · ${levelInfo.xpIntoLevel} / ${levelInfo.xpForNextLevel}",
+                            color = mutedTextColor,
+                            fontSize = 11.sp,
+                        )
+                    }
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(6.dp).clip(CircleShape)
+                            .background(
+                                if (hasBackground) Color.White.copy(alpha = 0.22f)
+                                else tokens.colors.surfaceElevated,
+                            ),
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth(levelInfo.progress).height(6.dp).clip(CircleShape)
+                                .background(
+                                    Brush.horizontalGradient(listOf(tokens.colors.accent, tokens.colors.accentStrong)),
+                                ),
+                        )
+                    }
+                }
             }
         }
     }

@@ -18,6 +18,7 @@ internal actual object PlatformLocalAccountDataCleaner {
         "nuvio_profile_cache",
         "nuvio_avatar_cache",
         "nuvio_profile_pin_cache",
+        "nuvio_profile_background_appearance",
         "nuvio_theme_settings",
         "nuvio_poster_card_style",
         "nuvio_debrid_settings",

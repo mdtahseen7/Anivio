@@ -8,6 +8,8 @@
     <string name="profile_background_member_note">Custom background URLs can be configured from the Anivio web panel.</string>
     <string name="profile_background_normal">Normal</string>
     <string name="profile_background_custom">Custom</string>
+    <string name="profile_background_brightness">Background brightness</string>
+    <string name="profile_background_brightness_description">Controls how strongly the selected anime background appears behind your profile name and level.</string>
     <string name="about_licenses_attributions_subtitle">Data sources, acknowledgements, and platform licenses</string>
     <string name="action_back">Back</string>
     <string name="action_cancel">Cancel</string>

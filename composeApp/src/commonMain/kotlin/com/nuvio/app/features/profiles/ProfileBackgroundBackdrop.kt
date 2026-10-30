@@ -23,6 +23,8 @@ import com.nuvio.app.features.membership.resolveProfileBackground
 fun ProfileBackgroundBackdrop(
     profile: NuvioProfile?,
     modifier: Modifier = Modifier,
+    imageOverlayAlpha: Float = 0.28f,
+    showFallback: Boolean = true,
 ) {
     val memberAccess by remember {
         MemberAccessRepository.ensureStarted()
@@ -63,10 +65,12 @@ fun ProfileBackgroundBackdrop(
         }
 
         if (backgroundModel == null) {
-            ProfileMeshBackground(
-                profileColor = profileColor,
-                modifier = Modifier.fillMaxSize(),
-            )
+            if (showFallback) {
+                ProfileMeshBackground(
+                    profileColor = profileColor,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         } else {
             AsyncImage(
                 model = backgroundModel,
@@ -77,7 +81,7 @@ fun ProfileBackgroundBackdrop(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.28f)),
+                    .background(Color.Black.copy(alpha = imageOverlayAlpha.coerceIn(0f, 1f))),
             )
         }
     }

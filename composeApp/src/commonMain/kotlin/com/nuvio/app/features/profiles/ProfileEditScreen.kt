@@ -24,12 +24,14 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -59,6 +61,7 @@ import com.nuvio.app.features.membership.ProfileBackgroundRepository
 import kotlinx.coroutines.launch
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
+import kotlin.math.roundToInt
 
 @Composable
 fun ProfileEditScreen(
@@ -82,6 +85,13 @@ fun ProfileEditScreen(
     var avatarUrl by rememberSaveable { mutableStateOf(currentProfile?.avatarUrl.orEmpty()) }
     var selectedBackgroundId by rememberSaveable { mutableStateOf(currentProfile?.profileBackgroundId) }
     var selectedBackgroundUrl by rememberSaveable { mutableStateOf(currentProfile?.profileBackgroundUrl) }
+    var backgroundBrightness by rememberSaveable(currentProfile?.profileIndex) {
+        mutableFloatStateOf(
+            currentProfile?.profileIndex
+                ?.let(ProfileBackgroundAppearanceRepository::brightnessFor)
+                ?: DEFAULT_PROFILE_BACKGROUND_BRIGHTNESS,
+        )
+    }
     var usesPrimaryAddons by rememberSaveable { mutableStateOf(currentProfile?.usesPrimaryAddons ?: false) }
     var isSaving by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -198,11 +208,43 @@ fun ProfileEditScreen(
                             selectedBackgroundUrl = selectedBackgroundUrl,
                             customBackgroundUrl = currentProfile?.profileBackgroundUrl,
                             standardBackgroundColor = previewAccent,
+                            imageOverlayAlpha = profileBackgroundOverlayAlpha(backgroundBrightness),
                             onSelectionChange = { id, url ->
                                 selectedBackgroundId = id
                                 selectedBackgroundUrl = url
                             },
                         )
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = stringResource(Res.string.profile_background_brightness),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                Text(
+                                    text = "${(backgroundBrightness * 100).roundToInt()}%",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                            Text(
+                                text = stringResource(Res.string.profile_background_brightness_description),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Slider(
+                                value = backgroundBrightness,
+                                onValueChange = {
+                                    backgroundBrightness = normalizeProfileBackgroundBrightness(it)
+                                },
+                                valueRange = MIN_PROFILE_BACKGROUND_BRIGHTNESS..MAX_PROFILE_BACKGROUND_BRIGHTNESS,
+                                steps = 15,
+                            )
+                        }
                     }
                 }
             }
@@ -324,8 +366,9 @@ fun ProfileEditScreen(
                                 usesPrimaryAddons = usesPrimaryAddons,
                             )
                         } else {
+                            val profileIndex = requireNotNull(currentProfile).profileIndex
                             ProfileRepository.updateProfile(
-                                profileIndex = currentProfile!!.profileIndex,
+                                profileIndex = profileIndex,
                                 name = name,
                                 avatarColorHex = avatarColorHex,
                                 avatarId = if (customAvatarUrl == null) selectedAvatarId else null,
@@ -333,6 +376,10 @@ fun ProfileEditScreen(
                                 profileBackgroundId = selectedBackgroundId,
                                 profileBackgroundUrl = selectedBackgroundUrl,
                                 usesPrimaryAddons = usesPrimaryAddons,
+                            )
+                            ProfileBackgroundAppearanceRepository.update(
+                                profileId = profileIndex,
+                                brightness = backgroundBrightness,
                             )
                         }
                         isSaving = false
