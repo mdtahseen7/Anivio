@@ -11,8 +11,8 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.put
 
-/** Kept small so one show never floods the picker and pushes the other seven off-screen. */
-private const val CharactersPerAnime = 12
+/** Kept bounded so the expanded catalogue remains quick to load on mobile connections. */
+private const val CharactersPerAnime = 14
 
 /** Prefix that keeps a persisted `avatarId` self-describing and distinct from older catalogue ids. */
 private const val CharacterIdPrefix = "anilist-character:"
@@ -34,6 +34,14 @@ private val AvatarAnimeSources = listOf(
     AvatarAnimeSource("Sword Art Online", "Sword Art Online"),
     AvatarAnimeSource("Fate", "Fate/stay night"),
     AvatarAnimeSource("Date A Live", "Date A Live"),
+    AvatarAnimeSource("Frieren", "Sousou no Frieren"),
+    AvatarAnimeSource("Jujutsu Kaisen", "Jujutsu Kaisen"),
+    AvatarAnimeSource("Demon Slayer", "Kimetsu no Yaiba"),
+    AvatarAnimeSource("Attack on Titan", "Shingeki no Kyojin"),
+    AvatarAnimeSource("My Hero Academia", "Boku no Hero Academia"),
+    AvatarAnimeSource("Chainsaw Man", "Chainsaw Man"),
+    AvatarAnimeSource("SPY x FAMILY", "SPY x FAMILY"),
+    AvatarAnimeSource("Solo Leveling", "Ore dake Level Up na Ken"),
 )
 
 /**
@@ -47,8 +55,8 @@ private data class AniListCharacter(val id: Int, val name: String, val imageUrl:
 /**
  * Fetches the character catalogue, grouped by show via [AvatarCatalogItem.category].
  *
- * Every show travels in one aliased query: AniList allows 30 requests/minute, so eight separate
- * searches would spend a quarter of that budget on what a user perceives as one screen opening.
+ * Every show travels in one aliased query: AniList allows 30 requests/minute, so separate searches
+ * would spend most of that budget on what a user perceives as one screen opening.
  *
  * Returns an empty list on failure — a picker with no choices is a degraded screen, not a reason to
  * fail profile editing.

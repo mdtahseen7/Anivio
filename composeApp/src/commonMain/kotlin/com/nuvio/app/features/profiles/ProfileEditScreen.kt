@@ -5,10 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,6 +13,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -61,7 +60,6 @@ import kotlinx.coroutines.launch
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ProfileEditScreen(
     profile: NuvioProfile? = null,
@@ -231,40 +229,33 @@ fun ProfileEditScreen(
 
                     if (avatars.isNotEmpty()) {
                         val avatarSpacing = 10.dp
-                        val minAvatarSize = 58.dp
+                        val avatarSize = 68.dp
                         // `groupBy` keeps encounter order, so the catalogue's curated show sequence
                         // survives into the picker without a second sort here.
                         val avatarGroups = remember(avatars) { avatars.groupBy { it.category } }
-                        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                            val columns = (((maxWidth + avatarSpacing) / (minAvatarSize + avatarSpacing)).toInt())
-                                .coerceAtLeast(1)
-                            val avatarSize = (maxWidth - avatarSpacing * (columns - 1)) / columns
-
-                            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                avatarGroups.forEach { (animeLabel, animeAvatars) ->
-                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Text(
-                                            text = animeLabel,
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                        FlowRow(
-                                            horizontalArrangement = Arrangement.spacedBy(avatarSpacing),
-                                            verticalArrangement = Arrangement.spacedBy(avatarSpacing),
-                                            maxItemsInEachRow = columns,
-                                        ) {
-                                            animeAvatars.forEach { avatar ->
-                                                AvatarChoiceItem(
-                                                    avatar = avatar,
-                                                    size = avatarSize,
-                                                    isSelected = customAvatarUrl == null &&
-                                                        avatar.id == selectedAvatarId,
-                                                    onClick = {
-                                                        avatarUrl = ""
-                                                        selectedAvatarId = avatar.id
-                                                    },
-                                                )
-                                            }
+                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            avatarGroups.forEach { (animeLabel, animeAvatars) ->
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(
+                                        text = animeLabel,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    LazyRow(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(avatarSpacing),
+                                    ) {
+                                        items(animeAvatars, key = AvatarCatalogItem::id) { avatar ->
+                                            AvatarChoiceItem(
+                                                avatar = avatar,
+                                                size = avatarSize,
+                                                isSelected = customAvatarUrl == null &&
+                                                    avatar.id == selectedAvatarId,
+                                                onClick = {
+                                                    avatarUrl = ""
+                                                    selectedAvatarId = avatar.id
+                                                },
+                                            )
                                         }
                                     }
                                 }
