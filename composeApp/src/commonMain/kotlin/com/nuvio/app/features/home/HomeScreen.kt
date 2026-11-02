@@ -1209,7 +1209,13 @@ fun HomeScreen(
             }
         }
 
-        Box(modifier = topBarModifier) {
+        // This must fill the home viewport before aligning the center control. A wrap-content Box
+        // ignores the intended center alignment and pins the Anime/Manga selector to the left edge.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(topBarModifier),
+        ) {
             ContentModeToggle(
                 selected = contentMode,
                 onSelected = ContentModeRepository::select,

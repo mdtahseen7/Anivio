@@ -122,7 +122,9 @@ private fun PartyHome(
     var pendingCode by remember {
         mutableStateOf(initialCode.takeIf { isValidPartyCode(it) && normalizePartyCode(it) != party?.code }.orEmpty())
     }
-    var joining by remember { mutableStateOf(party == null || pendingCode.isNotEmpty()) }
+    // Opening Watch Party from Settings is an invitation flow. A stale active-party snapshot must
+    // not replace the join form with an old room (and its old chat) before the user enters a code.
+    var joining by remember { mutableStateOf(true) }
     val mode = when {
         joined != null -> PartyScreenMode.Joined
         party != null && !joining -> PartyScreenMode.Party

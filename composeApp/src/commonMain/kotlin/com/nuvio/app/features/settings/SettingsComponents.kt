@@ -314,6 +314,7 @@ internal fun SettingsNavigationRow(
 internal fun SettingsSwitchRow(
     title: String,
     description: String? = null,
+    icon: ImageVector? = null,
     checked: Boolean,
     enabled: Boolean = true,
     isTablet: Boolean,
@@ -331,6 +332,15 @@ internal fun SettingsSwitchRow(
         horizontalArrangement = Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (icon != null) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (checked) tokens.colors.accent else tokens.colors.textMuted,
+                modifier = Modifier.size(22.dp),
+            )
+            Spacer(modifier = Modifier.width(if (isTablet) 16.dp else 14.dp))
+        }
         Column(
             modifier = Modifier
                 .weight(1f)

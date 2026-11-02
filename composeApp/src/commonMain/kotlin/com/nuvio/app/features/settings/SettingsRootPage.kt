@@ -20,6 +20,7 @@ import androidx.compose.material.icons.rounded.People
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Policy
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
@@ -27,6 +28,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Alignment
 import com.nuvio.app.core.build.AppVersionConfig
+import com.nuvio.app.core.ui.NuvioToastController
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.compose_about_made_with
 import nuvio.composeapp.generated.resources.compose_about_version_format
@@ -211,10 +213,20 @@ internal fun LazyListScope.settingsRootContent(
                     SettingsGroupDivider(isTablet = isTablet)
                     SettingsSwitchRow(
                         title = stringResource(Res.string.settings_incognito_mode_title),
-                        description = stringResource(Res.string.settings_incognito_mode_description),
+                        description = if (incognitoModeEnabled) {
+                            "Active — progress, history, reading progress, and tracking updates are paused."
+                        } else {
+                            stringResource(Res.string.settings_incognito_mode_description)
+                        },
+                        icon = Icons.Rounded.VisibilityOff,
                         checked = incognitoModeEnabled,
                         isTablet = isTablet,
-                        onCheckedChange = onIncognitoModeChanged,
+                        onCheckedChange = { enabled ->
+                            onIncognitoModeChanged(enabled)
+                            NuvioToastController.show(
+                                if (enabled) "Incognito mode is on" else "Incognito mode is off",
+                            )
+                        },
                     )
                 }
             }

@@ -2,6 +2,7 @@ package com.nuvio.app.features.plugins
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -400,13 +402,19 @@ fun PluginsSettingsPageContent(
                         overflow = TextOverflow.Ellipsis,
                     )
                     scrapers.forEach { scraper ->
+                        val repositoryIndex = scrapers.indexOfFirst { it.id == scraper.id }
                         Spacer(modifier = Modifier.height(12.dp))
                         ProviderRow(
                             scraper = scraper,
                             results = testResults[scraper.id],
                             detailsExpanded = expandedScraperId == scraper.id,
+                            canMoveUp = repositoryIndex > 0,
+                            canMoveDown = repositoryIndex >= 0 && repositoryIndex < scrapers.lastIndex,
                             onToggleDetails = {
                                 expandedScraperId = if (expandedScraperId == scraper.id) null else scraper.id
+                            },
+                            onReorder = { moveUp ->
+                                PluginRepository.moveScraper(scraper.id, moveUp)
                             },
                             isTesting = testingScraperId == scraper.id,
                             testEnabled = hasTmdbApiKey && scraper.enabled && scraper.code.isNotBlank(),
@@ -518,7 +526,10 @@ private fun ProviderRow(
     scraper: PluginScraper,
     results: List<PluginRuntimeResult>?,
     detailsExpanded: Boolean,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
     onToggleDetails: () -> Unit,
+    onReorder: (Boolean) -> Unit,
     isTesting: Boolean,
     testEnabled: Boolean,
     onTest: () -> Unit,
@@ -532,6 +543,25 @@ private fun ProviderRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .pointerInput(scraper.id, canMoveUp, canMoveDown) {
+                    var distance = 0f
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = { distance = 0f },
+                        onDragCancel = { distance = 0f },
+                        onDragEnd = { distance = 0f },
+                        onDrag = { change, dragAmount ->
+                            change.consume()
+                            distance += dragAmount.y
+                            if (distance <= -28f && canMoveUp) {
+                                onReorder(true)
+                                distance = 0f
+                            } else if (distance >= 28f && canMoveDown) {
+                                onReorder(false)
+                                distance = 0f
+                            }
+                        },
+                    )
+                }
                 .clickable(onClick = onToggleDetails),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
