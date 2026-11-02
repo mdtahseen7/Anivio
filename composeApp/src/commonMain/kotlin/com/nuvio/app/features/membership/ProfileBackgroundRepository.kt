@@ -1,6 +1,7 @@
 package com.nuvio.app.features.membership
 
 import co.touchlab.kermit.Logger
+import com.nuvio.app.core.anilist.AniListClient
 import com.nuvio.app.core.network.SupabaseProvider
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.storage.storage
@@ -21,6 +22,9 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 
 private const val ProfileBackgroundBucket = "membership-profile-backgrounds"
 
@@ -29,6 +33,8 @@ data class ProfileBackgroundCatalogItem(
     val displayName: String,
     val landscapeImageBytes: ByteArray? = null,
     val portraitImageBytes: ByteArray? = null,
+    /** Anime banners are served directly by AniList, so they do not need to be duplicated in storage. */
+    val landscapeImageUrl: String? = null,
     val assetVersion: Int,
 )
 
@@ -41,6 +47,7 @@ object ProfileBackgroundRepository {
     private var loadJob: Job? = null
     private var assetLoadJob: Job? = null
     private var remoteCatalog = emptyList<SupabaseProfileBackgroundCatalogItem>()
+    private var animeCatalog = emptyList<ProfileBackgroundCatalogItem>()
     private var cacheHydrated = false
     private var remoteLoaded = false
 
@@ -48,19 +55,31 @@ object ProfileBackgroundRepository {
         hydrateFromCacheIfNeeded()
         if (remoteLoaded || loadJob?.isActive == true) return
         loadJob = scope.launch {
-            try {
-                val items = SupabaseProvider.client.postgrest
+            val remoteItems = try {
+                SupabaseProvider.client.postgrest
                     .rpc("get_member_profile_background_catalog")
                     .decodeList<SupabaseProfileBackgroundCatalogItem>()
-                remoteCatalog = items
-                publishMetadata(items)
-                saveCachedCatalog(items)
-                remoteLoaded = true
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
                 log.w(error) { "Unable to load supporter profile backgrounds" }
+                null
             }
+            val animeItems = try {
+                fetchAnimeBackgrounds()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                log.w(error) { "Unable to load anime profile backgrounds" }
+                emptyList()
+            }
+            animeCatalog = animeItems
+            if (remoteItems != null) {
+                remoteCatalog = remoteItems
+                saveCachedCatalog(remoteItems)
+                remoteLoaded = true
+            }
+            publishCatalog()
         }
     }
 
@@ -109,6 +128,7 @@ object ProfileBackgroundRepository {
         assetLoadJob?.cancel()
         assetLoadJob = null
         remoteCatalog = emptyList()
+        animeCatalog = emptyList()
         _catalog.value = emptyList()
     }
 
@@ -121,12 +141,12 @@ object ProfileBackgroundRepository {
             json.decodeFromString<StoredProfileBackgroundCatalogPayload>(payload)
         }.getOrNull() ?: return
         remoteCatalog = stored.items
-        publishMetadata(stored.items)
+        publishCatalog()
     }
 
-    private fun publishMetadata(items: List<SupabaseProfileBackgroundCatalogItem>) {
+    private fun publishCatalog() {
         val current = _catalog.value.associateBy(ProfileBackgroundCatalogItem::id)
-        _catalog.value = items.map { item ->
+        val supporterCatalog = remoteCatalog.map { item ->
             val cached = current[item.id]?.takeIf { it.assetVersion == item.assetVersion }
             ProfileBackgroundCatalogItem(
                 id = item.id,
@@ -136,6 +156,7 @@ object ProfileBackgroundRepository {
                 assetVersion = item.assetVersion,
             )
         }
+        _catalog.value = animeCatalog + supporterCatalog
     }
 
     private fun saveCachedCatalog(items: List<SupabaseProfileBackgroundCatalogItem>) {
@@ -193,6 +214,29 @@ object ProfileBackgroundRepository {
         }
     }
 
+    private suspend fun fetchAnimeBackgrounds(): List<ProfileBackgroundCatalogItem> {
+        val variables = ProfileBannerSources.indices.joinToString(separator = ", ") { "\$s$it: String" }
+        val selections = ProfileBannerSources.indices.joinToString(separator = "\n") { index ->
+            "b$index: Media(search: \$s$index, type: ANIME) { id bannerImage }"
+        }
+        val query = "query ($variables) {\n$selections\n}"
+        val variablesJson = kotlinx.serialization.json.buildJsonObject {
+            ProfileBannerSources.forEachIndexed { index, source -> put("s$index", source.searchTerm) }
+        }
+        val data = AniListClient.query(query, variablesJson)
+        return ProfileBannerSources.mapIndexedNotNull { index, source ->
+            val media = data["b$index"] as? JsonObject ?: return@mapIndexedNotNull null
+            val imageUrl = media["bannerImage"]?.jsonPrimitive?.contentOrNull ?: return@mapIndexedNotNull null
+            val mediaId = media["id"]?.jsonPrimitive?.contentOrNull ?: return@mapIndexedNotNull null
+            ProfileBackgroundCatalogItem(
+                id = "anilist-banner-$mediaId",
+                displayName = source.displayName,
+                landscapeImageUrl = imageUrl,
+                assetVersion = 1,
+            )
+        }
+    }
+
     private suspend fun loadPortraitImage(item: SupabaseProfileBackgroundCatalogItem): ByteArray {
         val portraitPath = item.portraitStoragePath ?: return loadLandscapeImage(item)
         return try {
@@ -220,6 +264,22 @@ object ProfileBackgroundRepository {
                 .downloadAuthenticated(storagePath)
                 .also { MemberAssetStorage.saveProfileBackground(cacheKey, it) }
 }
+
+private data class ProfileBannerSource(val displayName: String, val searchTerm: String)
+
+/** A deliberately varied set of anime backdrops, resolved live so the art stays official and sharp. */
+private val ProfileBannerSources = listOf(
+    ProfileBannerSource("Frieren", "Sousou no Frieren"),
+    ProfileBannerSource("The Apothecary Diaries", "Kusuriya no Hitorigoto"),
+    ProfileBannerSource("Solo Leveling", "Ore dake Level Up na Ken"),
+    ProfileBannerSource("Jujutsu Kaisen", "Jujutsu Kaisen"),
+    ProfileBannerSource("Demon Slayer", "Kimetsu no Yaiba"),
+    ProfileBannerSource("SPY x FAMILY", "SPY x FAMILY"),
+    ProfileBannerSource("Chainsaw Man", "Chainsaw Man"),
+    ProfileBannerSource("Attack on Titan", "Shingeki no Kyojin"),
+    ProfileBannerSource("Bleach", "Bleach"),
+    ProfileBannerSource("Mushoku Tensei", "Mushoku Tensei"),
+)
 
 @Serializable
 private data class StoredProfileBackgroundCatalogPayload(

@@ -113,7 +113,7 @@ internal fun ProfileBackgroundPicker(
                 imageOverlayAlpha = imageOverlayAlpha,
             ) {
                 AsyncImage(
-                    model = background.landscapeImageBytes,
+                    model = background.landscapeImageBytes ?: background.landscapeImageUrl,
                     contentDescription = background.displayName,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,
