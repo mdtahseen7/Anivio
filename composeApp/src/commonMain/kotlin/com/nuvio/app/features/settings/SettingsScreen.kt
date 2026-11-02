@@ -200,6 +200,10 @@ fun SettingsScreen(
             TrackingSettingsRepository.ensureLoaded()
             TrackingSettingsRepository.uiState
         }.collectAsStateWithLifecycle()
+        val incognitoModeEnabled by remember {
+            IncognitoModeRepository.ensureLoaded()
+            IncognitoModeRepository.enabled
+        }.collectAsStateWithLifecycle()
         val addonsUiState by remember {
             AddonRepository.initialize()
             AddonRepository.uiState
@@ -440,6 +444,8 @@ fun SettingsScreen(
                 aniListAuthUiState = aniListAuthUiState,
                 malAuthUiState = malAuthUiState,
                 trackingSettingsUiState = trackingSettingsUiState,
+                incognitoModeEnabled = incognitoModeEnabled,
+                onIncognitoModeChanged = IncognitoModeRepository::setEnabled,
                 homescreenHeroEnabled = homescreenSettingsUiState.heroEnabled,
                 homescreenShowCatalogType = homescreenSettingsUiState.showCatalogType,
                 homescreenHideUnreleasedContent = homescreenSettingsUiState.hideUnreleasedContent,
@@ -506,6 +512,8 @@ fun SettingsScreen(
                 aniListAuthUiState = aniListAuthUiState,
                 malAuthUiState = malAuthUiState,
                 trackingSettingsUiState = trackingSettingsUiState,
+                incognitoModeEnabled = incognitoModeEnabled,
+                onIncognitoModeChanged = IncognitoModeRepository::setEnabled,
                 homescreenHeroEnabled = homescreenSettingsUiState.heroEnabled,
                 homescreenShowCatalogType = homescreenSettingsUiState.showCatalogType,
                 homescreenHideUnreleasedContent = homescreenSettingsUiState.hideUnreleasedContent,
@@ -582,6 +590,8 @@ private fun MobileSettingsScreen(
     aniListAuthUiState: AniListAuthUiState,
     malAuthUiState: MalAuthUiState,
     trackingSettingsUiState: TrackingSettingsUiState,
+    incognitoModeEnabled: Boolean,
+    onIncognitoModeChanged: (Boolean) -> Unit,
     homescreenHeroEnabled: Boolean,
     homescreenShowCatalogType: Boolean,
     homescreenHideUnreleasedContent: Boolean,
@@ -716,7 +726,9 @@ private fun MobileSettingsScreen(
                         onReaderClick = { onPageChange(SettingsPage.Reader) },
                         onAppearanceClick = { onPageChange(SettingsPage.Appearance) },
                             onAdvancedClick = { onPageChange(SettingsPage.Advanced) },
-                            onNotificationsClick = { onPageChange(SettingsPage.Notifications) },
+                        onNotificationsClick = { onPageChange(SettingsPage.Notifications) },
+                        incognitoModeEnabled = incognitoModeEnabled,
+                        onIncognitoModeChanged = IncognitoModeRepository::setEnabled,
                             onContentDiscoveryClick = { onPageChange(SettingsPage.ContentDiscovery) },
                             onIntegrationsClick = { onPageChange(SettingsPage.Integrations) },
                             onTrackingClick = { onPageChange(SettingsPage.TraktAuthentication) },
@@ -960,6 +972,8 @@ private fun TabletSettingsScreen(
     aniListAuthUiState: AniListAuthUiState,
     malAuthUiState: MalAuthUiState,
     trackingSettingsUiState: TrackingSettingsUiState,
+    incognitoModeEnabled: Boolean,
+    onIncognitoModeChanged: (Boolean) -> Unit,
     homescreenHeroEnabled: Boolean,
     homescreenShowCatalogType: Boolean,
     homescreenHideUnreleasedContent: Boolean,
@@ -1141,7 +1155,9 @@ private fun TabletSettingsScreen(
                                 onReaderClick = { openInlinePage(SettingsPage.Reader) },
                                 onAppearanceClick = { openInlinePage(SettingsPage.Appearance) },
                                 onAdvancedClick = { openInlinePage(SettingsPage.Advanced) },
-                                onNotificationsClick = { openInlinePage(SettingsPage.Notifications) },
+                            onNotificationsClick = { openInlinePage(SettingsPage.Notifications) },
+                            incognitoModeEnabled = incognitoModeEnabled,
+                            onIncognitoModeChanged = IncognitoModeRepository::setEnabled,
                                 onContentDiscoveryClick = { openInlinePage(SettingsPage.ContentDiscovery) },
                                 onIntegrationsClick = { openInlinePage(SettingsPage.Integrations) },
                                 onTrackingClick = { openInlinePage(SettingsPage.TraktAuthentication) },

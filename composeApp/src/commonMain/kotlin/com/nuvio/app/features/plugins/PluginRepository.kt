@@ -29,6 +29,9 @@ expect object PluginRepository {
      */
     fun moveScraper(scraperId: String, moveUp: Boolean)
 
+    /** Places a provider directly before another provider in the same repository. */
+    fun moveScraperTo(scraperId: String, targetScraperId: String)
+
     fun setPluginsEnabled(enabled: Boolean)
 
     fun setGroupStreamsByRepository(enabled: Boolean)

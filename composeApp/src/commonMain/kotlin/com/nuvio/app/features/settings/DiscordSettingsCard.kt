@@ -65,6 +65,7 @@ import com.nuvio.app.features.discord.DiscordAuthUiState
 import com.nuvio.app.features.discord.DiscordConnectionMode
 import com.nuvio.app.features.discord.DiscordGatewayStatus
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.action_cancel
 import nuvio.composeapp.generated.resources.discord_connect_action
@@ -114,6 +115,10 @@ internal fun DiscordConnectionCard(
     LaunchedEffect(uiState.mode) {
         if (uiState.mode == DiscordConnectionMode.CONNECTED) {
             showTokenDialog = false
+            while (true) {
+                DiscordAuth.refreshUser()
+                delay(5 * 60 * 1_000L)
+            }
         }
     }
 

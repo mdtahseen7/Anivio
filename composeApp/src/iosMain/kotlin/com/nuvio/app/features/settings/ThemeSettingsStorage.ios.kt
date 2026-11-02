@@ -18,6 +18,8 @@ actual object ThemeSettingsStorage {
     private const val selectedAppLanguageKey = "selected_app_language"
     private const val navBarStyleKey = "nav_bar_style"
     private const val navBarGlowEnabledKey = "nav_bar_glow_enabled"
+    private const val incognitoModeEnabledKey = "incognito_mode_enabled"
+    private const val homeTopBarEnabledKey = "home_top_bar_enabled"
     private val profileScopedSyncKeys = listOf(
         selectedThemeKey,
         customThemeColorsKey,
@@ -67,6 +69,32 @@ actual object ThemeSettingsStorage {
 
     actual fun saveNavBarGlowEnabled(enabled: Boolean) {
         NSUserDefaults.standardUserDefaults.setBool(enabled, forKey = ProfileScopedKey.of(navBarGlowEnabledKey))
+    }
+
+    actual fun loadIncognitoModeEnabled(): Boolean? {
+        val defaults = NSUserDefaults.standardUserDefaults
+        return if (defaults.objectForKey(incognitoModeEnabledKey) != null) {
+            defaults.boolForKey(incognitoModeEnabledKey)
+        } else {
+            null
+        }
+    }
+
+    actual fun saveIncognitoModeEnabled(enabled: Boolean) {
+        NSUserDefaults.standardUserDefaults.setBool(enabled, forKey = incognitoModeEnabledKey)
+    }
+
+    actual fun loadHomeTopBarEnabled(): Boolean? {
+        val defaults = NSUserDefaults.standardUserDefaults
+        return if (defaults.objectForKey(homeTopBarEnabledKey) != null) {
+            defaults.boolForKey(homeTopBarEnabledKey)
+        } else {
+            null
+        }
+    }
+
+    actual fun saveHomeTopBarEnabled(enabled: Boolean) {
+        NSUserDefaults.standardUserDefaults.setBool(enabled, forKey = homeTopBarEnabledKey)
     }
 
     actual fun loadLiquidGlassNativeTabBarEnabled(): Boolean? {

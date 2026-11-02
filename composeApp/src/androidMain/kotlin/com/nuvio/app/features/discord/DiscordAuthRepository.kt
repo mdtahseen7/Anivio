@@ -73,6 +73,20 @@ internal object DiscordAuthRepository : DiscordAuthController {
         }
     }
 
+    override suspend fun refreshUser() {
+        val accountToken = token ?: return
+        val latest = fetchCurrentUser(accountToken) ?: return
+        if (latest != _uiState.value.user) {
+            DiscordAuthStorage.saveSession(accountToken, latest)
+            _uiState.value = _uiState.value.copy(user = latest)
+        }
+    }
+
+    override suspend fun fetchUser(userId: String): DiscordUser? {
+        val accountToken = token ?: return null
+        return fetchDiscordUser(accountToken, userId)
+    }
+
     override suspend fun connectWithToken(rawToken: String): Boolean {
         val trimmed = rawToken.trim()
         if (trimmed.isEmpty()) return false
@@ -331,10 +345,14 @@ internal object DiscordAuthRepository : DiscordAuthController {
     }
 
     private suspend fun fetchCurrentUser(accountToken: String): DiscordUser? {
+        return fetchDiscordUser(accountToken, "@me")
+    }
+
+    private suspend fun fetchDiscordUser(accountToken: String, userId: String): DiscordUser? {
         val response = runCatching {
             httpRequestRaw(
                 method = "GET",
-                url = "$API_BASE/users/@me",
+                url = "$API_BASE/users/$userId",
                 headers = mapOf("Authorization" to accountToken),
                 body = "",
             )

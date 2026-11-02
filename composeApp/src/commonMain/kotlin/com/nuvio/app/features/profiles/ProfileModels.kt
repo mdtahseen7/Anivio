@@ -1,5 +1,6 @@
 package com.nuvio.app.features.profiles
 
+import com.nuvio.app.features.discord.DiscordAuth
 import androidx.compose.ui.graphics.Color
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -97,7 +98,7 @@ fun avatarImageUrl(avatar: AvatarCatalogItem): String? =
         ?: avatar.storagePath.takeIf { it.isNotBlank() && !avatar.memberOnly }?.let(::avatarStorageUrl)
 
 fun normalizedAvatarUrl(url: String?): String? =
-    url?.trim()?.takeIf { it.isValidAvatarUrl() }
+    url?.trim()?.takeIf { it == DISCORD_AVATAR_MARKER || it.isValidAvatarUrl() }
 
 fun String.isValidAvatarUrl(): Boolean {
     val value = trim()
@@ -107,5 +108,9 @@ fun String.isValidAvatarUrl(): Boolean {
 }
 
 fun profileAvatarImageUrl(profile: NuvioProfile, avatar: AvatarCatalogItem?): String? =
-    normalizedAvatarUrl(profile.avatarUrl)
+    normalizedAvatarUrl(profile.avatarUrl)?.let { storedUrl ->
+        if (storedUrl == DISCORD_AVATAR_MARKER) DiscordAuth.uiState.value.user?.avatarUrl else storedUrl
+    }
         ?: avatar?.let(::avatarImageUrl)
+
+const val DISCORD_AVATAR_MARKER = "discord://avatar"

@@ -7,6 +7,7 @@ import com.nuvio.app.core.tracking.ensureTrackingProvidersRegistered
 import com.nuvio.app.features.details.MetaDetails
 import com.nuvio.app.features.details.MetaVideo
 import com.nuvio.app.features.profiles.ProfileRepository
+import com.nuvio.app.features.settings.IncognitoModeRepository
 import com.nuvio.app.features.tracking.TrackingProviderId
 import com.nuvio.app.features.tracking.TrackingProviderRegistry
 import com.nuvio.app.features.tracking.TrackingSettingsRepository
@@ -156,6 +157,7 @@ object WatchedRepository {
     private var extraKeysObserverJob: Job? = null
 
     fun ensureLoaded() {
+        IncognitoModeRepository.ensureLoaded()
         ensureTrackingProvidersRegistered()
         TrackingProviderRegistry.ensureLoaded()
         TrackingSettingsRepository.ensureLoaded()
@@ -231,6 +233,11 @@ object WatchedRepository {
         loadedProviders.clear()
         nuvioHasLoadedRemote = false
         providersLoadedFromRemote.clear()
+
+        if (IncognitoModeRepository.enabled.value) {
+            publish()
+            return
+        }
 
         val payload = WatchedStorage.loadPayload(profileId).orEmpty().trim()
         if (payload.isNotEmpty()) {
@@ -333,6 +340,8 @@ object WatchedRepository {
             )
 
     suspend fun pullFromServer(profileId: Int) {
+        IncognitoModeRepository.ensureLoaded()
+        if (IncognitoModeRepository.enabled.value) return
         TrackingProviderRegistry.ensureLoaded()
         TrackingSettingsRepository.ensureLoaded()
         refreshForSource(
@@ -346,6 +355,8 @@ object WatchedRepository {
     }
 
     suspend fun forceSnapshotRefreshFromServer(profileId: Int) {
+        IncognitoModeRepository.ensureLoaded()
+        if (IncognitoModeRepository.enabled.value) return
         TrackingProviderRegistry.ensureLoaded()
         TrackingSettingsRepository.ensureLoaded()
         refreshForSource(
@@ -365,6 +376,7 @@ object WatchedRepository {
     ): Boolean {
         TrackingProviderRegistry.ensureLoaded()
         TrackingSettingsRepository.ensureLoaded()
+        if (IncognitoModeRepository.enabled.value) return false
         if (ProfileRepository.activeProfileId != profileId) {
             log.d { "Skipping watched refresh for inactive profile $profileId" }
             return false
@@ -770,6 +782,7 @@ object WatchedRepository {
         syncRemote: Boolean = true,
     ) {
         ensureLoaded()
+        if (IncognitoModeRepository.enabled.value) return
         if (items.isEmpty()) return
         val source = activeSource
         val markedAt = WatchedClock.nowEpochMs()
@@ -826,6 +839,7 @@ object WatchedRepository {
 
     fun unmarkWatched(items: Collection<WatchedItem>) {
         ensureLoaded()
+        if (IncognitoModeRepository.enabled.value) return
         if (items.isEmpty()) return
         val source = activeSource
         val (removedItems, removedExtraKeys) = itemsStore.update { nuvioItems, providerItems, dirtyNuvioKeys, dirtyProviderKeys ->
@@ -1021,6 +1035,7 @@ object WatchedRepository {
         trackerHistorySync: WatchedTrackerHistorySync,
         source: WatchProgressSource,
     ) {
+        if (IncognitoModeRepository.enabled.value) return
         val profileId = currentProfileId
         val operationGeneration = profileGeneration
         accountScopeSnapshot().launch {
@@ -1049,6 +1064,7 @@ object WatchedRepository {
         items: Collection<WatchedItem>,
         source: WatchProgressSource,
     ) {
+        if (IncognitoModeRepository.enabled.value) return
         val profileId = currentProfileId
         accountScopeSnapshot().launch {
             runCatching {
@@ -1172,6 +1188,7 @@ object WatchedRepository {
     }
 
     private fun persist() {
+        if (IncognitoModeRepository.enabled.value) return
         val storedPayload = itemsStore.read { nuvioItems, providerItems, dirtyNuvioKeys, dirtyProviderKeys ->
             val providerIds = buildSet {
                 addAll(providerItems.keys)

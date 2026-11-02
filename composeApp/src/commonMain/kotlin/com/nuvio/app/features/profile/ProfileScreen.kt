@@ -54,6 +54,7 @@ import com.nuvio.app.features.anilist.AniListAuthRepository
 import com.nuvio.app.features.mal.MalAuthSettings
 import com.nuvio.app.features.membership.MemberAccessRepository
 import com.nuvio.app.features.membership.resolveProfileBackground
+import com.nuvio.app.features.membership.ProfileBackgroundRepository
 import com.nuvio.app.features.profile.components.ActivityHeatmap
 import com.nuvio.app.features.profile.components.LevelRing
 import com.nuvio.app.features.profile.components.ProfileBarRow
@@ -100,6 +101,7 @@ fun ProfileScreen(
     val malAuth by MalAuthSettings.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
+        ProfileBackgroundRepository.ensureLoaded()
         ProfileStatsRepository.start()
         ProfileShareSettingsRepository.ensureLoaded()
         MalAuthSettings.ensureLoaded()

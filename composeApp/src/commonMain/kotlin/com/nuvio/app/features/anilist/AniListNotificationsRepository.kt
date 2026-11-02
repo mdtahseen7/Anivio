@@ -131,26 +131,21 @@ object AniListNotificationsRepository {
             .filter { it.source == NotificationSource.DANTOTSU }
             .mapNotNull { it.sourceNotificationId }
             .maxOrNull()
+        lastReadDantotsuNotificationId = maxOf(
+            lastReadDantotsuNotificationId ?: 0,
+            latestCommentNotificationId ?: 0,
+        ).takeIf { it > 0 }
+        _uiState.value = _uiState.value.copy(
+            unreadCount = 0,
+            lastClearedAtEpochSec = nowEpochSec,
+            lastReadDantotsuNotificationId = lastReadDantotsuNotificationId,
+        )
         try {
             AniListClient.query(
                 query = "query { Viewer { id unreadNotificationCount(resetNotificationCount: true) } }",
                 forceRefresh = true,
                 accessToken = token,
             )
-            lastReadDantotsuNotificationId = maxOf(
-                lastReadDantotsuNotificationId ?: 0,
-                latestCommentNotificationId ?: 0,
-            ).takeIf { it > 0 }
-            _uiState.value = _uiState.value.copy(
-                unreadCount = 0,
-                lastClearedAtEpochSec = nowEpochSec,
-                lastReadDantotsuNotificationId = lastReadDantotsuNotificationId,
-            )
-            // The feed query (PAGE_QUERY) also carries the unread count and is cached for the normal
-            // TTL, so without a forced refetch the badge would reappear from that stale cache on the
-            // next open. Re-pull page 1 fresh so cache and state both reflect the reset.
-            page = 1
-            loadPage(token, targetPage = 1, forceRefresh = true)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {

@@ -26,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
@@ -217,12 +218,26 @@ internal fun MainTabsDestination(
                     selectedTab != AppScreenTab.Search &&
                     selectedTab != AppScreenTab.Library
                 ) {
+                    val homeTopBarEnabled by ThemeSettingsRepository.homeTopBarEnabled.collectAsStateWithLifecycle()
+                    val topBarVisibility = navBarScrollState.labelVisibility
                     NuvioCircularGlassButton(
                         onClick = { onTabSelected(AppScreenTab.Search) },
                         hazeState = if (navBarStyleSetting != NavBarStyle.CLASSIC) navBarHazeState else null,
                         size = 48.dp,
                         modifier = Modifier
                             .align(Alignment.TopEnd)
+                            .graphicsLayer {
+                                alpha = if (selectedTab == AppScreenTab.Home) {
+                                    if (homeTopBarEnabled) topBarVisibility else 0f
+                                } else {
+                                    1f
+                                }
+                                translationY = if (selectedTab == AppScreenTab.Home) {
+                                    -48.dp.toPx() * (1f - topBarVisibility)
+                                } else {
+                                    0f
+                                }
+                            }
                             .statusBarsPadding()
                             .padding(top = 8.dp, end = 16.dp),
                     ) {

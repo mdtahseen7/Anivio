@@ -24,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.Dp
@@ -42,6 +43,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import com.nuvio.app.core.ui.LocalNuvioBottomNavigationOverlayPadding
+import com.nuvio.app.core.ui.LocalNuvioNavBarScrollState
 import com.nuvio.app.core.ui.NuvioCircularGlassButton
 import com.nuvio.app.core.ui.NuvioScreen
 import com.nuvio.app.core.ui.NuvioNetworkOfflineCard
@@ -83,6 +85,7 @@ import com.nuvio.app.features.watched.WatchedRepository
 import com.nuvio.app.features.watched.episodePlaybackId
 import com.nuvio.app.features.watched.resolveWatchedBadgesBulk
 import com.nuvio.app.features.watched.watchedItemKey
+import com.nuvio.app.features.settings.ThemeSettingsRepository
 import com.nuvio.app.features.watchprogress.CachedInProgressItem
 import com.nuvio.app.features.watchprogress.CachedNextUpItem
 import com.nuvio.app.features.watchprogress.ContinueWatchingEnrichmentCache
@@ -982,11 +985,24 @@ fun HomeScreen(
         // AniList session is restored, even if Home composed before that finished.
         val isAniListAuthenticated by AniListAuthRepository.isAuthenticated.collectAsStateWithLifecycle()
         val showNotificationsBell = onNotificationsClick != null && isAniListAuthenticated
+        val homeTopBarEnabled by ThemeSettingsRepository.homeTopBarEnabled.collectAsStateWithLifecycle()
+        val topBarVisibility = LocalNuvioNavBarScrollState.current?.labelVisibility ?: 1f
+        val topBarModifier = Modifier.graphicsLayer {
+            alpha = if (homeTopBarEnabled) topBarVisibility else 0f
+            translationY = -48.dp.toPx() * (1f - topBarVisibility)
+        }
         // The bell itself is rendered AFTER NuvioScreen (below) so it floats on top of the content
         // instead of being covered by the scrolling list / hero.
 
         NuvioScreen(
-            modifier = Modifier.fillMaxSize().then(heroStretchModifier),
+            modifier = Modifier
+                .fillMaxSize()
+                .then(heroStretchModifier)
+                .then(
+                    LocalNuvioNavBarScrollState.current?.let { navState ->
+                        Modifier.nestedScroll(navState.nestedScrollConnection)
+                    } ?: Modifier,
+                ),
             horizontalPadding = 0.dp,
             topPadding = if (showHeroSlot) 0.dp else null,
             listState = homeListState,
@@ -1157,43 +1173,47 @@ fun HomeScreen(
             LaunchedEffect(Unit) {
                 AniListNotificationsRepository.refresh()
             }
-            NuvioCircularGlassButton(
-                onClick = onNotificationsClick!!,
-                size = 48.dp,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .statusBarsPadding()
-                    .padding(top = 8.dp, start = 16.dp),
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Rounded.Notifications,
-                        contentDescription = "Notifications",
-                        tint = Color.White,
-                        modifier = Modifier.size(24.dp),
-                    )
-                    if (bellNotificationsUiState.unreadCount > 0) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(top = 1.dp, end = 1.dp)
-                                .size(9.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.nuvio.colors.accent),
+            Box(modifier = topBarModifier) {
+                NuvioCircularGlassButton(
+                    onClick = onNotificationsClick!!,
+                    size = 48.dp,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .statusBarsPadding()
+                        .padding(top = 8.dp, start = 16.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Rounded.Notifications,
+                            contentDescription = "Notifications",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp),
                         )
+                        if (bellNotificationsUiState.unreadCount > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(top = 1.dp, end = 1.dp)
+                                    .size(9.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.nuvio.colors.accent),
+                            )
+                        }
                     }
                 }
             }
         }
 
-        ContentModeToggle(
-            selected = contentMode,
-            onSelected = ContentModeRepository::select,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .statusBarsPadding()
-                .padding(top = 10.dp),
-        )
+        Box(modifier = topBarModifier) {
+            ContentModeToggle(
+                selected = contentMode,
+                onSelected = ContentModeRepository::select,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 10.dp),
+            )
+        }
     }
 }
 

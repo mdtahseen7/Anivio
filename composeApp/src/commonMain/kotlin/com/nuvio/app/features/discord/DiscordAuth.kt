@@ -56,6 +56,8 @@ data class DiscordWatchingActivity(
 interface DiscordAuthController {
     val uiState: StateFlow<DiscordAuthUiState>
     fun ensureLoaded()
+    suspend fun refreshUser()
+    suspend fun fetchUser(userId: String): DiscordUser?
     suspend fun connectWithToken(rawToken: String): Boolean
     fun disconnect()
     fun setRpcEnabled(enabled: Boolean)
@@ -124,6 +126,8 @@ object DiscordAuth {
     private val unavailable = object : DiscordAuthController {
         override val uiState: StateFlow<DiscordAuthUiState> = MutableStateFlow(DiscordAuthUiState())
         override fun ensureLoaded() = Unit
+        override suspend fun refreshUser() = Unit
+        override suspend fun fetchUser(userId: String): DiscordUser? = null
         override suspend fun connectWithToken(rawToken: String): Boolean = false
         override fun disconnect() = Unit
         override fun setRpcEnabled(enabled: Boolean) = Unit
@@ -144,6 +148,8 @@ object DiscordAuth {
     }
 
     fun ensureLoaded() = controller.ensureLoaded()
+    suspend fun refreshUser() = controller.refreshUser()
+    suspend fun fetchUser(userId: String): DiscordUser? = controller.fetchUser(userId)
     suspend fun connectWithToken(rawToken: String): Boolean = controller.connectWithToken(rawToken)
     fun disconnect() = controller.disconnect()
     fun setRpcEnabled(enabled: Boolean) = controller.setRpcEnabled(enabled)

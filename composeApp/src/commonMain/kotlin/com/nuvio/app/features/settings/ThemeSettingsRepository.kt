@@ -43,6 +43,9 @@ object ThemeSettingsRepository {
     private val _navBarGlowEnabled = MutableStateFlow(true)
     val navBarGlowEnabled: StateFlow<Boolean> = _navBarGlowEnabled.asStateFlow()
 
+    private val _homeTopBarEnabled = MutableStateFlow(true)
+    val homeTopBarEnabled: StateFlow<Boolean> = _homeTopBarEnabled.asStateFlow()
+
     private var hasLoaded = false
     private var observesMembership = false
 
@@ -69,6 +72,7 @@ object ThemeSettingsRepository {
         _selectedAppLanguage.value = AppLanguage.DEVICE
         _navBarGlowEnabled.value = true
         _navBarStyle.value = NavBarStyle.ADAPTIVE
+        _homeTopBarEnabled.value = true
     }
 
     private fun loadFromDisk() {
@@ -95,6 +99,7 @@ object ThemeSettingsRepository {
         _selectedAppLanguage.value = appLanguage
         _navBarGlowEnabled.value = ThemeSettingsStorage.loadNavBarGlowEnabled() ?: true
         _navBarStyle.value = NavBarStyle.fromKey(ThemeSettingsStorage.loadNavBarStyle())
+        _homeTopBarEnabled.value = ThemeSettingsStorage.loadHomeTopBarEnabled() ?: true
     }
 
     fun setTheme(theme: AppTheme) {
@@ -153,6 +158,13 @@ object ThemeSettingsRepository {
         if (_navBarGlowEnabled.value == enabled) return
         _navBarGlowEnabled.value = enabled
         ThemeSettingsStorage.saveNavBarGlowEnabled(enabled)
+    }
+
+    fun setHomeTopBarEnabled(enabled: Boolean) {
+        ensureLoaded()
+        if (_homeTopBarEnabled.value == enabled) return
+        _homeTopBarEnabled.value = enabled
+        ThemeSettingsStorage.saveHomeTopBarEnabled(enabled)
     }
 
     private fun observeMembership() {

@@ -380,6 +380,7 @@ actual object PluginRepository {
                         },
                     )
                 }
+                moveScraperToTop(scraperId)
                 persist()
             }
             return
@@ -395,6 +396,9 @@ actual object PluginRepository {
                     }
                 },
             )
+        }
+        if (enabled) {
+            moveScraperToTop(scraperId)
         }
         persist()
     }
@@ -421,6 +425,37 @@ actual object PluginRepository {
             state.copy(scrapers = list)
         }
         persist()
+    }
+
+    actual fun moveScraperTo(scraperId: String, targetScraperId: String) {
+        initialize()
+        _uiState.update { state ->
+            val list = state.scrapers.toMutableList()
+            val from = list.indexOfFirst { it.id == scraperId }
+            val target = list.indexOfFirst { it.id == targetScraperId }
+            if (from < 0 || target < 0 || from == target || list[from].repositoryUrl != list[target].repositoryUrl) {
+                return@update state
+            }
+            val moving = list.removeAt(from)
+            val adjustedTarget = list.indexOfFirst { it.id == targetScraperId }
+            list.add(adjustedTarget.coerceAtLeast(0), moving)
+            state.copy(scrapers = list)
+        }
+        persist()
+    }
+
+    private fun moveScraperToTop(scraperId: String) {
+        _uiState.update { state ->
+            val list = state.scrapers.toMutableList()
+            val from = list.indexOfFirst { it.id == scraperId }
+            if (from <= 0) return@update state
+            val repositoryUrl = list[from].repositoryUrl
+            val firstInRepository = list.indexOfFirst { it.repositoryUrl == repositoryUrl }
+            if (firstInRepository < 0 || from == firstInRepository) return@update state
+            val moving = list.removeAt(from)
+            list.add(firstInRepository, moving)
+            state.copy(scrapers = list)
+        }
     }
 
     actual fun setPluginsEnabled(enabled: Boolean) {

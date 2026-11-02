@@ -1,5 +1,6 @@
 package com.nuvio.app.features.tracking
 
+import com.nuvio.app.features.settings.IncognitoModeRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -55,6 +56,8 @@ object TrackingWriteCoordinator {
         item: TrackingMediaReference,
         destination: TrackingListStatus?,
     ): TrackingWriteDispatchResult {
+        IncognitoModeRepository.ensureLoaded()
+        if (IncognitoModeRepository.enabled.value) return TrackingWriteDispatchResult()
         TrackingProviderRegistry.ensureLoaded()
         return dispatchTrackingListStatus(
             writers = TrackingProviderRegistry.connectedListWriters(),

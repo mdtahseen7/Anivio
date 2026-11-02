@@ -54,7 +54,7 @@ import com.nuvio.app.features.plugins.AddPluginRepositoryResult
 import com.nuvio.app.features.plugins.PluginRepository
 import kotlinx.coroutines.launch
 
-private enum class ContentSourceTab { INSTALLED, BROWSE }
+private enum class ContentSourceTab { PLUGINS, ADDONS }
 private enum class ContentSourceFilter { ALL, ANIME, MANGA }
 
 private data class MarketplaceEntry(
@@ -97,8 +97,7 @@ fun ContentSourcesSettingsScreen(onBack: () -> Unit) {
 
     val addonState by AddonRepository.uiState.collectAsStateWithLifecycle()
     val pluginState by PluginRepository.uiState.collectAsStateWithLifecycle()
-    var tab by rememberSaveable { mutableStateOf(ContentSourceTab.INSTALLED) }
-    var filter by rememberSaveable { mutableStateOf(ContentSourceFilter.ALL) }
+    var tab by rememberSaveable { mutableStateOf(ContentSourceTab.PLUGINS) }
 
     NuvioScreen {
         stickyHeader {
@@ -110,35 +109,10 @@ fun ContentSourcesSettingsScreen(onBack: () -> Unit) {
         item {
             ContentSourceTabs(selected = tab, onSelected = { tab = it })
         }
-        item {
-            ContentSourceFilters(selected = filter, onSelected = { filter = it })
-        }
-        if (tab == ContentSourceTab.INSTALLED) {
-            item { NuvioSectionLabel("INSTALLED") }
-            item {
-                InstalledSummaryCard(
-                    addonCount = addonState.addons.count { it.isActive },
-                    pluginCount = if (AppFeaturePolicy.pluginsEnabled) pluginState.scrapers.count { it.enabled } else 0,
-                )
-            }
-            item { NuvioSectionLabel("ADDONS") }
-            addonsSettingsContent()
-            if (AppFeaturePolicy.pluginsEnabled) {
-                item { NuvioSectionLabel("PLUGINS") }
-                pluginsSettingsContent()
-            }
+        if (tab == ContentSourceTab.PLUGINS && AppFeaturePolicy.pluginsEnabled) {
+            pluginsSettingsContent()
         } else {
-            item {
-                BrowseContent(
-                    filter = filter,
-                    pluginState = pluginState,
-                    onInstall = { entry -> PluginRepository.addRepository(entry.manifestUrl) },
-                    onUpdate = { entry ->
-                        PluginRepository.refreshRepository(entry.manifestUrl, pushAfterRefresh = true)
-                    },
-                    showPlugins = AppFeaturePolicy.pluginsEnabled,
-                )
-            }
+            addonsSettingsContent()
         }
     }
 }

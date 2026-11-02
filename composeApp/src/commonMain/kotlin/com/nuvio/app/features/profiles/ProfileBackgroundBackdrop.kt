@@ -26,6 +26,9 @@ fun ProfileBackgroundBackdrop(
     imageOverlayAlpha: Float = 0.28f,
     showFallback: Boolean = true,
 ) {
+    LaunchedEffect(Unit) {
+        ProfileBackgroundRepository.ensureLoaded()
+    }
     val memberAccess by remember {
         MemberAccessRepository.ensureStarted()
         MemberAccessRepository.access

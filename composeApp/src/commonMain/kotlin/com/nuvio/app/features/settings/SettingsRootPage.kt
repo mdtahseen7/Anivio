@@ -50,6 +50,8 @@ import nuvio.composeapp.generated.resources.compose_settings_root_downloads_titl
 import nuvio.composeapp.generated.resources.compose_settings_root_general_section
 import nuvio.composeapp.generated.resources.compose_settings_root_integrations_description
 import nuvio.composeapp.generated.resources.compose_settings_root_notifications_description
+import nuvio.composeapp.generated.resources.settings_incognito_mode_title
+import nuvio.composeapp.generated.resources.settings_incognito_mode_description
 import nuvio.composeapp.generated.resources.compose_settings_root_privacy_policy_description
 import nuvio.composeapp.generated.resources.compose_settings_root_reader_description
 import nuvio.composeapp.generated.resources.compose_settings_root_switch_profile_description
@@ -78,6 +80,8 @@ internal fun LazyListScope.settingsRootContent(
     onAppearanceClick: () -> Unit,
     onAdvancedClick: () -> Unit,
     onNotificationsClick: () -> Unit,
+    incognitoModeEnabled: Boolean = false,
+    onIncognitoModeChanged: (Boolean) -> Unit = {},
     onContentDiscoveryClick: () -> Unit,
     onIntegrationsClick: () -> Unit,
     onTrackingClick: () -> Unit,
@@ -203,6 +207,14 @@ internal fun LazyListScope.settingsRootContent(
                         icon = Icons.Rounded.Notifications,
                         isTablet = isTablet,
                         onClick = onNotificationsClick,
+                    )
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsSwitchRow(
+                        title = stringResource(Res.string.settings_incognito_mode_title),
+                        description = stringResource(Res.string.settings_incognito_mode_description),
+                        checked = incognitoModeEnabled,
+                        isTablet = isTablet,
+                        onCheckedChange = onIncognitoModeChanged,
                     )
                 }
             }

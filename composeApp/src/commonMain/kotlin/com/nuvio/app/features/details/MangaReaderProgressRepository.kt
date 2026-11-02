@@ -1,6 +1,7 @@
 package com.nuvio.app.features.details
 
 import com.nuvio.app.features.downloads.DownloadsClock
+import com.nuvio.app.features.settings.IncognitoModeRepository
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -87,6 +88,8 @@ object MangaReaderProgressRepository {
         entries.clear()
         bookmarks.clear()
         history.clear()
+        IncognitoModeRepository.ensureLoaded()
+        if (IncognitoModeRepository.enabled.value) return
         val payload = MangaReaderProgressStorage.loadPayload().orEmpty().trim()
         if (payload.isBlank()) return
         val stored = runCatching {
@@ -173,6 +176,7 @@ object MangaReaderProgressRepository {
         chapterNumber: String,
     ) {
         ensureLoaded()
+        if (IncognitoModeRepository.enabled.value) return
         if (key.isBlank() || chapterId.isBlank()) return
         history[key] = MangaReaderHistoryEntry(
             key = key,
@@ -200,6 +204,7 @@ object MangaReaderProgressRepository {
         completed: Boolean? = null,
     ) {
         ensureLoaded()
+        if (IncognitoModeRepository.enabled.value) return
         if (key.isBlank()) return
         entries[key] = MangaReaderProgressEntry(
             key = key,
@@ -222,6 +227,7 @@ object MangaReaderProgressRepository {
     /** Toggles one location and returns true when the location is now bookmarked. */
     fun toggleBookmark(key: String, pageIndex: Int, webtoonOffset: Int = 0): Boolean {
         ensureLoaded()
+        if (IncognitoModeRepository.enabled.value) return false
         if (key.isBlank()) return false
         val normalizedPage = pageIndex.coerceAtLeast(0)
         val normalizedOffset = webtoonOffset.coerceAtLeast(0)
@@ -251,6 +257,7 @@ object MangaReaderProgressRepository {
     }
 
     private fun persist() {
+        if (IncognitoModeRepository.enabled.value) return
         MangaReaderProgressStorage.savePayload(
             json.encodeToString(
                 StoredMangaReaderProgress(
