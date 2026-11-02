@@ -1,7 +1,6 @@
 package com.nuvio.app.features.plugins
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,11 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.DragHandle
-import androidx.compose.material.icons.rounded.Extension
-import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Refresh
@@ -48,13 +43,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil3.compose.AsyncImage
 import com.nuvio.app.core.ui.NuvioIconActionButton
 import com.nuvio.app.core.ui.NuvioInfoBadge
 import com.nuvio.app.core.ui.NuvioInputField
@@ -192,7 +183,7 @@ fun PluginsSettingsPageContent(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Plugins", style = MaterialTheme.typography.titleLarge)
+                    Text("Providers", style = MaterialTheme.typography.titleLarge)
                     Text(
                         "${sortedScrapers.size} providers · ${sortedRepos.size} repositories",
                         style = MaterialTheme.typography.bodySmall,
@@ -377,6 +368,13 @@ fun PluginsSettingsPageContent(
         }
 
         NuvioSectionLabel("Providers")
+        NuvioSurfaceCard {
+            Text(
+                text = "Choose the providers Anivio can use to find streams and chapters.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         ProviderFilterChips(
             selected = providerFilter,
             onSelected = { providerFilter = it },
@@ -402,19 +400,18 @@ fun PluginsSettingsPageContent(
                         overflow = TextOverflow.Ellipsis,
                     )
                     scrapers.forEach { scraper ->
-                        val repositoryOrder = uiState.scrapers.filter { it.repositoryUrl == repoUrl }
-                        val repositoryIndex = repositoryOrder.indexOfFirst { it.id == scraper.id }
                         Spacer(modifier = Modifier.height(12.dp))
-                            ProviderRow(
-                                scraper = scraper,
-                                results = testResults[scraper.id],
-                                detailsExpanded = expandedScraperId == scraper.id,
-                                onToggleDetails = {
-                                    expandedScraperId = if (expandedScraperId == scraper.id) null else scraper.id
-                                },
+                        ProviderRow(
+                            scraper = scraper,
+                            results = testResults[scraper.id],
+                            detailsExpanded = expandedScraperId == scraper.id,
+                            onToggleDetails = {
+                                expandedScraperId = if (expandedScraperId == scraper.id) null else scraper.id
+                            },
                             isTesting = testingScraperId == scraper.id,
                             testEnabled = hasTmdbApiKey && scraper.enabled && scraper.code.isNotBlank(),
-                            onTest = {                                testingScraperId = scraper.id
+                            onTest = {
+                                testingScraperId = scraper.id
                                 coroutineScope.launch {
                                     PluginRepository.testScraper(scraper.id)
                                         .onSuccess { testResults[scraper.id] = it }
@@ -431,9 +428,6 @@ fun PluginsSettingsPageContent(
                                 }
                             },
                             onToggle = { PluginRepository.toggleScraper(scraper.id, it) },
-                            canMoveUp = repositoryIndex > 0,
-                            canMoveDown = repositoryIndex >= 0 && repositoryIndex < repositoryOrder.lastIndex,
-                            onReorder = { moveUp -> PluginRepository.moveScraper(scraper.id, moveUp) },
                             onConfigure = if (scraper.hasSettings && scraper.enabled && scraper.code.isNotBlank()) {
                                 {
                                     coroutineScope.launch {
@@ -520,37 +514,6 @@ private fun PluginToggleRow(
 }
 
 @Composable
-private fun ProviderLogo(
-    logoUrl: String?,
-    enabled: Boolean,
-) {
-    var imageFailed by remember(logoUrl) { mutableStateOf(false) }
-    Box(
-        modifier = Modifier
-            .size(40.dp)
-            .clip(RoundedCornerShape(12.dp)),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (!logoUrl.isNullOrBlank() && !imageFailed) {
-            AsyncImage(
-                model = logoUrl,
-                contentDescription = "Provider icon",
-                modifier = Modifier.matchParentSize(),
-                contentScale = ContentScale.Crop,
-                onError = { imageFailed = true },
-            )
-        } else {
-            Icon(
-                imageVector = Icons.Rounded.Extension,
-                contentDescription = null,
-                tint = if (enabled) Color(0xFF68B76A) else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(24.dp),
-            )
-        }
-    }
-}
-
-@Composable
 private fun ProviderRow(
     scraper: PluginScraper,
     results: List<PluginRuntimeResult>?,
@@ -560,9 +523,6 @@ private fun ProviderRow(
     testEnabled: Boolean,
     onTest: () -> Unit,
     onToggle: (Boolean) -> Unit,
-    canMoveUp: Boolean,
-    canMoveDown: Boolean,
-    onReorder: (Boolean) -> Unit,
     onConfigure: (() -> Unit)?,
 ) {
     val visibleResults = results.orEmpty()
@@ -570,84 +530,32 @@ private fun ProviderRow(
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onToggleDetails),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                ProviderLogo(
-                    logoUrl = scraper.logo,
-                    enabled = scraper.enabled,
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = scraper.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                Spacer(modifier = Modifier.width(10.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = scraper.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    AnimatedVisibility(visible = detailsExpanded) {
-                        Text(
-                            text = scraper.description.ifBlank {
-                                stringResource(Res.string.plugins_provider_no_description)
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
+                Text(
+                    text = scraper.description.ifBlank {
+                        stringResource(Res.string.plugins_provider_no_description)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
+            Spacer(modifier = Modifier.width(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .pointerInput(scraper.id, canMoveUp, canMoveDown) {
-                            var distance = 0f
-                            detectDragGesturesAfterLongPress(
-                                onDragStart = { distance = 0f },
-                                onDragCancel = { distance = 0f },
-                                onDragEnd = { distance = 0f },
-                                onDrag = { change, dragAmount ->
-                                    change.consume()
-                                    distance += dragAmount.y
-                                    if (distance <= -28f && canMoveUp) {
-                                        onReorder(true)
-                                        distance = 0f
-                                    } else if (distance >= 28f && canMoveDown) {
-                                        onReorder(false)
-                                        distance = 0f
-                                    }
-                                },
-                            )
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.DragHandle,
-                        contentDescription = "Hold and drag to reorder",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                IconButton(onClick = onToggleDetails) {
-                    Icon(
-                        imageVector = Icons.Rounded.Info,
-                        contentDescription = if (detailsExpanded) "Hide provider details" else "Show provider details",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                IconButton(onClick = { onReorder(true) }, enabled = canMoveUp) {
-                    Icon(Icons.Rounded.KeyboardArrowUp, contentDescription = "Move provider up")
-                }
-                IconButton(onClick = { onReorder(false) }, enabled = canMoveDown) {
-                    Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = "Move provider down")
-                }
                 Box {
                     IconButton(onClick = { actionsExpanded = true }) {
                         Icon(Icons.Rounded.MoreVert, contentDescription = "Provider actions")
@@ -656,6 +564,15 @@ private fun ProviderRow(
                         expanded = actionsExpanded,
                         onDismissRequest = { actionsExpanded = false },
                     ) {
+                        DropdownMenuItem(
+                            text = {
+                                Text(if (detailsExpanded) "Hide details" else "Show details")
+                            },
+                            onClick = {
+                                actionsExpanded = false
+                                onToggleDetails()
+                            },
+                        )
                         DropdownMenuItem(
                             text = { Text(stringResource(Res.string.plugins_button_test_provider)) },
                             onClick = { actionsExpanded = false; onTest() },

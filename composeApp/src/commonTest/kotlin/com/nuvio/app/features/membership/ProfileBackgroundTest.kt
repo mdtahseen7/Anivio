@@ -3,14 +3,16 @@ package com.nuvio.app.features.membership
 import com.nuvio.app.features.profiles.NuvioProfile
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
 
 class ProfileBackgroundTest {
     @Test
-    fun backgroundDoesNotRenderWithoutEntitlement() {
+    fun savedBackgroundRendersWithoutEntitlement() {
         val profile = NuvioProfile(profileBackgroundId = "aurora")
 
-        assertNull(resolveProfileBackground(profile, CosmeticEntitlements.None))
+        assertEquals(
+            ProfileBackgroundSelection.Catalog("aurora"),
+            resolveProfileBackground(profile, CosmeticEntitlements.None),
+        )
     }
 
     @Test

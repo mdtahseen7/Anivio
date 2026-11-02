@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import com.nuvio.app.core.build.AppVersionConfig
 import com.nuvio.app.core.ui.NuvioScreen
 import com.nuvio.app.core.ui.NuvioScreenHeader
+import com.nuvio.app.core.ui.NuvioSurfaceCard
 import com.nuvio.app.features.discord.DiscordAuth
 import com.nuvio.app.features.discord.DiscordUser
 import coil3.compose.AsyncImage
@@ -73,13 +74,10 @@ private fun AboutBody(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(if (isTablet) 28.dp else 24.dp),
     ) {
-        PlainSettingsStack(
-            title = stringResource(Res.string.about_section_app),
-            isTablet = isTablet,
-        ) {
+        NuvioSurfaceCard {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
                     text = stringResource(Res.string.about_app_name),
@@ -104,26 +102,7 @@ private fun AboutBody(
             }
         }
 
-        PlainSettingsStack(
-            title = stringResource(Res.string.about_section_author),
-            isTablet = isTablet,
-        ) {
-            PlainRow(
-                title = stringResource(Res.string.about_author_title),
-                body = stringResource(Res.string.about_author_body),
-                isTablet = isTablet,
-            )
-            PlainRow(
-                title = stringResource(Res.string.about_origin_title),
-                body = stringResource(Res.string.about_origin_body),
-                isTablet = isTablet,
-            )
-        }
-
-        PlainSettingsStack(
-            title = "Created by",
-            isTablet = isTablet,
-        ) {
+        NuvioSurfaceCard {
             Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 ownerProfile.value?.avatarUrl?.let { avatarUrl ->
                     AsyncImage(
@@ -135,6 +114,11 @@ private fun AboutBody(
                     Spacer(modifier = Modifier.width(14.dp))
                 }
                 Column {
+                    Text(
+                        text = "Created by",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
                     Text(
                         text = ownerProfile.value?.globalName
                             ?: ownerProfile.value?.username

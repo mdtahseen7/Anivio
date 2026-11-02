@@ -1,6 +1,7 @@
 package com.nuvio.app
 
 import androidx.compose.material.icons.rounded.Explore
+import androidx.compose.animation.core.animateFloatAsState
 import nuvio.composeapp.generated.resources.compose_search_discover_title
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
@@ -220,6 +221,10 @@ internal fun MainTabsDestination(
                 ) {
                     val homeTopBarEnabled by ThemeSettingsRepository.homeTopBarEnabled.collectAsStateWithLifecycle()
                     val topBarVisibility = navBarScrollState.labelVisibility
+                    val animatedTopBarVisibility by animateFloatAsState(
+                        targetValue = if (homeTopBarEnabled) topBarVisibility else 0f,
+                        label = "home_search_visibility",
+                    )
                     NuvioCircularGlassButton(
                         onClick = { onTabSelected(AppScreenTab.Search) },
                         hazeState = if (navBarStyleSetting != NavBarStyle.CLASSIC) navBarHazeState else null,
@@ -228,18 +233,18 @@ internal fun MainTabsDestination(
                             .align(Alignment.TopEnd)
                             .graphicsLayer {
                                 alpha = if (selectedTab == AppScreenTab.Home) {
-                                    if (homeTopBarEnabled) topBarVisibility else 0f
+                                    animatedTopBarVisibility
                                 } else {
                                     1f
                                 }
                                 translationY = if (selectedTab == AppScreenTab.Home) {
-                                    -48.dp.toPx() * (1f - topBarVisibility)
+                                    -56.dp.toPx() * (1f - animatedTopBarVisibility)
                                 } else {
                                     0f
                                 }
                             }
                             .statusBarsPadding()
-                            .padding(top = 8.dp, end = 16.dp),
+                            .padding(top = 12.dp, end = 16.dp),
                     ) {
                         Icon(
                             painter = painterResource(Res.drawable.sidebar_search),

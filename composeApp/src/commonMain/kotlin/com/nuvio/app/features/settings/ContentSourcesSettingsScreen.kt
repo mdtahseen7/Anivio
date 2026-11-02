@@ -102,7 +102,7 @@ fun ContentSourcesSettingsScreen(onBack: () -> Unit) {
     NuvioScreen {
         stickyHeader {
             NuvioScreenHeader(
-                title = "Content & Addons",
+                title = "Content sources",
                 onBack = onBack,
             )
         }
@@ -134,7 +134,10 @@ private fun ContentSourceTabs(
                 else MaterialTheme.colorScheme.surfaceContainer,
             ) {
                 Text(
-                    text = tab.name.lowercase().replaceFirstChar(Char::uppercase),
+                    text = when (tab) {
+                        ContentSourceTab.PLUGINS -> "Providers"
+                        ContentSourceTab.ADDONS -> "Add-ons"
+                    },
                     modifier = Modifier.padding(vertical = 11.dp),
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     style = MaterialTheme.typography.labelLarge,

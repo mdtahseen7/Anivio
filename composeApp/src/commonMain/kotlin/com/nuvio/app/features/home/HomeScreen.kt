@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -987,9 +988,13 @@ fun HomeScreen(
         val showNotificationsBell = onNotificationsClick != null && isAniListAuthenticated
         val homeTopBarEnabled by ThemeSettingsRepository.homeTopBarEnabled.collectAsStateWithLifecycle()
         val topBarVisibility = LocalNuvioNavBarScrollState.current?.labelVisibility ?: 1f
+        val animatedTopBarVisibility by animateFloatAsState(
+            targetValue = if (homeTopBarEnabled) topBarVisibility else 0f,
+            label = "home_top_controls_visibility",
+        )
         val topBarModifier = Modifier.graphicsLayer {
-            alpha = if (homeTopBarEnabled) topBarVisibility else 0f
-            translationY = -48.dp.toPx() * (1f - topBarVisibility)
+            alpha = animatedTopBarVisibility
+            translationY = -56.dp.toPx() * (1f - animatedTopBarVisibility)
         }
         // The bell itself is rendered AFTER NuvioScreen (below) so it floats on top of the content
         // instead of being covered by the scrolling list / hero.
@@ -1180,7 +1185,7 @@ fun HomeScreen(
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .statusBarsPadding()
-                        .padding(top = 8.dp, start = 16.dp),
+                    .padding(top = 12.dp, start = 16.dp),
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
@@ -1211,7 +1216,7 @@ fun HomeScreen(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .statusBarsPadding()
-                    .padding(top = 10.dp),
+                    .padding(top = 12.dp),
             )
         }
     }

@@ -110,10 +110,11 @@ object PartyChat {
 
     internal fun start(next: PartyChatRoom) {
         scope.launch {
-            if (room?.partyId != next.partyId) reset()
+            // A watch party chat belongs to the live session, not a reusable room code. Starting
+            // a session must therefore never paint messages left over from an earlier session.
+            reset()
             room = next
             ownMemberIds += next.memberId
-            sync()
         }
     }
 

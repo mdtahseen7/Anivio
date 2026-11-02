@@ -56,8 +56,6 @@ import com.nuvio.app.core.ui.NuvioStatusModal
 import com.nuvio.app.core.ui.NuvioSurfaceCard
 import com.nuvio.app.core.ui.themePalette
 import com.nuvio.app.core.ui.accentBrush
-import com.nuvio.app.features.membership.CosmeticEntitlement
-import com.nuvio.app.features.membership.MemberAccessRepository
 import com.nuvio.app.features.membership.ProfileBackgroundRepository
 import com.nuvio.app.features.discord.DiscordAuth
 import kotlinx.coroutines.launch
@@ -103,12 +101,11 @@ fun ProfileEditScreen(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showPinSetup by remember { mutableStateOf(false) }
     var showPinClear by remember { mutableStateOf(false) }
-    val memberAccess by remember {
-        MemberAccessRepository.ensureStarted()
-        MemberAccessRepository.access
-    }.collectAsStateWithLifecycle()
     val backgroundCatalog by ProfileBackgroundRepository.catalog.collectAsStateWithLifecycle()
-    val canChooseBackground = !isNew && memberAccess.entitlements.includes(CosmeticEntitlement.PROFILE_BACKGROUNDS)
+    // Keep appearance controls discoverable for every existing profile. The catalog itself can
+    // still apply its own membership rules, but hiding this entire section made saved banners look
+    // like the feature had disappeared.
+    val canChooseBackground = !isNew
 
     val avatars by AvatarRepository.avatars.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) {
@@ -195,19 +192,21 @@ fun ProfileEditScreen(
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
-                    if (discordUiState.user?.avatarUrl != null) {
-                        OutlinedButton(
-                            onClick = {
-                                avatarUrl = DISCORD_AVATAR_MARKER
-                                selectedAvatarId = null
+                    OutlinedButton(
+                        onClick = {
+                            avatarUrl = DISCORD_AVATAR_MARKER
+                            selectedAvatarId = null
+                        },
+                        enabled = discordUiState.user?.avatarUrl != null,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            when {
+                                discordUiState.user?.avatarUrl == null -> "Connect Discord to use its profile picture"
+                                avatarUrl == DISCORD_AVATAR_MARKER -> "Using Discord profile picture"
+                                else -> "Use Discord profile picture"
                             },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(
-                                if (avatarUrl == DISCORD_AVATAR_MARKER) "Using Discord profile picture"
-                                else "Use Discord profile picture",
-                            )
-                        }
+                        )
                     }
                 }
             }
