@@ -11,7 +11,7 @@ All plugins run directly inside Anivio's internal **QuickJS** runtime (single-fi
 | Provider | File | Content Type | Stream Format | Features & Highlights |
 |---|---|---|---|---|
 | **Torrentio** | `torrentio.js` | Anime, Series & Movies | Torrent (P2P) | Ported from Saikou's torrent engine. Queries Nyaa, TokyoTosho, HorribleSubs, etc. via AniZip ID mapping. Full magnet URIs with trackers, seeders (👤), file sizes (💾), and Real-Debrid / TorBox support. |
-| **KickAssAnime** | `kickassanime.js` | Anime | HLS (m3u8) | Direct 1080p master HLS stream extraction via CatStream Astro player embeds, complete with embedded VTT subtitles. |
+| **KickAssAnime** | `kickassanime.js` | Anime | HLS / DASH | Ported from [Saikou's KAA provider](https://github.com/middlegear/Saikou/commit/9010ae6da96bb2f09bce2c625dd861219730edbf) (GPL-3.0): paginated episodes, SUB/DUB locales, Cat/Vid/Duck/Bird servers, validated manifests, and multilingual subtitles. |
 | **MKissa** | `mkissa.js` | Anime | HLS / MP4 | Fast SUB and DUB stream extraction via the Anivexa API. Exposes custom API mirror URL in provider settings. |
 | **AniBD** | `anibd.js` | Anime | HLS (m3u8) | Multi-server stream extraction with fallback resolution for anime series and films. |
 | **Anikoto** | `anikoto.js` | Anime | HLS (m3u8) | Multi-source SUB and DUB streams with intelligent health and latency ranking. |
