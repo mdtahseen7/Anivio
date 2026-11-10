@@ -2,6 +2,7 @@ package com.nuvio.app.features.settings
 
 import com.nuvio.app.core.build.AppFeaturePolicy
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -51,6 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.enabledAddons
@@ -70,6 +73,7 @@ import com.nuvio.app.features.player.STREAM_AUTO_PLAY_TIMEOUT_VALUES
 import com.nuvio.app.features.player.SubtitleBackgroundColorSwatches
 import com.nuvio.app.features.player.SubtitleColorSwatches
 import com.nuvio.app.features.player.SubtitleLanguageOption
+import com.nuvio.app.features.player.SubtitleStyleState
 import com.nuvio.app.features.player.formatPlaybackSpeedLabel
 import com.nuvio.app.features.player.languageLabelForCode
 import com.nuvio.app.features.player.subtitleFontSizeRangeSp
@@ -561,8 +565,13 @@ private fun PlaybackSettingsSection(
             isTablet = isTablet,
         ) {
             val subtitleRenderingEnabled = !autoPlayPlayerSettings.externalPlayerEnabled
+            val subtitleStyle = autoPlayPlayerSettings.subtitleStyle
+            SubtitleStylePreview(
+                style = subtitleStyle,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(modifier = Modifier.height(12.dp))
             SettingsGroup(isTablet = isTablet) {
-                val subtitleStyle = autoPlayPlayerSettings.subtitleStyle
                 SettingsSliderRow(
                     title = stringResource(Res.string.settings_playback_subtitle_size),
                     value = subtitleStyle.fontSizeSp,
@@ -658,6 +667,12 @@ private fun PlaybackSettingsSection(
                         )
                     }
                 }
+            }
+            TextButton(
+                onClick = { PlayerSettingsRepository.setSubtitleStyle(SubtitleStyleState.DEFAULT) },
+                enabled = subtitleRenderingEnabled,
+            ) {
+                Text(text = stringResource(Res.string.compose_player_reset_defaults))
             }
         }
 
@@ -1707,6 +1722,44 @@ private fun PlaybackSettingsSection(
             },
             onDismiss = { showAutoPlayRegexDialog = false },
         )
+    }
+}
+
+@Composable
+private fun SubtitleStylePreview(
+    style: SubtitleStyleState,
+    modifier: Modifier = Modifier,
+) {
+    val textBackground = style.backgroundColor
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xFF182A35))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = "SUBTITLE PREVIEW",
+            style = MaterialTheme.typography.labelMedium,
+            color = Color.White.copy(alpha = 0.7f),
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 84.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "Every story begins with a little curiosity.",
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(textBackground)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                color = style.textColor,
+                fontSize = style.fontSizeSp.coerceIn(12, 32).sp,
+                fontWeight = if (style.bold) FontWeight.Bold else FontWeight.Normal,
+            )
+        }
     }
 }
 
