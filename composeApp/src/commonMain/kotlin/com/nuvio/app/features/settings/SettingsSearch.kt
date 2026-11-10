@@ -495,6 +495,12 @@ internal fun settingsSearchEntries(
         ),
         icon = Icons.Rounded.Extension,
     )
+    addPage(
+        page = SettingsPage.MediaServers,
+        key = "media-servers",
+        title = stringResource(Res.string.compose_settings_page_media_servers),
+        description = stringResource(Res.string.settings_content_discovery_media_servers_description),
+    )
     if (pluginsEnabled) {
         addPage(
             page = SettingsPage.Plugins,
