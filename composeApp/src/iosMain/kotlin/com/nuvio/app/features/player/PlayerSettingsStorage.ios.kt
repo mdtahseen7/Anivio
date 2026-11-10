@@ -39,6 +39,7 @@ actual object PlayerSettingsStorage {
     private const val subtitleOutlineEnabledKey = "subtitle_outline_enabled"
     private const val subtitleOutlineWidthKey = "subtitle_outline_width"
     private const val subtitleBoldKey = "subtitle_bold"
+    private const val subtitleFontFamilyKey = "subtitle_font_family"
     private const val subtitleFontSizeSpKey = "subtitle_font_size_sp"
     private const val subtitleBottomOffsetKey = "subtitle_bottom_offset"
     private const val subtitleStripSdhKey = "subtitle_strip_sdh"
@@ -112,6 +113,7 @@ actual object PlayerSettingsStorage {
         subtitleOutlineEnabledKey,
         subtitleOutlineWidthKey,
         subtitleBoldKey,
+        subtitleFontFamilyKey,
         subtitleFontSizeSpKey,
         subtitleBottomOffsetKey,
         subtitleStripSdhKey,
@@ -460,6 +462,12 @@ actual object PlayerSettingsStorage {
 
     actual fun saveSubtitleFontSizeSp(fontSizeSp: Int) {
         NSUserDefaults.standardUserDefaults.setInteger(fontSizeSp.toLong(), forKey = ProfileScopedKey.of(subtitleFontSizeSpKey))
+    }
+
+    actual fun loadSubtitleFontFamily(): String? = loadString(subtitleFontFamilyKey)
+
+    actual fun saveSubtitleFontFamily(fontFamily: String) {
+        saveString(subtitleFontFamilyKey, fontFamily)
     }
 
     actual fun loadSubtitleBottomOffset(): Int? {
@@ -989,6 +997,7 @@ actual object PlayerSettingsStorage {
         loadSubtitleOutlineEnabled()?.let { put(subtitleOutlineEnabledKey, encodeSyncBoolean(it)) }
         loadSubtitleOutlineWidth()?.let { put(subtitleOutlineWidthKey, encodeSyncInt(it)) }
         loadSubtitleBold()?.let { put(subtitleBoldKey, encodeSyncBoolean(it)) }
+        loadSubtitleFontFamily()?.let { put(subtitleFontFamilyKey, encodeSyncString(it)) }
         loadSubtitleFontSizeSp()?.let { put(subtitleFontSizeSpKey, encodeSyncInt(it)) }
         loadSubtitleBottomOffset()?.let { put(subtitleBottomOffsetKey, encodeSyncInt(it)) }
         loadSubtitleStripSdh()?.let { put(subtitleStripSdhKey, encodeSyncBoolean(it)) }
@@ -1067,6 +1076,7 @@ actual object PlayerSettingsStorage {
         payload.decodeSyncBoolean(subtitleOutlineEnabledKey)?.let(::saveSubtitleOutlineEnabled)
         payload.decodeSyncInt(subtitleOutlineWidthKey)?.let(::saveSubtitleOutlineWidth)
         payload.decodeSyncBoolean(subtitleBoldKey)?.let(::saveSubtitleBold)
+        payload.decodeSyncString(subtitleFontFamilyKey)?.let(::saveSubtitleFontFamily)
         payload.decodeSyncInt(subtitleFontSizeSpKey)?.let(::saveSubtitleFontSizeSp)
         payload.decodeSyncInt(subtitleBottomOffsetKey)?.let(::saveSubtitleBottomOffset)
         payload.decodeSyncBoolean(subtitleStripSdhKey)?.let(::saveSubtitleStripSdh)

@@ -268,6 +268,7 @@ actual fun PlatformPlayerSurface(
                     outlineColor = style.outlineColor.toMpvColorString(),
                     outlineSize = if (style.outlineEnabled) style.outlineWidth.toFloat() else 0f,
                     bold = style.bold,
+                    fontFamily = style.fontFamily.storageValue,
                     fontSize = style.toMpvSubtitleFontSize(),
                     subPos = style.toMpvSubtitlePosition(),
                     stripSdh = style.stripSdh,

@@ -1635,6 +1635,7 @@ private class NuvioLibmpvView(
                     mpv.setPropertyString("sub-border-color", style.outlineColor.toMpvColor())
                     mpv.setPropertyString("sub-border-style", style.toMpvSubtitleBorderStyle())
                     mpv.setPropertyString("sub-bold", if (style.bold) "yes" else "no")
+                    mpv.setPropertyString("sub-font", style.fontFamily.toMpvFontName())
                     mpv.setPropertyInt("sub-font-size", style.toMpvSubtitleFontSize())
                     mpv.setPropertyInt("sub-outline-size", style.toMpvSubtitleOutlineSize())
                     mpv.setPropertyInt("sub-border-size", style.toMpvSubtitleOutlineSize())
@@ -1809,6 +1810,23 @@ private fun SubtitleStyleState.toMpvSubtitleBorderStyle(): String =
     } else {
         "outline-and-shadow"
     }
+
+private fun SubtitleFontFamily.toMpvFontName(): String = when (this) {
+    SubtitleFontFamily.Default,
+    SubtitleFontFamily.Sans -> "sans-serif"
+    SubtitleFontFamily.Serif -> "serif"
+    SubtitleFontFamily.Monospace -> "monospace"
+}
+
+private fun SubtitleFontFamily.toTypeface(bold: Boolean): Typeface {
+    val base = when (this) {
+        SubtitleFontFamily.Default -> Typeface.DEFAULT
+        SubtitleFontFamily.Sans -> Typeface.create("sans-serif", Typeface.NORMAL)
+        SubtitleFontFamily.Serif -> Typeface.SERIF
+        SubtitleFontFamily.Monospace -> Typeface.MONOSPACE
+    }
+    return Typeface.create(base, if (bold) Typeface.BOLD else Typeface.NORMAL)
+}
 
 private const val MPV_SUBTITLE_FONT_SIZE_SCALE = 55.0 / 18.0
 private const val MPV_SUBTITLE_FONT_SIZE_MIN = 36
@@ -2026,7 +2044,7 @@ private fun PlayerView.applySubtitleStyle(style: SubtitleStyleState, pipScale: F
                 android.graphics.Color.TRANSPARENT,
                 if (style.outlineEnabled) CaptionStyleCompat.EDGE_TYPE_OUTLINE else CaptionStyleCompat.EDGE_TYPE_NONE,
                 style.outlineColor.toArgb(),
-                if (style.bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT,
+                style.fontFamily.toTypeface(style.bold),
             )
         )
         setFixedTextSize(TypedValue.COMPLEX_UNIT_SP, style.fontSizeSp.toFloat() * pipScale)

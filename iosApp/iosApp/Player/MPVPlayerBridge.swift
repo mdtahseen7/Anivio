@@ -166,6 +166,7 @@ final class MPVPlayerBridgeImpl: NSObject, NuvioPlayerBridge {
         outlineColor: String,
         outlineSize: Float,
         bold: Bool,
+        fontFamily: String,
         fontSize: Float,
         subPos: Int32,
         stripSdh: Bool
@@ -176,6 +177,7 @@ final class MPVPlayerBridgeImpl: NSObject, NuvioPlayerBridge {
             outlineColor: outlineColor,
             outlineSize: outlineSize,
             bold: bold,
+            fontFamily: fontFamily,
             fontSize: fontSize,
             subPos: Int(subPos),
             stripSdh: stripSdh
@@ -804,6 +806,7 @@ final class MPVPlayerViewController: UIViewController {
         outlineColor: String,
         outlineSize: Float,
         bold: Bool,
+        fontFamily: String,
         fontSize: Float,
         subPos: Int,
         stripSdh: Bool
@@ -816,6 +819,7 @@ final class MPVPlayerViewController: UIViewController {
         checkError(mpv_set_property_string(mpv, "sub-outline-color", outlineColor))
         checkError(mpv_set_property_string(mpv, "sub-border-style", backgroundColor.hasPrefix("#00") ? "outline-and-shadow" : "opaque-box"))
         setStringProperty("sub-bold", bold ? "yes" : "no")
+        setStringProperty("sub-font", subtitleFontName(fontFamily))
 
         var outline = Double(outlineSize)
         checkError(mpv_set_property(mpv, "sub-outline-size", MPV_FORMAT_DOUBLE, &outline))
@@ -827,6 +831,14 @@ final class MPVPlayerViewController: UIViewController {
         checkError(mpv_set_property(mpv, "sub-pos", MPV_FORMAT_INT64, &position))
         setStringProperty("sub-filter-sdh", stripSdh ? "yes" : "no")
         setStringProperty("sub-filter-sdh-harder", stripSdh ? "yes" : "no")
+    }
+
+    private func subtitleFontName(_ fontFamily: String) -> String {
+        switch fontFamily {
+        case "serif": return "serif"
+        case "monospace": return "monospace"
+        default: return "sans-serif"
+        }
     }
 
     func destroyPlayer() {

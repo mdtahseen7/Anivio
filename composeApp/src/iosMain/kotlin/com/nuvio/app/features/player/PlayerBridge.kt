@@ -70,6 +70,7 @@ interface NuvioPlayerBridge {
         outlineColor: String,
         outlineSize: Float,
         bold: Boolean,
+        fontFamily: String,
         fontSize: Float,
         subPos: Int,
         stripSdh: Boolean,

@@ -566,6 +566,11 @@
     <string name="compose_settings_root_account_section">ACCOUNT</string>
     <string name="compose_settings_root_advanced_description">Startup and profile behavior.</string>
     <string name="compose_settings_root_advanced_section">ADVANCED</string>
+    <string name="settings_section_you">YOUR SPACE</string>
+    <string name="settings_section_watch">WATCH</string>
+    <string name="settings_section_personalize">PERSONALIZE</string>
+    <string name="settings_section_services">SERVICES</string>
+    <string name="settings_section_system">SYSTEM</string>
     <string name="compose_settings_root_appearance_description">Home, streams, collections, and detail pages</string>
     <string name="compose_settings_root_check_updates_description">Download latest release</string>
     <string name="compose_settings_root_check_updates_title">Check for updates</string>
@@ -1262,6 +1267,11 @@
     <string name="settings_playback_subtitle_background_color">Background Color</string>
     <string name="settings_playback_subtitle_bold">Bold</string>
     <string name="settings_playback_subtitle_bold_description">Use a heavier subtitle font weight.</string>
+    <string name="settings_playback_subtitle_font">Font</string>
+    <string name="settings_playback_subtitle_font_default">Default</string>
+    <string name="settings_playback_subtitle_font_sans">Sans serif</string>
+    <string name="settings_playback_subtitle_font_serif">Serif</string>
+    <string name="settings_playback_subtitle_font_monospace">Monospace</string>
     <string name="settings_playback_subtitle_color_transparent">Transparent</string>
     <string name="settings_playback_subtitle_outline">Outline</string>
     <string name="settings_playback_subtitle_outline_color">Outline Color</string>

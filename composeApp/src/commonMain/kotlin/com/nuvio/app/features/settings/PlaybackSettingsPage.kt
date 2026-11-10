@@ -50,6 +50,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -74,6 +75,7 @@ import com.nuvio.app.features.player.SubtitleBackgroundColorSwatches
 import com.nuvio.app.features.player.SubtitleColorSwatches
 import com.nuvio.app.features.player.SubtitleLanguageOption
 import com.nuvio.app.features.player.SubtitleStyleState
+import com.nuvio.app.features.player.SubtitleFontFamily
 import com.nuvio.app.features.player.formatPlaybackSpeedLabel
 import com.nuvio.app.features.player.languageLabelForCode
 import com.nuvio.app.features.player.subtitleFontSizeRangeSp
@@ -302,6 +304,7 @@ private fun PlaybackSettingsSection(
     var showSubtitleTextColorDialog by remember { mutableStateOf(false) }
     var showSubtitleBackgroundColorDialog by remember { mutableStateOf(false) }
     var showSubtitleOutlineColorDialog by remember { mutableStateOf(false) }
+    var showSubtitleFontFamilyDialog by remember { mutableStateOf(false) }
     var showExternalPlayerDialog by remember { mutableStateOf(false) }
     var showExternalPlayerAppDialog by remember { mutableStateOf(false) }
     var showReuseCacheDurationDialog by remember { mutableStateOf(false) }
@@ -572,6 +575,14 @@ private fun PlaybackSettingsSection(
             )
             Spacer(modifier = Modifier.height(12.dp))
             SettingsGroup(isTablet = isTablet) {
+                SettingsNavigationRow(
+                    title = stringResource(Res.string.settings_playback_subtitle_font),
+                    description = subtitleFontFamilyLabel(subtitleStyle.fontFamily),
+                    enabled = subtitleRenderingEnabled,
+                    isTablet = isTablet,
+                    onClick = { showSubtitleFontFamilyDialog = true },
+                )
+                SettingsGroupDivider(isTablet = isTablet)
                 SettingsSliderRow(
                     title = stringResource(Res.string.settings_playback_subtitle_size),
                     value = subtitleStyle.fontSizeSp,
@@ -1458,6 +1469,17 @@ private fun PlaybackSettingsSection(
         )
     }
 
+    if (showSubtitleFontFamilyDialog) {
+        SubtitleFontFamilyDialog(
+            selectedFamily = autoPlayPlayerSettings.subtitleStyle.fontFamily,
+            onFamilySelected = { family ->
+                PlayerSettingsRepository.setSubtitleStyle(autoPlayPlayerSettings.subtitleStyle.copy(fontFamily = family))
+                showSubtitleFontFamilyDialog = false
+            },
+            onDismiss = { showSubtitleFontFamilyDialog = false },
+        )
+    }
+
     if (showSubtitleBackgroundColorDialog) {
         SubtitleColorDialog(
             title = stringResource(Res.string.settings_playback_subtitle_background_color),
@@ -1758,9 +1780,25 @@ private fun SubtitleStylePreview(
                 color = style.textColor,
                 fontSize = style.fontSizeSp.coerceIn(12, 32).sp,
                 fontWeight = if (style.bold) FontWeight.Bold else FontWeight.Normal,
+                fontFamily = style.fontFamily.toComposeFontFamily(),
             )
         }
     }
+}
+
+@Composable
+private fun subtitleFontFamilyLabel(fontFamily: SubtitleFontFamily): String = when (fontFamily) {
+    SubtitleFontFamily.Default -> stringResource(Res.string.settings_playback_subtitle_font_default)
+    SubtitleFontFamily.Sans -> stringResource(Res.string.settings_playback_subtitle_font_sans)
+    SubtitleFontFamily.Serif -> stringResource(Res.string.settings_playback_subtitle_font_serif)
+    SubtitleFontFamily.Monospace -> stringResource(Res.string.settings_playback_subtitle_font_monospace)
+}
+
+private fun SubtitleFontFamily.toComposeFontFamily(): FontFamily = when (this) {
+    SubtitleFontFamily.Default -> FontFamily.Default
+    SubtitleFontFamily.Sans -> FontFamily.SansSerif
+    SubtitleFontFamily.Serif -> FontFamily.Serif
+    SubtitleFontFamily.Monospace -> FontFamily.Monospace
 }
 
 @Composable
@@ -2836,6 +2874,68 @@ private fun SubtitleColorDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun SubtitleFontFamilyDialog(
+    selectedFamily: SubtitleFontFamily,
+    onFamilySelected: (SubtitleFontFamily) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    BasicAlertDialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = stringResource(Res.string.settings_playback_subtitle_font),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                SubtitleFontFamily.entries.forEach { family ->
+                    val selected = family == selectedFamily
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onFamilySelected(family) },
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (selected) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                        },
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = subtitleFontFamilyLabel(family),
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontFamily = family.toComposeFontFamily(),
+                                fontWeight = if (family == SubtitleFontFamily.Default) FontWeight.Normal else FontWeight.Medium,
+                            )
+                            if (selected) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Check,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }

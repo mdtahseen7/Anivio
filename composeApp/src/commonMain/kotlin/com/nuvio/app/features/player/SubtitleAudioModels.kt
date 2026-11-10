@@ -49,15 +49,30 @@ data class SubtitleStyleState(
     val outlineEnabled: Boolean = true,
     val outlineWidth: Int = 2,
     val bold: Boolean = false,
+    val fontFamily: SubtitleFontFamily = SubtitleFontFamily.Default,
     val fontSizeSp: Int = 18,
     val bottomOffset: Int = 20,
     val stripSdh: Boolean = false,
-    val useForcedSubtitles: Boolean = false,
+    val useForcedSubtitles: Boolean = true,
     val showOnlyPreferredLanguages: Boolean = false,
     val overrideEmbeddedStyles: Boolean = false,
 ) {
     companion object {
         val DEFAULT = SubtitleStyleState()
+    }
+}
+
+/** A small, cross-platform set of subtitle faces that every player backend can map reliably. */
+enum class SubtitleFontFamily(val storageValue: String) {
+    Default("default"),
+    Sans("sans"),
+    Serif("serif"),
+    Monospace("monospace"),
+    ;
+
+    companion object {
+        fun fromStorage(value: String?): SubtitleFontFamily =
+            entries.firstOrNull { it.storageValue == value } ?: Default
     }
 }
 
