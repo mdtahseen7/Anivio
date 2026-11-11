@@ -23,6 +23,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.material3.Slider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -68,6 +71,11 @@ fun AudioTrackModal(
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
 
+                val audioSettings by PlayerSettingsRepository.uiState.collectAsState()
+                Text("Audio delay · ${audioSettings.audioDelayMs} ms", color = Color.White)
+                Slider(value = audioSettings.audioDelayMs.toFloat(), onValueChange = { PlayerSettingsRepository.setAudioDelayMs(it.toInt()) }, valueRange = -2000f..2000f)
+                Text("Amplification · ${audioSettings.audioAmplificationDb.toInt()} dB", color = Color.White)
+                Slider(value = audioSettings.audioAmplificationDb, onValueChange = PlayerSettingsRepository::setAudioAmplificationDb, valueRange = 0f..20f)
                 if (audioTracks.isEmpty()) {
                     Text(
                         text = stringResource(Res.string.compose_player_no_audio_tracks_available),

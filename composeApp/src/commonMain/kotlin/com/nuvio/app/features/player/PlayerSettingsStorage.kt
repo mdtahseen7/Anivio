@@ -3,6 +3,38 @@ package com.nuvio.app.features.player
 import kotlinx.serialization.json.JsonObject
 
 internal expect object PlayerSettingsStorage {
+    fun loadAudioDelayForDevice(key: String): Int?
+    fun saveAudioDelayForDevice(key: String, value: Int)
+    fun loadAutoSwitchPlaybackEngineOnError(): Boolean?
+    fun saveAutoSwitchPlaybackEngineOnError(value: Boolean)
+    fun loadShowDetailedLoadingStatus(): Boolean?
+    fun saveShowDetailedLoadingStatus(value: Boolean)
+    fun loadShowPauseOverlay(): Boolean?
+    fun saveShowPauseOverlay(value: Boolean)
+    fun loadExoChaptersEnabled(): Boolean?
+    fun saveExoChaptersEnabled(value: Boolean)
+    fun loadPreloadNextEpisode(): Boolean?
+    fun savePreloadNextEpisode(value: Boolean)
+    fun loadPreferSameServer(): Boolean?
+    fun savePreferSameServer(value: Boolean)
+    fun loadDefaultServerKey(): String?
+    fun saveDefaultServerKey(value: String)
+    fun loadRememberAudioDelay(): Boolean?
+    fun saveRememberAudioDelay(value: Boolean)
+    fun loadAudioDelayMs(): Int?
+    fun saveAudioDelayMs(value: Int)
+    fun loadPersistAudioAmplification(): Boolean?
+    fun savePersistAudioAmplification(value: Boolean)
+    fun loadAudioAmplificationDb(): Float?
+    fun saveAudioAmplificationDb(value: Float)
+    fun loadAudioDownmix(): Boolean?
+    fun saveAudioDownmix(value: Boolean)
+    fun loadAudioChannels(): String?
+    fun saveAudioChannels(value: String)
+    fun loadAudioMaintainVolume(): Boolean?
+    fun saveAudioMaintainVolume(value: Boolean)
+    fun loadAudioCenterMixLevel(): Float?
+    fun saveAudioCenterMixLevel(value: Float)
     fun loadShowLoadingOverlay(): Boolean?
     fun saveShowLoadingOverlay(enabled: Boolean)
     fun loadUseLegacyPlayerLayout(): Boolean?

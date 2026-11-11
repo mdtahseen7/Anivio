@@ -29,6 +29,7 @@ internal fun CoroutineScope.launchPlayerNextEpisodeAutoPlay(
     settings: PlayerSettingsUiState,
     currentStreamBingeGroup: String?,
     currentStreamAddonName: String?,
+    currentServerKey: String? = null,
     onDownloadedEpisodeSelected: (DownloadItem, MetaVideo) -> Unit,
     onEpisodeStreamSelected: (StreamItem, MetaVideo) -> Unit,
     onManualSelectionRequired: (MetaVideo) -> Unit,
@@ -158,6 +159,7 @@ internal fun CoroutineScope.launchPlayerNextEpisodeAutoPlay(
                 debridEnabled = debridSettings.canResolvePlayableLinks,
                 activeResolverProviderId = debridSettings.activeResolverProviderId,
                 preferredAddonName = preferredAddonName,
+                preferredServerKey = if (settings.preferSameServer) currentServerKey ?: settings.defaultServerKey.takeIf { it.isNotBlank() } else null,
             )
 
         fun tryBingeGroupOnly(streams: List<StreamItem>): StreamItem? {
@@ -176,6 +178,7 @@ internal fun CoroutineScope.launchPlayerNextEpisodeAutoPlay(
                 debridEnabled = debridSettings.canResolvePlayableLinks,
                 activeResolverProviderId = debridSettings.activeResolverProviderId,
                 preferredAddonName = preferredAddonName,
+                preferredServerKey = if (settings.preferSameServer) currentServerKey ?: settings.defaultServerKey.takeIf { it.isNotBlank() } else null,
             )
         }
 
@@ -241,11 +244,11 @@ internal fun CoroutineScope.launchPlayerNextEpisodeAutoPlay(
             }
             if (selectedStream != null) {
                 innerJob.cancel()
-            } else if (PlayerStreamsRepository.episodeStreamsState.value.groups.flatMap { it.streams }.isNotEmpty()) {
+            } else if (!PlayerStreamsRepository.episodeStreamsState.value.isAnyLoading && PlayerStreamsRepository.episodeStreamsState.value.groups.flatMap { it.streams }.isNotEmpty()) {
                 innerJob.cancel()
                 finishWithoutSelection()
             } else {
-                val completed = withTimeoutOrNull(timeoutMs) { autoSelectSettled.await() }
+                val completed = withTimeoutOrNull(if (settings.preferSameServer) NEXT_EPISODE_HARD_TIMEOUT_MS else timeoutMs) { autoSelectSettled.await() }
                 innerJob.cancel()
                 if (completed == null && !autoSelectTriggered) {
                     val allStreams = PlayerStreamsRepository.episodeStreamsState.value.groups.flatMap { it.streams }

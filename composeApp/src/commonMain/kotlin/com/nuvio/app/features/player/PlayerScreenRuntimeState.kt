@@ -139,6 +139,7 @@ internal class PlayerScreenRuntime(
     var playerController by mutableStateOf<PlayerEngineController?>(null)
     var playerControllerSourceUrl by mutableStateOf<String?>(null)
     var errorMessage by mutableStateOf<String?>(null)
+    var automaticallySwitchedSource: String? = null
     var showSwitchEngineConfirm by mutableStateOf(false)
     var playbackEngineOverride by mutableStateOf<AndroidPlaybackEngine?>(null)
     var playbackSnapshotKey by mutableStateOf<PlaybackKey?>(null)

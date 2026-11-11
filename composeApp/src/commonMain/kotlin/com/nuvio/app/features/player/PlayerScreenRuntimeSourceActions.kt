@@ -387,6 +387,7 @@ internal fun PlayerScreenRuntime.playNextEpisode() {
         settings = playerSettingsUiState,
         currentStreamBingeGroup = currentStreamBingeGroup,
         currentStreamAddonName = activeProviderName,
+        currentServerKey = com.nuvio.app.features.streams.streamServerKey(activeProviderAddonId, activeStreamTitle),
         onDownloadedEpisodeSelected = { item, episode -> switchToDownloadedEpisode(item, episode) },
         onEpisodeStreamSelected = { stream, episode -> switchToEpisodeStream(stream, episode) },
         onManualSelectionRequired = { nextVideo ->

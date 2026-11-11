@@ -370,6 +370,14 @@ private fun PlaybackSettingsSection(
                     onCheckedChange = PlayerSettingsRepository::setUseLegacyPlayerLayout,
                 )
                 SettingsGroupDivider(isTablet = isTablet)
+                SettingsSwitchRow(title = "Switch engine on error", description = "Try the other playback engine once if playback fails.", checked = autoPlayPlayerSettings.autoSwitchPlaybackEngineOnError, isTablet = isTablet, onCheckedChange = PlayerSettingsRepository::setAutoSwitchPlaybackEngineOnError)
+                SettingsGroupDivider(isTablet = isTablet)
+                SettingsSwitchRow(title = "Detailed loading status", description = "Show engine, server and buffer while opening media.", checked = autoPlayPlayerSettings.showDetailedLoadingStatus, isTablet = isTablet, onCheckedChange = PlayerSettingsRepository::setShowDetailedLoadingStatus)
+                SettingsGroupDivider(isTablet = isTablet)
+                SettingsSwitchRow(title = "Pause overlay", description = "Show episode information while playback is paused.", checked = autoPlayPlayerSettings.showPauseOverlay, isTablet = isTablet, onCheckedChange = PlayerSettingsRepository::setShowPauseOverlay)
+                SettingsGroupDivider(isTablet = isTablet)
+                SettingsSwitchRow(title = "Chapter markers", description = "Read embedded chapters in ExoPlayer and show a chapter picker.", checked = autoPlayPlayerSettings.exoChaptersEnabled, isTablet = isTablet, onCheckedChange = PlayerSettingsRepository::setExoChaptersEnabled)
+                SettingsGroupDivider(isTablet = isTablet)
                 SettingsSwitchRow(
                     title = stringResource(Res.string.settings_playback_title_at_top),
                     description = stringResource(Res.string.settings_playback_title_at_top_description),
@@ -468,6 +476,7 @@ private fun PlaybackSettingsSection(
             }
         }
 
+        if (activePage == SettingsPage.PlaybackLanguages) AudioPlaybackSettings(isTablet, autoPlayPlayerSettings)
         if (activePage == SettingsPage.PlaybackLanguages) SettingsSection(
             title = stringResource(Res.string.settings_playback_section_subtitle_audio),
             isTablet = isTablet,
@@ -1178,6 +1187,13 @@ private fun PlaybackSettingsSection(
             isTablet = isTablet,
         ) {
             SettingsGroup(isTablet = isTablet) {
+                SettingsSwitchRow(title = "Preload next episode sources", description = "Fetch sources before the current episode ends, using the autoplay server preference.", checked = autoPlayPlayerSettings.preloadNextEpisode, isTablet = isTablet, onCheckedChange = PlayerSettingsRepository::setPreloadNextEpisode)
+                SettingsGroupDivider(isTablet = isTablet)
+                SettingsSwitchRow(title = "Make current server default", description = "Remember the server you play. If unavailable, open source selection instead of switching servers.", checked = autoPlayPlayerSettings.preferSameServer, isTablet = isTablet, onCheckedChange = PlayerSettingsRepository::setPreferSameServer)
+                if (autoPlayPlayerSettings.defaultServerKey.isNotBlank()) {
+                    SettingsNavigationRow(title = "Clear default server", description = autoPlayPlayerSettings.defaultServerKey.substringAfter("|"), isTablet = isTablet, onClick = { PlayerSettingsRepository.setDefaultServerKey("") })
+                }
+                SettingsGroupDivider(isTablet = isTablet)
                 SettingsSwitchRow(
                     title = stringResource(Res.string.settings_playback_auto_play_next_episode),
                     description = stringResource(Res.string.settings_playback_auto_play_next_episode_description),
@@ -3788,7 +3804,17 @@ internal fun LazyListScope.playbackSettingsHubContent(
                 if (index > 0) SettingsGroupDivider(isTablet = isTablet)
                 SettingsNavigationRow(
                     title = stringResource(target.titleRes),
-                    description = null,
+                    description = stringResource(when (target) {
+                        SettingsPage.PlaybackPlayer -> Res.string.settings_playback_page_player_description
+                        SettingsPage.PlaybackStreams -> Res.string.settings_playback_page_stream_selection_description
+                        SettingsPage.PlaybackAutoPlay -> Res.string.settings_playback_page_stream_selection_description
+                        SettingsPage.PlaybackUpNext -> Res.string.settings_playback_page_up_next_description
+                        SettingsPage.PlaybackSkip -> Res.string.settings_playback_page_skip_description
+                        SettingsPage.PlaybackLanguages -> Res.string.settings_playback_page_audio_description
+                        SettingsPage.PlaybackSubtitles -> Res.string.settings_playback_page_subtitles_description
+                        SettingsPage.PlaybackVideo -> Res.string.settings_playback_page_video_description
+                        else -> Res.string.settings_playback_page_p2p_description
+                    }),
                     isTablet = isTablet,
                     onClick = { onPageClick(target) },
                 )

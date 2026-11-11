@@ -771,6 +771,7 @@ private fun MobileSettingsScreen(
                         aboutContent(isTablet = false)
                     }
                 }
+                SettingsPage.SupportersContributors -> communityContent(isTablet = false)
                 SettingsPage.PrivacyPolicy -> privacyPolicyContent(
                     isTablet = false,
                 )
@@ -1227,6 +1228,7 @@ private fun TabletSettingsScreen(
                             aboutContent(isTablet = true)
                         }
                     }
+                    SettingsPage.SupportersContributors -> communityContent(isTablet = true)
                     SettingsPage.PrivacyPolicy -> privacyPolicyContent(
                         isTablet = true,
                     )

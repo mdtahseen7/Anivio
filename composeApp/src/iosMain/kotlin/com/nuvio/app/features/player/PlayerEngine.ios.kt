@@ -126,6 +126,11 @@ actual fun PlatformPlayerSurface(
             override fun configureIosVideoOutput(settings: PlayerSettingsUiState) {
                 bridge.applyIosVideoOutputSettings(settings)
             }
+            override fun configureAudio(settings: PlayerSettingsUiState) {
+                bridge.configureAudioProcessing(settings.audioDelayMs, settings.audioAmplificationDb,
+                    if (settings.audioDownmix) settings.audioChannels.let { if (it == "auto") "stereo" else it } else "auto",
+                    !settings.audioMaintainVolume, settings.audioCenterMixLevel)
+            }
 
             override fun setPlaybackSpeed(speed: Float) {
                 bridge.setPlaybackSpeed(speed)

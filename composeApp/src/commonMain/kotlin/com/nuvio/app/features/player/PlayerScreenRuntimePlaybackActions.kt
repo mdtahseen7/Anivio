@@ -35,7 +35,10 @@ internal val AndroidPlaybackEngine.switchTarget: AndroidPlaybackEngine
     get() = if (this == AndroidPlaybackEngine.Libmpv) AndroidPlaybackEngine.ExoPlayer else AndroidPlaybackEngine.Libmpv
 
 internal fun PlayerScreenRuntime.switchPlaybackEngine() {
-    val target = playerController?.playbackEngine?.switchTarget ?: return
+    val currentEngine = playerController?.playbackEngine ?: playbackEngineOverride
+        ?: playerSettingsUiState.androidPlaybackEngine.takeIf { it != AndroidPlaybackEngine.Auto }
+        ?: AndroidPlaybackEngine.ExoPlayer
+    val target = currentEngine.switchTarget
     flushWatchProgress()
     activeInitialPositionMs = playbackSnapshot.positionMs.coerceAtLeast(0L)
     activeInitialProgressFraction = null

@@ -42,6 +42,7 @@ interface NuvioPlayerBridge {
         gamma: Int,
     )
     fun configureAudioOutput(audioOutput: String)
+    fun configureAudioProcessing(delayMs: Int, gainDb: Float, channels: String, normalize: Boolean, centerLevel: Float)
     fun setPlaybackSpeed(speed: Float)
     fun setMuted(muted: Boolean)
     fun setResizeMode(mode: Int) // 0=Fit, 1=Fill, 2=Zoom

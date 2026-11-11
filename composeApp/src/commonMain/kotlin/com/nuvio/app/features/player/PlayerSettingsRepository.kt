@@ -32,6 +32,21 @@ fun snapToAllowedTimeout(value: Int): Int {
 }
 
 data class PlayerSettingsUiState(
+    val autoSwitchPlaybackEngineOnError: Boolean = false,
+    val showDetailedLoadingStatus: Boolean = false,
+    val showPauseOverlay: Boolean = true,
+    val exoChaptersEnabled: Boolean = true,
+    val preloadNextEpisode: Boolean = true,
+    val preferSameServer: Boolean = true,
+    val defaultServerKey: String = "",
+    val rememberAudioDelay: Boolean = false,
+    val audioDelayMs: Int = 0,
+    val persistAudioAmplification: Boolean = false,
+    val audioAmplificationDb: Float = 0f,
+    val audioDownmix: Boolean = false,
+    val audioChannels: String = "auto",
+    val audioMaintainVolume: Boolean = true,
+    val audioCenterMixLevel: Float = 0.707f,
     val showLoadingOverlay: Boolean = true,
     val useLegacyPlayerLayout: Boolean = false,
     val playerTitleAtTop: Boolean = false,
@@ -98,10 +113,32 @@ data class PlayerSettingsUiState(
 )
 
 object PlayerSettingsRepository {
+    private var activeAudioDevice: String? = null
+    fun setActiveAudioDevice(key: String?) {
+        ensureLoaded()
+        activeAudioDevice = key
+        audioDelayMs = if (rememberAudioDelay && key != null) PlayerSettingsStorage.loadAudioDelayForDevice(key) ?: 0 else 0
+        publish()
+    }
     private val _uiState = MutableStateFlow(PlayerSettingsUiState())
     val uiState: StateFlow<PlayerSettingsUiState> = _uiState.asStateFlow()
 
     private var hasLoaded = false
+    private var autoSwitchPlaybackEngineOnError: Boolean = false
+    private var showDetailedLoadingStatus: Boolean = false
+    private var showPauseOverlay: Boolean = true
+    private var exoChaptersEnabled: Boolean = true
+    private var preloadNextEpisode: Boolean = true
+    private var preferSameServer: Boolean = true
+    private var defaultServerKey: String = ""
+    private var rememberAudioDelay: Boolean = false
+    private var audioDelayMs: Int = 0
+    private var persistAudioAmplification: Boolean = false
+    private var audioAmplificationDb: Float = 0f
+    private var audioDownmix: Boolean = false
+    private var audioChannels: String = "auto"
+    private var audioMaintainVolume: Boolean = true
+    private var audioCenterMixLevel: Float = 0.707f
     private var showLoadingOverlay = true
     private var useLegacyPlayerLayout = false
     private var playerTitleAtTop = false
@@ -177,6 +214,21 @@ object PlayerSettingsRepository {
 
     fun clearLocalState() {
         hasLoaded = false
+        autoSwitchPlaybackEngineOnError = false
+        showDetailedLoadingStatus = false
+        showPauseOverlay = true
+        exoChaptersEnabled = true
+        preloadNextEpisode = true
+        preferSameServer = true
+        defaultServerKey = ""
+        rememberAudioDelay = false
+        audioDelayMs = 0
+        persistAudioAmplification = false
+        audioAmplificationDb = 0f
+        audioDownmix = false
+        audioChannels = "auto"
+        audioMaintainVolume = true
+        audioCenterMixLevel = 0.707f
         showLoadingOverlay = true
         useLegacyPlayerLayout = false
         playerTitleAtTop = false
@@ -245,6 +297,22 @@ object PlayerSettingsRepository {
 
     private fun loadFromDisk() {
         hasLoaded = true
+        autoSwitchPlaybackEngineOnError = PlayerSettingsStorage.loadAutoSwitchPlaybackEngineOnError() ?: false
+        showDetailedLoadingStatus = PlayerSettingsStorage.loadShowDetailedLoadingStatus() ?: false
+        showPauseOverlay = PlayerSettingsStorage.loadShowPauseOverlay() ?: true
+        exoChaptersEnabled = PlayerSettingsStorage.loadExoChaptersEnabled() ?: true
+        preloadNextEpisode = PlayerSettingsStorage.loadPreloadNextEpisode() ?: true
+        preferSameServer = PlayerSettingsStorage.loadPreferSameServer() ?: true
+        defaultServerKey = PlayerSettingsStorage.loadDefaultServerKey() ?: ""
+        rememberAudioDelay = PlayerSettingsStorage.loadRememberAudioDelay() ?: false
+        activeAudioDevice = null
+        audioDelayMs = 0
+        persistAudioAmplification = PlayerSettingsStorage.loadPersistAudioAmplification() ?: false
+        audioAmplificationDb = if (persistAudioAmplification) (PlayerSettingsStorage.loadAudioAmplificationDb() ?: 0f).let { if (it.isFinite()) it.coerceIn(0f, 20f) else 0f } else 0f
+        audioDownmix = PlayerSettingsStorage.loadAudioDownmix() ?: false
+        audioChannels = PlayerSettingsStorage.loadAudioChannels() ?: "auto"
+        audioMaintainVolume = PlayerSettingsStorage.loadAudioMaintainVolume() ?: true
+        audioCenterMixLevel = (PlayerSettingsStorage.loadAudioCenterMixLevel() ?: 0.707f).let { if (it.isFinite()) it.coerceIn(0f, 1.5f) else 0.707f }
         showLoadingOverlay = PlayerSettingsStorage.loadShowLoadingOverlay() ?: true
         useLegacyPlayerLayout = PlayerSettingsStorage.loadUseLegacyPlayerLayout() ?: false
         playerTitleAtTop = PlayerSettingsStorage.loadPlayerTitleAtTop() ?: false
@@ -964,8 +1032,129 @@ object PlayerSettingsRepository {
         PlayerSettingsStorage.saveIosHdrComputePeakEnabled(iosHdrComputePeakEnabled)
     }
 
+    fun setAutoSwitchPlaybackEngineOnError(value: Boolean) {
+        ensureLoaded()
+        autoSwitchPlaybackEngineOnError = value
+        PlayerSettingsStorage.saveAutoSwitchPlaybackEngineOnError(value)
+        publish()
+    }
+
+    fun setShowDetailedLoadingStatus(value: Boolean) {
+        ensureLoaded()
+        showDetailedLoadingStatus = value
+        PlayerSettingsStorage.saveShowDetailedLoadingStatus(value)
+        publish()
+    }
+
+    fun setShowPauseOverlay(value: Boolean) {
+        ensureLoaded()
+        showPauseOverlay = value
+        PlayerSettingsStorage.saveShowPauseOverlay(value)
+        publish()
+    }
+
+    fun setExoChaptersEnabled(value: Boolean) {
+        ensureLoaded()
+        exoChaptersEnabled = value
+        PlayerSettingsStorage.saveExoChaptersEnabled(value)
+        publish()
+    }
+
+    fun setPreloadNextEpisode(value: Boolean) {
+        ensureLoaded()
+        preloadNextEpisode = value
+        PlayerSettingsStorage.savePreloadNextEpisode(value)
+        publish()
+    }
+
+    fun setPreferSameServer(value: Boolean) {
+        ensureLoaded()
+        preferSameServer = value
+        PlayerSettingsStorage.savePreferSameServer(value)
+        publish()
+    }
+
+    fun setDefaultServerKey(value: String) {
+        ensureLoaded()
+        defaultServerKey = value
+        PlayerSettingsStorage.saveDefaultServerKey(value)
+        publish()
+    }
+
+    fun setRememberAudioDelay(value: Boolean) {
+        ensureLoaded()
+        rememberAudioDelay = value
+        PlayerSettingsStorage.saveRememberAudioDelay(value)
+        publish()
+    }
+
+    fun setAudioDelayMs(value: Int) {
+        ensureLoaded()
+        audioDelayMs = value.coerceIn(-2000, 2000)
+        if (rememberAudioDelay) activeAudioDevice?.let { PlayerSettingsStorage.saveAudioDelayForDevice(it, audioDelayMs) }
+        publish()
+    }
+
+    fun setPersistAudioAmplification(value: Boolean) {
+        ensureLoaded()
+        persistAudioAmplification = value
+        PlayerSettingsStorage.savePersistAudioAmplification(value)
+        PlayerSettingsStorage.saveAudioAmplificationDb(if (value) audioAmplificationDb else 0f)
+        publish()
+    }
+
+    fun setAudioAmplificationDb(value: Float) {
+        ensureLoaded()
+        audioAmplificationDb = if (value.isFinite()) value.coerceIn(0f, 20f) else 0f
+        if (persistAudioAmplification) PlayerSettingsStorage.saveAudioAmplificationDb(audioAmplificationDb)
+        publish()
+    }
+
+    fun setAudioDownmix(value: Boolean) {
+        ensureLoaded()
+        audioDownmix = value
+        PlayerSettingsStorage.saveAudioDownmix(value)
+        publish()
+    }
+
+    fun setAudioChannels(value: String) {
+        ensureLoaded()
+        audioChannels = value.takeIf { it in setOf("auto", "mono", "stereo", "5.1", "7.1") } ?: "auto"
+        PlayerSettingsStorage.saveAudioChannels(audioChannels)
+        publish()
+    }
+
+    fun setAudioMaintainVolume(value: Boolean) {
+        ensureLoaded()
+        audioMaintainVolume = value
+        PlayerSettingsStorage.saveAudioMaintainVolume(value)
+        publish()
+    }
+
+    fun setAudioCenterMixLevel(value: Float) {
+        ensureLoaded()
+        audioCenterMixLevel = if (value.isFinite()) value.coerceIn(0f, 1.5f) else 0.707f
+        PlayerSettingsStorage.saveAudioCenterMixLevel(audioCenterMixLevel)
+        publish()
+    }
+
     private fun publish() {
         _uiState.value = PlayerSettingsUiState(
+            autoSwitchPlaybackEngineOnError = autoSwitchPlaybackEngineOnError,
+            showDetailedLoadingStatus = showDetailedLoadingStatus,
+            showPauseOverlay = showPauseOverlay,
+            exoChaptersEnabled = exoChaptersEnabled,
+            preloadNextEpisode = preloadNextEpisode,
+            preferSameServer = preferSameServer,
+            defaultServerKey = defaultServerKey,
+            rememberAudioDelay = rememberAudioDelay,
+            audioDelayMs = audioDelayMs,
+            persistAudioAmplification = persistAudioAmplification,
+            audioAmplificationDb = audioAmplificationDb,
+            audioDownmix = audioDownmix,
+            audioChannels = audioChannels,
+            audioMaintainVolume = audioMaintainVolume,
+            audioCenterMixLevel = audioCenterMixLevel,
             showLoadingOverlay = showLoadingOverlay,
             useLegacyPlayerLayout = useLegacyPlayerLayout,
             playerTitleAtTop = playerTitleAtTop,

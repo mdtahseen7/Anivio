@@ -101,6 +101,9 @@ final class MPVPlayerBridgeImpl: NSObject, NuvioPlayerBridge {
     func configureAudioOutput(audioOutput: String) {
         playerVC?.configureAudioOutput(audioOutput: audioOutput)
     }
+    func configureAudioProcessing(delayMs: Int32, gainDb: Float, channels: String, normalize: Bool, centerLevel: Float) {
+        playerVC?.configureAudioProcessing(delayMs: Int(delayMs), gainDb: gainDb, channels: channels, normalize: normalize, centerLevel: centerLevel)
+    }
     func setPlaybackSpeed(speed: Float) { playerVC?.setSpeed(speed) }
     func setMuted(muted: Bool) { playerVC?.setMuted(muted) }
     func setResizeMode(mode: Int32) { playerVC?.setResize(Int(mode)) }
@@ -792,6 +795,14 @@ final class MPVPlayerViewController: UIViewController {
         } else {
             setStringProperty("sid", "no")
         }
+    }
+
+    func configureAudioProcessing(delayMs: Int, gainDb: Float, channels: String, normalize: Bool, centerLevel: Float) {
+        setStringProperty("audio-delay", String(Double(max(-2000, min(2000, delayMs))) / 1000))
+        setStringProperty("volume", String(100 * pow(10.0, Double(max(0, min(20, gainDb))) / 20)))
+        setStringProperty("audio-channels", channels)
+        setStringProperty("audio-normalize-downmix", normalize ? "yes" : "no")
+        setStringProperty("audio-mix-center-level", String(max(0, min(1.5, centerLevel))))
     }
 
     func setSubtitleDelayMs(_ delayMs: Int) {

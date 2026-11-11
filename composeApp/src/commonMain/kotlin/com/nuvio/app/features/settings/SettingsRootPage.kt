@@ -112,6 +112,46 @@ internal fun LazyListScope.settingsRootContent(
     showAdvancedSection: Boolean = true,
     showAboutPage: Boolean = true,
 ) {
+    if (sectionPage == SettingsPage.Root) {
+        val groups = buildList {
+            if (showAccountSection) add(SettingsPage.YourSpace)
+            if (showGeneralSection) addAll(listOf(SettingsPage.Personalize, SettingsPage.WatchSettings, SettingsPage.Services, SettingsPage.Anivio))
+            if (showAdvancedSection) add(SettingsPage.SystemSettings)
+            if (showAboutSection) add(SettingsPage.AboutSettings)
+        }
+        groups.forEach { group ->
+            settingsRootContent(
+                isTablet = isTablet,
+                sectionPage = group,
+                onSectionClick = onSectionClick,
+                onPlaybackClick = onPlaybackClick,
+                onReaderClick = onReaderClick,
+                onAppearanceClick = onAppearanceClick,
+                onAdvancedClick = onAdvancedClick,
+                onNotificationsClick = onNotificationsClick,
+                incognitoModeEnabled = incognitoModeEnabled,
+                onIncognitoModeChanged = onIncognitoModeChanged,
+                onContentDiscoveryClick = onContentDiscoveryClick,
+                onIntegrationsClick = onIntegrationsClick,
+                onTrackingClick = onTrackingClick,
+                onAboutClick = onAboutClick,
+                onPrivacyPolicyClick = onPrivacyPolicyClick,
+                onLicensesAttributionsClick = onLicensesAttributionsClick,
+                onCheckForUpdatesClick = onCheckForUpdatesClick,
+                onTestUpdateBannerClick = onTestUpdateBannerClick,
+                onDownloadsClick = onDownloadsClick,
+                onAccountClick = onAccountClick,
+                onSwitchProfileClick = onSwitchProfileClick,
+                onWatchPartyClick = onWatchPartyClick,
+                showAccountSection = showAccountSection,
+                showGeneralSection = showGeneralSection,
+                showAboutSection = showAboutSection,
+                showAdvancedSection = showAdvancedSection,
+                showAboutPage = showAboutPage,
+            )
+        }
+        return
+    }
     val rows = mutableListOf<SettingsHubRow>()
     fun row(title: StringResource, description: StringResource, icon: ImageVector, action: () -> Unit) {
         rows += SettingsHubRow(title, description, icon, action)
@@ -134,6 +174,7 @@ internal fun LazyListScope.settingsRootContent(
         SettingsPage.YourSpace -> {
             row(Res.string.compose_settings_page_account, Res.string.compose_settings_root_account_description, Icons.Rounded.AccountCircle, onAccountClick)
             onSwitchProfileClick?.let { row(Res.string.compose_settings_root_switch_profile_title, Res.string.compose_settings_root_switch_profile_description, Icons.Rounded.People, it) }
+            onWatchPartyClick?.let { row(Res.string.party_title, Res.string.party_settings_description, Icons.Rounded.Groups, it) }
         }
         SettingsPage.Personalize -> {
             row(Res.string.compose_settings_page_appearance, Res.string.compose_settings_root_appearance_description, Icons.Rounded.Palette, onAppearanceClick)
@@ -152,13 +193,13 @@ internal fun LazyListScope.settingsRootContent(
             page(SettingsPage.ProfileSharing, Res.string.settings_profile_sharing_description, Icons.Rounded.People)
             row(Res.string.compose_settings_page_reader, Res.string.compose_settings_root_reader_description, Icons.Rounded.MenuBook, onReaderClick)
             row(Res.string.compose_settings_root_downloads_title, Res.string.compose_settings_root_downloads_description, Icons.Rounded.CloudDownload, onDownloadsClick)
-            onWatchPartyClick?.let { row(Res.string.party_title, Res.string.party_settings_description, Icons.Rounded.Groups, it) }
         }
         SettingsPage.SystemSettings -> {
             row(Res.string.compose_settings_page_notifications, Res.string.compose_settings_root_notifications_description, Icons.Rounded.Notifications, onNotificationsClick)
             row(Res.string.compose_settings_page_advanced, Res.string.compose_settings_root_advanced_description, Icons.Rounded.Tune, onAdvancedClick)
         }
         SettingsPage.AboutSettings -> {
+            page(SettingsPage.SupportersContributors, Res.string.settings_community_description, Icons.Rounded.People)
             if (showAboutPage) row(Res.string.compose_settings_page_about, Res.string.about_page_subtitle, Icons.Rounded.Info, onAboutClick)
             row(Res.string.compose_settings_page_privacy_policy, Res.string.compose_settings_root_privacy_policy_description, Icons.Rounded.Policy, onPrivacyPolicyClick)
             row(Res.string.compose_settings_page_licenses_attributions, Res.string.about_licenses_attributions_subtitle, Icons.Rounded.Info, onLicensesAttributionsClick)
@@ -180,6 +221,9 @@ internal fun LazyListScope.settingsRootContent(
                 )
             }
         }
+    }
+    if (sectionPage == SettingsPage.AboutSettings && com.nuvio.app.features.updater.AppUpdaterPlatform.isSupported) {
+        item { SettingsGroup(isTablet = isTablet) { UpdateChannelSettingsRow(isTablet) } }
     }
     if (sectionPage == SettingsPage.SystemSettings) {
         item {

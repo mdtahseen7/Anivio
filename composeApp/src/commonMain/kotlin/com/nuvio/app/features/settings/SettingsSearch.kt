@@ -979,6 +979,18 @@ internal fun settingsSearchEntries(
         )
     }
 
+    listOf(
+        Triple("Audio processing", "Audio delay amplification downmix output channels center mix", SettingsPage.PlaybackLanguages),
+        Triple("Player interface", "Switch engine on error detailed loading status pause overlay chapter markers", SettingsPage.PlaybackPlayer),
+        Triple("Preload next episode", "Make current server default same server autoplay", SettingsPage.PlaybackUpNext),
+        Triple("Recent searches", "Enable disable search history privacy", SettingsPage.ContentDiscovery),
+        Triple("Supporters & Contributors", "Community credits GitHub Nuvio", SettingsPage.SupportersContributors),
+        Triple("Update channel", "Stable beta preview releases", SettingsPage.AboutSettings),
+    ).forEach { (title, description, page) ->
+        if (title != "Update channel" || checkForUpdatesAvailable) {
+            addPage(page, "new-${page.name}", title, description, icon = Icons.Rounded.Tune)
+        }
+    }
     return entries
 }
 

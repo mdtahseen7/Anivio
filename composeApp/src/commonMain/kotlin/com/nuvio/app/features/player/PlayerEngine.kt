@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 
 interface PlayerEngineController {
+    fun configureAudio(settings: PlayerSettingsUiState) {}
     val playbackEngine: AndroidPlaybackEngine? get() = null
     fun play()
     fun pause()
@@ -34,6 +35,9 @@ interface PlayerEngineController {
     fun clearNowPlayingInfo() {}
     suspend fun getMediaInfo(): PlayerMediaInfo = PlayerMediaInfo()
 }
+
+@Composable
+internal expect fun rememberAudioOutputKey(enabled: Boolean): String?
 
 internal fun sanitizePlaybackHeaders(headers: Map<String, String>?): Map<String, String> {
     val rawHeaders = headers ?: return emptyMap()

@@ -33,6 +33,28 @@ import org.jetbrains.compose.resources.getString
 
 @Composable
 internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
+    val audioOutputKey = rememberAudioOutputKey(playerSettingsUiState.rememberAudioDelay)
+    LaunchedEffect(audioOutputKey, playerSettingsUiState.rememberAudioDelay) { PlayerSettingsRepository.setActiveAudioDevice(audioOutputKey) }
+    LaunchedEffect(Unit) {
+        if (!playerSettingsUiState.persistAudioAmplification) PlayerSettingsRepository.setAudioAmplificationDb(0f)
+    }
+    LaunchedEffect(playerController, playerSettingsUiState) { playerController?.configureAudio(playerSettingsUiState) }
+    LaunchedEffect(activeProviderAddonId, activeStreamTitle, playerSettingsUiState.preferSameServer) {
+        if (playerSettingsUiState.preferSameServer && !activeProviderAddonId.isNullOrBlank() && !activeStreamTitle.isNullOrBlank()) {
+            PlayerSettingsRepository.setDefaultServerKey(
+                com.nuvio.app.features.streams.streamServerKey(activeProviderAddonId, activeStreamTitle)
+            )
+        }
+    }
+    LaunchedEffect(nextEpisodeInfo?.videoId, playerSettingsUiState.preloadNextEpisode) {
+        val next = nextEpisodeInfo
+        if (playerSettingsUiState.preloadNextEpisode && next?.hasAired == true) {
+            PlayerStreamsRepository.loadEpisodeStreams(
+                type = contentType ?: parentMetaType, videoId = next.videoId,
+                season = next.season, episode = next.episode,
+            )
+        }
+    }
     val currentFeedback = liveGestureFeedback ?: gestureFeedback
     LaunchedEffect(currentFeedback) {
         if (currentFeedback != null) {

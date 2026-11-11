@@ -2,6 +2,11 @@ package com.nuvio.app.features.streams
 
 import com.nuvio.app.core.build.AppFeaturePolicy
 
+internal fun streamServerKey(addonId: String?, label: String?): String =
+    listOf(addonId.orEmpty().trim().lowercase(), label.orEmpty().trim().lowercase()).joinToString("|")
+
+internal fun StreamItem.serverPreferenceKey(): String = streamServerKey(addonId, streamLabel)
+
 object StreamAutoPlaySelector {
 
     fun orderAddonStreams(
@@ -46,6 +51,9 @@ object StreamAutoPlaySelector {
         debridEnabled: Boolean = true,
         activeResolverProviderId: String? = null,
         preferredAddonName: String? = null,
+        preferredServerKey: String? = com.nuvio.app.features.player.PlayerSettingsRepository.uiState.value.let {
+            if (it.preferSameServer) it.defaultServerKey.takeIf(String::isNotBlank) else null
+        },
     ): StreamItem? =
         evaluateAutoPlayStream(
             streams = streams,
@@ -61,6 +69,7 @@ object StreamAutoPlaySelector {
             debridEnabled = debridEnabled,
             activeResolverProviderId = activeResolverProviderId,
             preferredAddonName = preferredAddonName,
+            preferredServerKey = preferredServerKey,
         ).stream
 
     fun evaluateAutoPlayStream(
@@ -77,6 +86,9 @@ object StreamAutoPlaySelector {
         debridEnabled: Boolean = true,
         activeResolverProviderId: String? = null,
         preferredAddonName: String? = null,
+        preferredServerKey: String? = com.nuvio.app.features.player.PlayerSettingsRepository.uiState.value.let {
+            if (it.preferSameServer) it.defaultServerKey.takeIf(String::isNotBlank) else null
+        },
     ): StreamAutoPlayEvaluation {
         if (streams.isEmpty()) return StreamAutoPlayEvaluation()
 
@@ -85,7 +97,10 @@ object StreamAutoPlaySelector {
             StreamAutoPlaySource.INSTALLED_ADDONS_ONLY -> streams.filter { it.addonName in installedAddonNames }
             StreamAutoPlaySource.ENABLED_PLUGINS_ONLY -> streams.filter { it.addonName !in installedAddonNames }
         }
-        val candidateStreams = sourceScopedStreams.filter { stream ->
+        val serverScopedStreams = preferredServerKey?.takeIf { it.isNotBlank() }?.let { key ->
+            sourceScopedStreams.filter { it.serverPreferenceKey() == key }
+        } ?: sourceScopedStreams
+        val candidateStreams = serverScopedStreams.filter { stream ->
             val isAddonStream = stream.addonName in installedAddonNames
             if (isAddonStream) {
                 selectedAddons.isEmpty() || stream.addonName in selectedAddons

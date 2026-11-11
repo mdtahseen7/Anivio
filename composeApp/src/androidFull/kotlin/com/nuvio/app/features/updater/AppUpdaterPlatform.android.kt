@@ -7,6 +7,9 @@ actual object AppUpdaterPlatform {
 
     actual fun getSupportedAbis(): List<String> = AndroidAppUpdaterPlatform.getSupportedAbis()
 
+    actual fun getUpdateChannel(): String? = AndroidAppUpdaterPlatform.getUpdateChannel()
+    actual fun setUpdateChannel(channel: String) = AndroidAppUpdaterPlatform.setUpdateChannel(channel)
+
     actual fun getIgnoredTag(): String? = AndroidAppUpdaterPlatform.getIgnoredTag()
 
     actual fun setIgnoredTag(tag: String?) {

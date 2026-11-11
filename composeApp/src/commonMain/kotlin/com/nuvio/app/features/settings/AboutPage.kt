@@ -127,7 +127,7 @@ private fun CreatorSpotlight(owner: DiscordUser?) {
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text(
-                text = "CREATOR SPOTLIGHT",
+                text = "Creator spotlight",
                 style = MaterialTheme.typography.labelMedium,
                 color = colors.primary,
                 fontWeight = FontWeight.Bold,

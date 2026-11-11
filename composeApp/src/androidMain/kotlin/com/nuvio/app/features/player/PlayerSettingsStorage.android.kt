@@ -18,7 +18,27 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 actual object PlayerSettingsStorage {
+    actual fun loadAudioDelayForDevice(key: String): Int? = preferences?.let {
+        val scoped = ProfileScopedKey.of("audio_device_delay:$key")
+        if (it.contains(scoped)) it.getInt(scoped, 0) else null
+    }
+    actual fun saveAudioDelayForDevice(key: String, value: Int) { preferences?.edit()?.putInt(ProfileScopedKey.of("audio_device_delay:$key"), value)?.apply() }
     private const val preferencesName = "nuvio_player_settings"
+    private const val autoSwitchPlaybackEngineOnErrorKey = "auto_switch_playback_engine_on_error"
+    private const val showDetailedLoadingStatusKey = "show_detailed_loading_status"
+    private const val showPauseOverlayKey = "show_pause_overlay"
+    private const val exoChaptersEnabledKey = "exo_chapters_enabled"
+    private const val preloadNextEpisodeKey = "preload_next_episode"
+    private const val preferSameServerKey = "prefer_same_server"
+    private const val defaultServerKeyKey = "default_server_key"
+    private const val rememberAudioDelayKey = "remember_audio_delay"
+    private const val audioDelayMsKey = "audio_delay_ms"
+    private const val persistAudioAmplificationKey = "persist_audio_amplification"
+    private const val audioAmplificationDbKey = "audio_amplification_db"
+    private const val audioDownmixKey = "audio_downmix"
+    private const val audioChannelsKey = "audio_channels"
+    private const val audioMaintainVolumeKey = "audio_maintain_volume"
+    private const val audioCenterMixLevelKey = "audio_center_mix_level"
     private const val showLoadingOverlayKey = "show_loading_overlay"
     private const val useLegacyPlayerLayoutKey = "use_legacy_player_layout"
     private const val playerTitleAtTopKey = "player_title_at_top"
@@ -95,6 +115,21 @@ actual object PlayerSettingsStorage {
     private const val iosSaturationKey = "ios_saturation"
     private const val iosGammaKey = "ios_gamma"
     private val syncKeys = listOf(
+        autoSwitchPlaybackEngineOnErrorKey,
+        showDetailedLoadingStatusKey,
+        showPauseOverlayKey,
+        exoChaptersEnabledKey,
+        preloadNextEpisodeKey,
+        preferSameServerKey,
+        defaultServerKeyKey,
+        rememberAudioDelayKey,
+        audioDelayMsKey,
+        persistAudioAmplificationKey,
+        audioAmplificationDbKey,
+        audioDownmixKey,
+        audioChannelsKey,
+        audioMaintainVolumeKey,
+        audioCenterMixLevelKey,
         showLoadingOverlayKey,
         showParentalGuideKey,
         resizeModeKey,
@@ -170,6 +205,126 @@ actual object PlayerSettingsStorage {
 
     fun initialize(context: Context) {
         preferences = context.getSharedPreferences(preferencesName, Context.MODE_PRIVATE)
+    }
+
+    actual fun loadAutoSwitchPlaybackEngineOnError(): Boolean? = preferences?.let { prefs ->
+        val key = ProfileScopedKey.of(autoSwitchPlaybackEngineOnErrorKey)
+        if (prefs.contains(key)) prefs.getBoolean(key, false) else null
+    }
+    actual fun saveAutoSwitchPlaybackEngineOnError(value: Boolean) {
+        preferences?.edit()?.putBoolean(ProfileScopedKey.of(autoSwitchPlaybackEngineOnErrorKey), value)?.apply()
+    }
+
+    actual fun loadShowDetailedLoadingStatus(): Boolean? = preferences?.let { prefs ->
+        val key = ProfileScopedKey.of(showDetailedLoadingStatusKey)
+        if (prefs.contains(key)) prefs.getBoolean(key, false) else null
+    }
+    actual fun saveShowDetailedLoadingStatus(value: Boolean) {
+        preferences?.edit()?.putBoolean(ProfileScopedKey.of(showDetailedLoadingStatusKey), value)?.apply()
+    }
+
+    actual fun loadShowPauseOverlay(): Boolean? = preferences?.let { prefs ->
+        val key = ProfileScopedKey.of(showPauseOverlayKey)
+        if (prefs.contains(key)) prefs.getBoolean(key, true) else null
+    }
+    actual fun saveShowPauseOverlay(value: Boolean) {
+        preferences?.edit()?.putBoolean(ProfileScopedKey.of(showPauseOverlayKey), value)?.apply()
+    }
+
+    actual fun loadExoChaptersEnabled(): Boolean? = preferences?.let { prefs ->
+        val key = ProfileScopedKey.of(exoChaptersEnabledKey)
+        if (prefs.contains(key)) prefs.getBoolean(key, true) else null
+    }
+    actual fun saveExoChaptersEnabled(value: Boolean) {
+        preferences?.edit()?.putBoolean(ProfileScopedKey.of(exoChaptersEnabledKey), value)?.apply()
+    }
+
+    actual fun loadPreloadNextEpisode(): Boolean? = preferences?.let { prefs ->
+        val key = ProfileScopedKey.of(preloadNextEpisodeKey)
+        if (prefs.contains(key)) prefs.getBoolean(key, true) else null
+    }
+    actual fun savePreloadNextEpisode(value: Boolean) {
+        preferences?.edit()?.putBoolean(ProfileScopedKey.of(preloadNextEpisodeKey), value)?.apply()
+    }
+
+    actual fun loadPreferSameServer(): Boolean? = preferences?.let { prefs ->
+        val key = ProfileScopedKey.of(preferSameServerKey)
+        if (prefs.contains(key)) prefs.getBoolean(key, true) else null
+    }
+    actual fun savePreferSameServer(value: Boolean) {
+        preferences?.edit()?.putBoolean(ProfileScopedKey.of(preferSameServerKey), value)?.apply()
+    }
+
+    actual fun loadDefaultServerKey(): String? = preferences?.let { prefs ->
+        val key = ProfileScopedKey.of(defaultServerKeyKey)
+        if (prefs.contains(key)) prefs.getString(key, "") else null
+    }
+    actual fun saveDefaultServerKey(value: String) {
+        preferences?.edit()?.putString(ProfileScopedKey.of(defaultServerKeyKey), value)?.apply()
+    }
+
+    actual fun loadRememberAudioDelay(): Boolean? = preferences?.let { prefs ->
+        val key = ProfileScopedKey.of(rememberAudioDelayKey)
+        if (prefs.contains(key)) prefs.getBoolean(key, false) else null
+    }
+    actual fun saveRememberAudioDelay(value: Boolean) {
+        preferences?.edit()?.putBoolean(ProfileScopedKey.of(rememberAudioDelayKey), value)?.apply()
+    }
+
+    actual fun loadAudioDelayMs(): Int? = preferences?.let { prefs ->
+        val key = ProfileScopedKey.of(audioDelayMsKey)
+        if (prefs.contains(key)) prefs.getInt(key, 0) else null
+    }
+    actual fun saveAudioDelayMs(value: Int) {
+        preferences?.edit()?.putInt(ProfileScopedKey.of(audioDelayMsKey), value)?.apply()
+    }
+
+    actual fun loadPersistAudioAmplification(): Boolean? = preferences?.let { prefs ->
+        val key = ProfileScopedKey.of(persistAudioAmplificationKey)
+        if (prefs.contains(key)) prefs.getBoolean(key, false) else null
+    }
+    actual fun savePersistAudioAmplification(value: Boolean) {
+        preferences?.edit()?.putBoolean(ProfileScopedKey.of(persistAudioAmplificationKey), value)?.apply()
+    }
+
+    actual fun loadAudioAmplificationDb(): Float? = preferences?.let { prefs ->
+        val key = ProfileScopedKey.of(audioAmplificationDbKey)
+        if (prefs.contains(key)) prefs.getFloat(key, 0f) else null
+    }
+    actual fun saveAudioAmplificationDb(value: Float) {
+        preferences?.edit()?.putFloat(ProfileScopedKey.of(audioAmplificationDbKey), value)?.apply()
+    }
+
+    actual fun loadAudioDownmix(): Boolean? = preferences?.let { prefs ->
+        val key = ProfileScopedKey.of(audioDownmixKey)
+        if (prefs.contains(key)) prefs.getBoolean(key, false) else null
+    }
+    actual fun saveAudioDownmix(value: Boolean) {
+        preferences?.edit()?.putBoolean(ProfileScopedKey.of(audioDownmixKey), value)?.apply()
+    }
+
+    actual fun loadAudioChannels(): String? = preferences?.let { prefs ->
+        val key = ProfileScopedKey.of(audioChannelsKey)
+        if (prefs.contains(key)) prefs.getString(key, "auto") else null
+    }
+    actual fun saveAudioChannels(value: String) {
+        preferences?.edit()?.putString(ProfileScopedKey.of(audioChannelsKey), value)?.apply()
+    }
+
+    actual fun loadAudioMaintainVolume(): Boolean? = preferences?.let { prefs ->
+        val key = ProfileScopedKey.of(audioMaintainVolumeKey)
+        if (prefs.contains(key)) prefs.getBoolean(key, true) else null
+    }
+    actual fun saveAudioMaintainVolume(value: Boolean) {
+        preferences?.edit()?.putBoolean(ProfileScopedKey.of(audioMaintainVolumeKey), value)?.apply()
+    }
+
+    actual fun loadAudioCenterMixLevel(): Float? = preferences?.let { prefs ->
+        val key = ProfileScopedKey.of(audioCenterMixLevelKey)
+        if (prefs.contains(key)) prefs.getFloat(key, 0.707f) else null
+    }
+    actual fun saveAudioCenterMixLevel(value: Float) {
+        preferences?.edit()?.putFloat(ProfileScopedKey.of(audioCenterMixLevelKey), value)?.apply()
     }
 
     actual fun loadShowLoadingOverlay(): Boolean? =
@@ -1195,6 +1350,21 @@ actual object PlayerSettingsStorage {
     }
 
     actual fun exportToSyncPayload(): JsonObject = buildJsonObject {
+        loadAutoSwitchPlaybackEngineOnError()?.let { put(autoSwitchPlaybackEngineOnErrorKey, encodeSyncBoolean(it)) }
+        loadShowDetailedLoadingStatus()?.let { put(showDetailedLoadingStatusKey, encodeSyncBoolean(it)) }
+        loadShowPauseOverlay()?.let { put(showPauseOverlayKey, encodeSyncBoolean(it)) }
+        loadExoChaptersEnabled()?.let { put(exoChaptersEnabledKey, encodeSyncBoolean(it)) }
+        loadPreloadNextEpisode()?.let { put(preloadNextEpisodeKey, encodeSyncBoolean(it)) }
+        loadPreferSameServer()?.let { put(preferSameServerKey, encodeSyncBoolean(it)) }
+        loadDefaultServerKey()?.let { put(defaultServerKeyKey, encodeSyncString(it)) }
+        loadRememberAudioDelay()?.let { put(rememberAudioDelayKey, encodeSyncBoolean(it)) }
+        loadAudioDelayMs()?.let { put(audioDelayMsKey, encodeSyncInt(it)) }
+        loadPersistAudioAmplification()?.let { put(persistAudioAmplificationKey, encodeSyncBoolean(it)) }
+        loadAudioAmplificationDb()?.let { put(audioAmplificationDbKey, encodeSyncFloat(it)) }
+        loadAudioDownmix()?.let { put(audioDownmixKey, encodeSyncBoolean(it)) }
+        loadAudioChannels()?.let { put(audioChannelsKey, encodeSyncString(it)) }
+        loadAudioMaintainVolume()?.let { put(audioMaintainVolumeKey, encodeSyncBoolean(it)) }
+        loadAudioCenterMixLevel()?.let { put(audioCenterMixLevelKey, encodeSyncFloat(it)) }
         loadShowLoadingOverlay()?.let { put(showLoadingOverlayKey, encodeSyncBoolean(it)) }
         loadShowParentalGuide()?.let { put(showParentalGuideKey, encodeSyncBoolean(it)) }
         loadResizeMode()?.let { put(resizeModeKey, encodeSyncString(it)) }
@@ -1274,6 +1444,21 @@ actual object PlayerSettingsStorage {
             syncKeys.forEach { remove(ProfileScopedKey.of(it)) }
         }?.apply()
 
+        payload.decodeSyncBoolean(autoSwitchPlaybackEngineOnErrorKey)?.let(::saveAutoSwitchPlaybackEngineOnError)
+        payload.decodeSyncBoolean(showDetailedLoadingStatusKey)?.let(::saveShowDetailedLoadingStatus)
+        payload.decodeSyncBoolean(showPauseOverlayKey)?.let(::saveShowPauseOverlay)
+        payload.decodeSyncBoolean(exoChaptersEnabledKey)?.let(::saveExoChaptersEnabled)
+        payload.decodeSyncBoolean(preloadNextEpisodeKey)?.let(::savePreloadNextEpisode)
+        payload.decodeSyncBoolean(preferSameServerKey)?.let(::savePreferSameServer)
+        payload.decodeSyncString(defaultServerKeyKey)?.let(::saveDefaultServerKey)
+        payload.decodeSyncBoolean(rememberAudioDelayKey)?.let(::saveRememberAudioDelay)
+        payload.decodeSyncInt(audioDelayMsKey)?.let(::saveAudioDelayMs)
+        payload.decodeSyncBoolean(persistAudioAmplificationKey)?.let(::savePersistAudioAmplification)
+        payload.decodeSyncFloat(audioAmplificationDbKey)?.let(::saveAudioAmplificationDb)
+        payload.decodeSyncBoolean(audioDownmixKey)?.let(::saveAudioDownmix)
+        payload.decodeSyncString(audioChannelsKey)?.let(::saveAudioChannels)
+        payload.decodeSyncBoolean(audioMaintainVolumeKey)?.let(::saveAudioMaintainVolume)
+        payload.decodeSyncFloat(audioCenterMixLevelKey)?.let(::saveAudioCenterMixLevel)
         payload.decodeSyncBoolean(showLoadingOverlayKey)?.let(::saveShowLoadingOverlay)
         payload.decodeSyncBoolean(showParentalGuideKey)?.let(::saveShowParentalGuide)
         payload.decodeSyncString(resizeModeKey)?.let(::saveResizeMode)

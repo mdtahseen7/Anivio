@@ -69,6 +69,18 @@ internal fun LazyListScope.contentDiscoveryContent(
                     onClick = { showSourcePicker = true },
                 )
                 SettingsGroupDivider(isTablet = isTablet)
+                val historyEnabled by remember {
+                    com.nuvio.app.features.search.SearchHistoryRepository.ensureLoaded()
+                    com.nuvio.app.features.search.SearchHistoryRepository.enabled
+                }.collectAsStateWithLifecycle()
+                SettingsSwitchRow(
+                    title = "Recent searches",
+                    description = "Save and show search history for this profile.",
+                    checked = historyEnabled,
+                    isTablet = isTablet,
+                    onCheckedChange = com.nuvio.app.features.search.SearchHistoryRepository::setEnabled,
+                )
+                SettingsGroupDivider(isTablet = isTablet)
                 SettingsSwitchRow(
                     title = stringResource(Res.string.settings_content_discovery_adult),
                     description = stringResource(Res.string.settings_content_discovery_adult_description),

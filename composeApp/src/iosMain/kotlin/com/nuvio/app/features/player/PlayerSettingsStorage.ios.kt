@@ -17,6 +17,23 @@ import kotlinx.serialization.json.put
 import platform.Foundation.NSUserDefaults
 
 actual object PlayerSettingsStorage {
+    actual fun loadAudioDelayForDevice(key: String): Int? = loadInt("audio_device_delay:$key")
+    actual fun saveAudioDelayForDevice(key: String, value: Int) = saveInt("audio_device_delay:$key", value)
+    private const val autoSwitchPlaybackEngineOnErrorKey = "auto_switch_playback_engine_on_error"
+    private const val showDetailedLoadingStatusKey = "show_detailed_loading_status"
+    private const val showPauseOverlayKey = "show_pause_overlay"
+    private const val exoChaptersEnabledKey = "exo_chapters_enabled"
+    private const val preloadNextEpisodeKey = "preload_next_episode"
+    private const val preferSameServerKey = "prefer_same_server"
+    private const val defaultServerKeyKey = "default_server_key"
+    private const val rememberAudioDelayKey = "remember_audio_delay"
+    private const val audioDelayMsKey = "audio_delay_ms"
+    private const val persistAudioAmplificationKey = "persist_audio_amplification"
+    private const val audioAmplificationDbKey = "audio_amplification_db"
+    private const val audioDownmixKey = "audio_downmix"
+    private const val audioChannelsKey = "audio_channels"
+    private const val audioMaintainVolumeKey = "audio_maintain_volume"
+    private const val audioCenterMixLevelKey = "audio_center_mix_level"
     private const val showLoadingOverlayKey = "show_loading_overlay"
     private const val useLegacyPlayerLayoutKey = "use_legacy_player_layout"
     private const val playerTitleAtTopKey = "player_title_at_top"
@@ -93,6 +110,21 @@ actual object PlayerSettingsStorage {
     private const val iosSaturationKey = "ios_saturation"
     private const val iosGammaKey = "ios_gamma"
     private val syncKeys = listOf(
+        autoSwitchPlaybackEngineOnErrorKey,
+        showDetailedLoadingStatusKey,
+        showPauseOverlayKey,
+        exoChaptersEnabledKey,
+        preloadNextEpisodeKey,
+        preferSameServerKey,
+        defaultServerKeyKey,
+        rememberAudioDelayKey,
+        audioDelayMsKey,
+        persistAudioAmplificationKey,
+        audioAmplificationDbKey,
+        audioDownmixKey,
+        audioChannelsKey,
+        audioMaintainVolumeKey,
+        audioCenterMixLevelKey,
         showLoadingOverlayKey,
         showParentalGuideKey,
         resizeModeKey,
@@ -164,6 +196,14 @@ actual object PlayerSettingsStorage {
         iosGammaKey,
     )
 
+    private fun loadString(keyBase: String): String? = NSUserDefaults.standardUserDefaults.stringForKey(ProfileScopedKey.of(keyBase))
+    private fun saveString(keyBase: String, value: String) { NSUserDefaults.standardUserDefaults.setObject(value, forKey = ProfileScopedKey.of(keyBase)) }
+    private fun loadFloat(keyBase: String): Float? {
+        val defaults = NSUserDefaults.standardUserDefaults
+        val key = ProfileScopedKey.of(keyBase)
+        return if (defaults.objectForKey(key) != null) defaults.floatForKey(key) else null
+    }
+    private fun saveFloat(keyBase: String, value: Float) { NSUserDefaults.standardUserDefaults.setFloat(value, forKey = ProfileScopedKey.of(keyBase)) }
     private fun loadBoolean(keyBase: String): Boolean? {
         val defaults = NSUserDefaults.standardUserDefaults
         val key = ProfileScopedKey.of(keyBase)
@@ -183,6 +223,51 @@ actual object PlayerSettingsStorage {
     private fun saveInt(keyBase: String, value: Int) {
         NSUserDefaults.standardUserDefaults.setInteger(value.toLong(), forKey = ProfileScopedKey.of(keyBase))
     }
+
+    actual fun loadAutoSwitchPlaybackEngineOnError(): Boolean? = loadBoolean(autoSwitchPlaybackEngineOnErrorKey)
+    actual fun saveAutoSwitchPlaybackEngineOnError(value: Boolean) = saveBoolean(autoSwitchPlaybackEngineOnErrorKey, value)
+
+    actual fun loadShowDetailedLoadingStatus(): Boolean? = loadBoolean(showDetailedLoadingStatusKey)
+    actual fun saveShowDetailedLoadingStatus(value: Boolean) = saveBoolean(showDetailedLoadingStatusKey, value)
+
+    actual fun loadShowPauseOverlay(): Boolean? = loadBoolean(showPauseOverlayKey)
+    actual fun saveShowPauseOverlay(value: Boolean) = saveBoolean(showPauseOverlayKey, value)
+
+    actual fun loadExoChaptersEnabled(): Boolean? = loadBoolean(exoChaptersEnabledKey)
+    actual fun saveExoChaptersEnabled(value: Boolean) = saveBoolean(exoChaptersEnabledKey, value)
+
+    actual fun loadPreloadNextEpisode(): Boolean? = loadBoolean(preloadNextEpisodeKey)
+    actual fun savePreloadNextEpisode(value: Boolean) = saveBoolean(preloadNextEpisodeKey, value)
+
+    actual fun loadPreferSameServer(): Boolean? = loadBoolean(preferSameServerKey)
+    actual fun savePreferSameServer(value: Boolean) = saveBoolean(preferSameServerKey, value)
+
+    actual fun loadDefaultServerKey(): String? = loadString(defaultServerKeyKey)
+    actual fun saveDefaultServerKey(value: String) = saveString(defaultServerKeyKey, value)
+
+    actual fun loadRememberAudioDelay(): Boolean? = loadBoolean(rememberAudioDelayKey)
+    actual fun saveRememberAudioDelay(value: Boolean) = saveBoolean(rememberAudioDelayKey, value)
+
+    actual fun loadAudioDelayMs(): Int? = loadInt(audioDelayMsKey)
+    actual fun saveAudioDelayMs(value: Int) = saveInt(audioDelayMsKey, value)
+
+    actual fun loadPersistAudioAmplification(): Boolean? = loadBoolean(persistAudioAmplificationKey)
+    actual fun savePersistAudioAmplification(value: Boolean) = saveBoolean(persistAudioAmplificationKey, value)
+
+    actual fun loadAudioAmplificationDb(): Float? = loadFloat(audioAmplificationDbKey)
+    actual fun saveAudioAmplificationDb(value: Float) = saveFloat(audioAmplificationDbKey, value)
+
+    actual fun loadAudioDownmix(): Boolean? = loadBoolean(audioDownmixKey)
+    actual fun saveAudioDownmix(value: Boolean) = saveBoolean(audioDownmixKey, value)
+
+    actual fun loadAudioChannels(): String? = loadString(audioChannelsKey)
+    actual fun saveAudioChannels(value: String) = saveString(audioChannelsKey, value)
+
+    actual fun loadAudioMaintainVolume(): Boolean? = loadBoolean(audioMaintainVolumeKey)
+    actual fun saveAudioMaintainVolume(value: Boolean) = saveBoolean(audioMaintainVolumeKey, value)
+
+    actual fun loadAudioCenterMixLevel(): Float? = loadFloat(audioCenterMixLevelKey)
+    actual fun saveAudioCenterMixLevel(value: Float) = saveFloat(audioCenterMixLevelKey, value)
 
     actual fun loadShowLoadingOverlay(): Boolean? {
         val defaults = NSUserDefaults.standardUserDefaults
@@ -978,6 +1063,21 @@ actual object PlayerSettingsStorage {
     }
 
     actual fun exportToSyncPayload(): JsonObject = buildJsonObject {
+        loadAutoSwitchPlaybackEngineOnError()?.let { put(autoSwitchPlaybackEngineOnErrorKey, encodeSyncBoolean(it)) }
+        loadShowDetailedLoadingStatus()?.let { put(showDetailedLoadingStatusKey, encodeSyncBoolean(it)) }
+        loadShowPauseOverlay()?.let { put(showPauseOverlayKey, encodeSyncBoolean(it)) }
+        loadExoChaptersEnabled()?.let { put(exoChaptersEnabledKey, encodeSyncBoolean(it)) }
+        loadPreloadNextEpisode()?.let { put(preloadNextEpisodeKey, encodeSyncBoolean(it)) }
+        loadPreferSameServer()?.let { put(preferSameServerKey, encodeSyncBoolean(it)) }
+        loadDefaultServerKey()?.let { put(defaultServerKeyKey, encodeSyncString(it)) }
+        loadRememberAudioDelay()?.let { put(rememberAudioDelayKey, encodeSyncBoolean(it)) }
+        loadAudioDelayMs()?.let { put(audioDelayMsKey, encodeSyncInt(it)) }
+        loadPersistAudioAmplification()?.let { put(persistAudioAmplificationKey, encodeSyncBoolean(it)) }
+        loadAudioAmplificationDb()?.let { put(audioAmplificationDbKey, encodeSyncFloat(it)) }
+        loadAudioDownmix()?.let { put(audioDownmixKey, encodeSyncBoolean(it)) }
+        loadAudioChannels()?.let { put(audioChannelsKey, encodeSyncString(it)) }
+        loadAudioMaintainVolume()?.let { put(audioMaintainVolumeKey, encodeSyncBoolean(it)) }
+        loadAudioCenterMixLevel()?.let { put(audioCenterMixLevelKey, encodeSyncFloat(it)) }
         loadShowLoadingOverlay()?.let { put(showLoadingOverlayKey, encodeSyncBoolean(it)) }
         loadShowParentalGuide()?.let { put(showParentalGuideKey, encodeSyncBoolean(it)) }
         loadResizeMode()?.let { put(resizeModeKey, encodeSyncString(it)) }
@@ -1057,6 +1157,21 @@ actual object PlayerSettingsStorage {
             NSUserDefaults.standardUserDefaults.removeObjectForKey(ProfileScopedKey.of(key))
         }
 
+        payload.decodeSyncBoolean(autoSwitchPlaybackEngineOnErrorKey)?.let(::saveAutoSwitchPlaybackEngineOnError)
+        payload.decodeSyncBoolean(showDetailedLoadingStatusKey)?.let(::saveShowDetailedLoadingStatus)
+        payload.decodeSyncBoolean(showPauseOverlayKey)?.let(::saveShowPauseOverlay)
+        payload.decodeSyncBoolean(exoChaptersEnabledKey)?.let(::saveExoChaptersEnabled)
+        payload.decodeSyncBoolean(preloadNextEpisodeKey)?.let(::savePreloadNextEpisode)
+        payload.decodeSyncBoolean(preferSameServerKey)?.let(::savePreferSameServer)
+        payload.decodeSyncString(defaultServerKeyKey)?.let(::saveDefaultServerKey)
+        payload.decodeSyncBoolean(rememberAudioDelayKey)?.let(::saveRememberAudioDelay)
+        payload.decodeSyncInt(audioDelayMsKey)?.let(::saveAudioDelayMs)
+        payload.decodeSyncBoolean(persistAudioAmplificationKey)?.let(::savePersistAudioAmplification)
+        payload.decodeSyncFloat(audioAmplificationDbKey)?.let(::saveAudioAmplificationDb)
+        payload.decodeSyncBoolean(audioDownmixKey)?.let(::saveAudioDownmix)
+        payload.decodeSyncString(audioChannelsKey)?.let(::saveAudioChannels)
+        payload.decodeSyncBoolean(audioMaintainVolumeKey)?.let(::saveAudioMaintainVolume)
+        payload.decodeSyncFloat(audioCenterMixLevelKey)?.let(::saveAudioCenterMixLevel)
         payload.decodeSyncBoolean(showLoadingOverlayKey)?.let(::saveShowLoadingOverlay)
         payload.decodeSyncBoolean(showParentalGuideKey)?.let(::saveShowParentalGuide)
         payload.decodeSyncString(resizeModeKey)?.let(::saveResizeMode)

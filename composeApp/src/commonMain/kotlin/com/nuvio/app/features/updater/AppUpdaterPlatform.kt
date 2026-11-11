@@ -6,6 +6,9 @@ expect object AppUpdaterPlatform {
 
     fun getSupportedAbis(): List<String>
 
+    fun getUpdateChannel(): String?
+    fun setUpdateChannel(channel: String)
+
     fun getIgnoredTag(): String?
 
     fun setIgnoredTag(tag: String?)

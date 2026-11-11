@@ -202,6 +202,12 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
                     }
                     errorMessage = message
                     if (message != null) {
+                        if (!isIos && playerSettingsUiState.autoSwitchPlaybackEngineOnError && automaticallySwitchedSource != activeSourceUrl) {
+                            automaticallySwitchedSource = activeSourceUrl
+                            switchPlaybackEngine()
+                            errorMessage = null
+                            return@PlatformPlayerSurface
+                        }
                         controlsVisible = !playerControlsLocked
                         removeFailedStreamFromCache()
                     }
@@ -211,7 +217,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
         }
 
         AnimatedVisibility(
-            visible = pausedOverlayVisible && !controlsVisible && !playerControlsLocked,
+            visible = playerSettingsUiState.showPauseOverlay && pausedOverlayVisible && !controlsVisible && !playerControlsLocked,
             enter = fadeIn(animationSpec = tween(durationMillis = 220)),
             exit = fadeOut(animationSpec = tween(durationMillis = 180)),
         ) {
@@ -231,6 +237,9 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
         }
 
         RenderPlayerControls(displayedPositionMs = displayedPositionMs, isEpisode = isEpisode)
+        if (controlsVisible && !playerControlsLocked && playerSettingsUiState.exoChaptersEnabled && playbackSnapshot.chapters.isNotEmpty()) {
+            ChapterPicker(playbackSnapshot.chapters, onSeek = { playerController?.seekTo(it) })
+        }
         RenderPlaybackOverlays(
             runtime = runtime,
             displayedPositionMs = displayedPositionMs,
@@ -430,7 +439,9 @@ private fun BoxScope.RenderPlaybackOverlays(
             flushWatchProgress()
             args.onBack()
         },
-        p2pInitialLoadingMessage = p2pInitialLoadingMessage,
+        p2pInitialLoadingMessage = p2pInitialLoadingMessage ?: if (playerSettingsUiState.showDetailedLoadingStatus) {
+            "${playerController?.playbackEngine?.label ?: "Preparing player"} · $activeProviderName\n${activeStreamTitle}\nBuffered ${((playbackSnapshot.bufferedPositionMs - playbackSnapshot.positionMs).coerceAtLeast(0) / 1000)} s"
+        } else null,
         p2pInitialLoadingProgress = p2pInitialLoadingProgress,
         showP2pRebufferStats = showP2pRebufferStats,
         p2pRebufferMessage = p2pRebufferMessage,

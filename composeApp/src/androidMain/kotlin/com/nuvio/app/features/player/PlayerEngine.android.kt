@@ -226,7 +226,13 @@ private fun ExoPlayerSurface(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val latestOnSnapshot = rememberUpdatedState(onSnapshot)
+    var chapters by remember(sourceUrl) { mutableStateOf(emptyList<PlayerChapter>()) }
+    LaunchedEffect(sourceUrl, sourceHeaders) {
+        if (PlayerSettingsRepository.uiState.value.exoChaptersEnabled) {
+            chapters = MatroskaChapterLoader.load(sourceUrl, sanitizePlaybackHeaders(sourceHeaders))
+        }
+    }
+    val latestOnSnapshot = rememberUpdatedState<(PlayerPlaybackSnapshot) -> Unit> { snapshot -> onSnapshot(snapshot.copy(chapters = chapters)) }
     val latestOnError = rememberUpdatedState(onError)
     val latestOnInitialPositionHandled = rememberUpdatedState(onInitialPositionHandled)
     val latestPlayWhenReady = rememberUpdatedState(playWhenReady)
@@ -330,7 +336,7 @@ private fun ExoPlayerSurface(
             val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory, extractorsFactory)
             val videoSource = mediaSourceFactory.createMediaSource(videoMediaItem)
             val audioSource = mediaSourceFactory.createMediaSource(playbackMediaItemFromUrl(sourceAudioUrl))
-            val mergedSource = MergingMediaSource(videoSource, audioSource)
+            val mergedSource = AudioDelayMediaSource(MergingMediaSource(videoSource, audioSource)) { PlayerSettingsRepository.uiState.value.audioDelayMs.toLong() * 1000 }
             if (startPositionMs != null) {
                 setMediaSource(mergedSource, startPositionMs.coerceAtLeast(0L))
             } else {
@@ -428,7 +434,7 @@ private fun ExoPlayerSurface(
                 .setRenderersFactory(renderersFactory)
                 .setTrackSelector(trackSelector)
                 .setLoadControl(loadControl)
-                .setMediaSourceFactory(mediaSourceFactory)
+                .setMediaSourceFactory(AudioDelayMediaSourceFactory(mediaSourceFactory) { PlayerSettingsRepository.uiState.value.audioDelayMs.toLong() * 1000 })
                 .build()
         }
 
@@ -1506,6 +1512,15 @@ private class NuvioLibmpvView(
         nowPlayingController: AndroidPlayerNowPlayingController?,
     ): PlayerEngineController =
         object : PlayerEngineController {
+            override fun configureAudio(settings: PlayerSettingsUiState) {
+                executeMpv {
+                    mpv.setPropertyDouble("audio-delay", settings.audioDelayMs.coerceIn(-2000, 2000) / 1000.0)
+                    mpv.setPropertyDouble("volume", 100.0 * Math.pow(10.0, settings.audioAmplificationDb.coerceIn(0f, 20f) / 20.0))
+                    mpv.setPropertyString("audio-channels", if (!settings.audioDownmix) "auto" else settings.audioChannels.let { if (it == "auto") "stereo" else it })
+                    mpv.setPropertyBoolean("audio-normalize-downmix", !settings.audioMaintainVolume)
+                    mpv.setPropertyDouble("audio-mix-center-level", settings.audioCenterMixLevel.coerceIn(0f, 1.5f).toDouble())
+                }
+            }
             override val playbackEngine = AndroidPlaybackEngine.Libmpv
             override fun play() = setPaused(false)
 
@@ -2253,6 +2268,12 @@ private class SubtitleOffsetRenderersFactory(
     private val shouldOverrideEmbeddedStylesProvider: () -> Boolean = { false },
     private val videoBoundsFractionProvider: () -> RectF?,
 ) : DefaultRenderersFactory(context) {
+    override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): androidx.media3.exoplayer.audio.AudioSink =
+        androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context)
+            .setEnableFloatOutput(false)
+            .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+            .setAudioProcessors(arrayOf(PlaybackAudioProcessor()))
+            .build()
     override fun buildTextRenderers(
         context: Context,
         output: TextOutput,

@@ -78,6 +78,7 @@ internal enum class SettingsPage(
         category = SettingsCategory.About,
         parentPage = AboutSettings,
     ),
+    SupportersContributors(Res.string.settings_community_title, SettingsCategory.About, AboutSettings),
     PrivacyPolicy(
         titleRes = Res.string.compose_settings_page_privacy_policy,
         category = SettingsCategory.About,
@@ -193,5 +194,10 @@ internal enum class SettingsPage(
 internal val SettingsPage.opensInlineOnTablet: Boolean
     get() = parentPage != null
 
-internal fun SettingsPage.previousPage(): SettingsPage? = parentPage
+internal fun SettingsPage.previousPage(): SettingsPage? = when (parentPage) {
+    SettingsPage.YourSpace, SettingsPage.Personalize, SettingsPage.WatchSettings,
+    SettingsPage.Services, SettingsPage.SystemSettings, SettingsPage.Anivio,
+    SettingsPage.AboutSettings -> SettingsPage.Root
+    else -> parentPage
+}
 

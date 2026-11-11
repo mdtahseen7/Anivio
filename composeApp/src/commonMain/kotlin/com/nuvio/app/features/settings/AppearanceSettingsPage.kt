@@ -216,6 +216,30 @@ internal fun LazyListScope.appearanceSettingsContent(
     }
     if (layoutOnly) {
     item {
+        var showNavigation by remember { mutableStateOf(false) }
+        val glowEnabled by ThemeSettingsRepository.navBarGlowEnabled.collectAsStateWithLifecycle()
+        SettingsGroup(isTablet = isTablet) {
+            if (!isIos) SettingsNavigationRow(
+                title = stringResource(Res.string.settings_appearance_nav_bar_style),
+                description = stringResource(selectedNavBarStyle.labelRes),
+                isTablet = isTablet,
+                onClick = { showNavigation = true },
+            )
+            if (liquidGlassNativeTabBarSupported) SettingsSwitchRow(
+                title = stringResource(Res.string.settings_appearance_liquid_glass),
+                description = stringResource(Res.string.settings_appearance_liquid_glass_description),
+                checked = liquidGlassNativeTabBarEnabled, isTablet = isTablet,
+                onCheckedChange = onLiquidGlassNativeTabBarToggle,
+            )
+        }
+        if (showNavigation) NavigationBarSettingsSheet(
+            isTablet = isTablet, selectedStyle = if (isTablet) NavBarStyle.COMPACT else selectedNavBarStyle,
+            onStyleSelected = onNavBarStyleSelected, glowEnabled = glowEnabled,
+            onGlowChanged = ThemeSettingsRepository::setNavBarGlowEnabled,
+            onDismiss = { showNavigation = false },
+        )
+    }
+    item {
         SettingsSection(
             title = stringResource(Res.string.settings_appearance_section_home),
             isTablet = isTablet,

@@ -218,6 +218,7 @@ fun IosHardwareDecoderMode.localizedLabel(): String = when (this) {
 }
 
 data class PlayerPlaybackSnapshot(
+    val chapters: List<PlayerChapter> = emptyList(),
     val isLoading: Boolean = true,
     val isPlaying: Boolean = false,
     val isEnded: Boolean = false,

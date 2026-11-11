@@ -139,7 +139,7 @@ private object AppUpdaterRepository {
         }
 
         val releases = appUpdaterJson.decodeFromString<List<GitHubReleaseDto>>(response.body)
-        val release = releases.firstOrNull { it.matchesRequestedChannel() && !it.draft && !it.prerelease }
+        val release = releases.firstOrNull { isReleaseInUpdateChannel(UpdatePreferences.channel.value, it.draft, it.prerelease, it.tagName.orEmpty()) }
             ?: throw NoChannelReleaseException()
 
         val tag = release.tagName?.takeIf { it.isNotBlank() }
@@ -158,21 +158,6 @@ private object AppUpdaterRepository {
             assetUrl = asset.browserDownloadUrl,
             assetSizeBytes = asset.size,
         )
-    }
-
-    private fun GitHubReleaseDto.matchesRequestedChannel(): Boolean {
-        // A project publishing a single stream of releases has no channel to disambiguate, so an
-        // unset channel accepts everything rather than matching nothing.
-        val channel = UpdateChannelConfig.CHANNEL.trim()
-        if (channel.isBlank()) return true
-
-        if (targetCommitish?.trim()?.equals(channel, ignoreCase = true) == true) {
-            return true
-        }
-
-        return listOf(tagName, name)
-            .filterNotNull()
-            .any { value -> value.contains(channel, ignoreCase = true) }
     }
 
     private fun chooseBestApkAsset(assets: List<GitHubAssetDto>): GitHubAssetDto? {

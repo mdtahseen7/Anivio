@@ -46,6 +46,9 @@ object AndroidAppUpdaterPlatform {
         return context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
     }
 
+    fun getUpdateChannel(): String? = preferences().getString("update_channel", null)
+    fun setUpdateChannel(channel: String) { preferences().edit().putString("update_channel", channel).apply() }
+
     fun getIgnoredTag(): String? =
         preferences().getString(ignoredTagKey, null)
 
