@@ -335,12 +335,20 @@ internal fun SettingsSwitchRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon != null) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = if (checked) tokens.colors.accent else tokens.colors.textMuted,
-                modifier = Modifier.size(22.dp),
-            )
+            Surface(
+                modifier = Modifier.size(if (isTablet) 42.dp else 36.dp),
+                color = tokens.colors.accent.copy(alpha = tokens.opacity.pressed),
+                shape = tokens.shapes.compactCard,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = if (checked) tokens.colors.accent else tokens.colors.textPrimary,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+            }
             Spacer(modifier = Modifier.width(if (isTablet) 16.dp else 14.dp))
         }
         Column(
