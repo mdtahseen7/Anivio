@@ -148,6 +148,8 @@ internal fun LazyListScope.settingsRootContent(
             row(Res.string.compose_settings_page_tracking, Res.string.compose_settings_root_tracking_description, Icons.Default.Sync, onTrackingClick)
         }
         SettingsPage.Anivio -> {
+            page(SettingsPage.ProfileCustomization, Res.string.settings_profile_customization_description, Icons.Rounded.Palette)
+            page(SettingsPage.ProfileSharing, Res.string.settings_profile_sharing_description, Icons.Rounded.People)
             row(Res.string.compose_settings_page_reader, Res.string.compose_settings_root_reader_description, Icons.Rounded.MenuBook, onReaderClick)
             row(Res.string.compose_settings_root_downloads_title, Res.string.compose_settings_root_downloads_description, Icons.Rounded.CloudDownload, onDownloadsClick)
             onWatchPartyClick?.let { row(Res.string.party_title, Res.string.party_settings_description, Icons.Rounded.Groups, it) }
@@ -165,9 +167,10 @@ internal fun LazyListScope.settingsRootContent(
         }
         else -> Unit
     }
-    rows.forEach { row ->
-        item {
-            SettingsGroup(isTablet = isTablet) {
+    item {
+        SettingsGroup(isTablet = isTablet) {
+            rows.forEachIndexed { index, row ->
+                if (index > 0) SettingsGroupDivider(isTablet = isTablet)
                 SettingsNavigationRow(
                     title = stringResource(row.title),
                     description = stringResource(row.description),

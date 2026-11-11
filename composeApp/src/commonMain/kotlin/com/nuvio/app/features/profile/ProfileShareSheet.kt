@@ -296,7 +296,7 @@ private fun ShareStat(value: String, label: String) {
 }
 
 @Composable
-private fun ShareCardSettings(
+internal fun ShareCardSettings(
     settings: ProfileShareSettings,
     onSettingsChange: ((ProfileShareSettings) -> ProfileShareSettings) -> Unit,
 ) {

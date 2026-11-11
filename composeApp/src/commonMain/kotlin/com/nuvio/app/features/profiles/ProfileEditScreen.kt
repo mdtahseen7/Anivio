@@ -69,6 +69,7 @@ fun ProfileEditScreen(
     onBack: () -> Unit,
     onSaved: () -> Unit,
     modifier: Modifier = Modifier,
+    showHeader: Boolean = true,
 ) {
     val isNew = profile == null
     val scope = rememberCoroutineScope()
@@ -136,7 +137,7 @@ fun ProfileEditScreen(
     }
 
     NuvioScreen(modifier = modifier) {
-        stickyHeader {
+        if (showHeader) stickyHeader {
             NuvioScreenHeader(
                 title = if (isNew) {
                     stringResource(Res.string.profile_edit_add_title)

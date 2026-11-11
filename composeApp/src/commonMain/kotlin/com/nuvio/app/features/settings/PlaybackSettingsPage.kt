@@ -75,6 +75,7 @@ import com.nuvio.app.features.player.SubtitleBackgroundColorSwatches
 import com.nuvio.app.features.player.SubtitleColorSwatches
 import com.nuvio.app.features.player.SubtitleLanguageOption
 import com.nuvio.app.features.player.SubtitleStyleState
+import com.nuvio.app.features.player.SubtitleFontFamilyDialog
 import com.nuvio.app.features.player.SubtitleFontFamily
 import com.nuvio.app.features.player.formatPlaybackSpeedLabel
 import com.nuvio.app.features.player.languageLabelForCode
@@ -2882,67 +2883,6 @@ private fun SubtitleColorDialog(
     }
 }
 
-@Composable
-@OptIn(ExperimentalMaterial3Api::class)
-private fun SubtitleFontFamilyDialog(
-    selectedFamily: SubtitleFontFamily,
-    onFamilySelected: (SubtitleFontFamily) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    BasicAlertDialog(onDismissRequest = onDismiss) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surface,
-        ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    text = stringResource(Res.string.settings_playback_subtitle_font),
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                SubtitleFontFamily.entries.forEach { family ->
-                    val selected = family == selectedFamily
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onFamilySelected(family) },
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (selected) {
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-                        },
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = subtitleFontFamilyLabel(family),
-                                modifier = Modifier.weight(1f),
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontFamily = family.toComposeFontFamily(),
-                                fontWeight = if (family == SubtitleFontFamily.Default) FontWeight.Normal else FontWeight.Medium,
-                            )
-                            if (selected) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Check,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -3842,9 +3782,10 @@ internal fun LazyListScope.playbackSettingsHubContent(
         SettingsPage.PlaybackSubtitles,
         SettingsPage.PlaybackVideo,
     ) + if (P2pSettingsRepository.isVisible) listOf(SettingsPage.PlaybackP2p) else emptyList()
-    pages.forEach { target ->
-        item(key = target.name) {
-            SettingsGroup(isTablet = isTablet) {
+    item {
+        SettingsGroup(isTablet = isTablet) {
+            pages.forEachIndexed { index, target ->
+                if (index > 0) SettingsGroupDivider(isTablet = isTablet)
                 SettingsNavigationRow(
                     title = stringResource(target.titleRes),
                     description = null,

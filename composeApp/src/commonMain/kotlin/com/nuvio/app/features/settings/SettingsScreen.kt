@@ -395,7 +395,14 @@ fun SettingsScreen(
             onBack = ::navigateBack,
         )
 
-        if (maxWidth >= 768.dp) {
+        if (page == SettingsPage.ProfileCustomization) {
+            com.nuvio.app.features.profiles.ProfileEditScreen(
+                profile = profileSettingsState.activeProfile,
+                onBack = ::navigateBack,
+                onSaved = ::navigateBack,
+                showHeader = showInternalHeader,
+            )
+        } else if (maxWidth >= 768.dp) {
             TabletSettingsScreen(
                 page = page,
                 scrollToTopRequests = scrollToTopRequests,
@@ -754,6 +761,8 @@ private fun MobileSettingsScreen(
                         )
                     }
                 }
+                SettingsPage.ProfileCustomization -> Unit
+                SettingsPage.ProfileSharing -> profileSharingSettingsContent(isTablet = false)
                 SettingsPage.Account -> accountSettingsContent(
                     isTablet = false,
                 )
@@ -1208,6 +1217,8 @@ private fun TabletSettingsScreen(
                             )
                         }
                     }
+                    SettingsPage.ProfileCustomization -> Unit
+                    SettingsPage.ProfileSharing -> profileSharingSettingsContent(isTablet = true)
                     SettingsPage.Account -> accountSettingsContent(
                         isTablet = true,
                     )

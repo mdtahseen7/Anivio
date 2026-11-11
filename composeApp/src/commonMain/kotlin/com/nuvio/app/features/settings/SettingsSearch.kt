@@ -191,6 +191,21 @@ internal fun settingsSearchEntries(
         )
     }
 
+    addPage(
+        page = SettingsPage.ProfileCustomization,
+        key = "profile-customization",
+        title = stringResource(Res.string.settings_profile_customization),
+        description = stringResource(Res.string.settings_profile_customization_description),
+        icon = Icons.Rounded.Palette,
+    )
+    addPage(
+        page = SettingsPage.ProfileSharing,
+        key = "profile-sharing",
+        title = stringResource(Res.string.settings_profile_sharing),
+        description = stringResource(Res.string.settings_profile_sharing_description),
+        icon = Icons.Rounded.People,
+    )
+
     if (switchProfileAvailable) {
         add(
             key = "switch-profile",

@@ -65,6 +65,8 @@ internal enum class SettingsPage(
     SystemSettings(Res.string.settings_section_system, SettingsCategory.Advanced, Root),
     Anivio(Res.string.settings_section_anivio, SettingsCategory.General, Root),
     AboutSettings(Res.string.compose_settings_root_about_section, SettingsCategory.About, Root),
+    ProfileCustomization(Res.string.settings_profile_customization, SettingsCategory.General, Anivio),
+    ProfileSharing(Res.string.settings_profile_sharing, SettingsCategory.General, Anivio),
     Layout(Res.string.settings_layout_title, SettingsCategory.General, Personalize),
     Account(
         titleRes = Res.string.compose_settings_page_account,
