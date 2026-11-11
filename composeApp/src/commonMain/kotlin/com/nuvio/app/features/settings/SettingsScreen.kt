@@ -709,8 +709,15 @@ private fun MobileSettingsScreen(
             }
 
             when (page) {
-                SettingsPage.Root -> {
-                    settingsSearchRootContent(
+                SettingsPage.Root,
+                SettingsPage.YourSpace,
+                SettingsPage.WatchSettings,
+                SettingsPage.Personalize,
+                SettingsPage.Services,
+                SettingsPage.SystemSettings,
+                SettingsPage.Anivio,
+                SettingsPage.AboutSettings -> {
+                    if (page == SettingsPage.Root) settingsSearchRootContent(
                         query = settingsSearchQuery,
                         entries = searchEntries,
                         isTablet = false,
@@ -719,9 +726,11 @@ private fun MobileSettingsScreen(
                         onQueryChange = { settingsSearchQuery = it },
                         onTargetClick = { openSearchTarget(it) },
                     )
-                    if (settingsSearchQuery.isBlank()) {
+                    if (page != SettingsPage.Root || settingsSearchQuery.isBlank()) {
                     settingsRootContent(
                         isTablet = false,
+                        sectionPage = page,
+                        onSectionClick = onPageChange,
                         onPlaybackClick = { onPageChange(SettingsPage.Playback) },
                         onReaderClick = { onPageChange(SettingsPage.Reader) },
                         onAppearanceClick = { onPageChange(SettingsPage.Appearance) },
@@ -759,8 +768,18 @@ private fun MobileSettingsScreen(
                 SettingsPage.LicensesAttributions -> licensesAttributionsContent(
                     isTablet = false,
                 )
-                SettingsPage.Playback -> playbackSettingsContent(
+                SettingsPage.Playback -> playbackSettingsHubContent(isTablet = false, onPageClick = onPageChange)
+                SettingsPage.PlaybackPlayer,
+                SettingsPage.PlaybackLanguages,
+                SettingsPage.PlaybackSubtitles,
+                SettingsPage.PlaybackStreams,
+                SettingsPage.PlaybackAutoPlay,
+                SettingsPage.PlaybackVideo,
+                SettingsPage.PlaybackSkip,
+                SettingsPage.PlaybackUpNext,
+                SettingsPage.PlaybackP2p -> playbackSettingsContent(
                     isTablet = false,
+                    activePage = page,
                     showLoadingOverlay = showLoadingOverlay,
                     holdToSpeedEnabled = holdToSpeedEnabled,
                     holdToSpeedValue = holdToSpeedValue,
@@ -787,8 +806,10 @@ private fun MobileSettingsScreen(
                 SettingsPage.Reader -> readerSettingsContent(
                     isTablet = false,
                 )
-                SettingsPage.Appearance -> appearanceSettingsContent(
+                SettingsPage.Appearance,
+                SettingsPage.Layout -> appearanceSettingsContent(
                     isTablet = false,
+                    layoutOnly = page == SettingsPage.Layout,
                     selectedTheme = selectedTheme,
                     onThemeSelected = onThemeSelected,
                     amoledEnabled = amoledEnabled,
@@ -1138,8 +1159,15 @@ private fun TabletSettingsScreen(
                     }
                 }
                 when (page) {
-                    SettingsPage.Root -> {
-                        settingsSearchRootContent(
+                    SettingsPage.Root,
+                SettingsPage.YourSpace,
+                SettingsPage.WatchSettings,
+                SettingsPage.Personalize,
+                SettingsPage.Services,
+                SettingsPage.SystemSettings,
+                SettingsPage.Anivio,
+                SettingsPage.AboutSettings -> {
+                        if (page == SettingsPage.Root) settingsSearchRootContent(
                             query = settingsSearchQuery,
                             entries = searchEntries,
                             isTablet = true,
@@ -1148,9 +1176,11 @@ private fun TabletSettingsScreen(
                             onQueryChange = { settingsSearchQuery = it },
                             onTargetClick = { openSearchTarget(it) },
                         )
-                        if (settingsSearchQuery.isBlank()) {
+                        if (page != SettingsPage.Root || settingsSearchQuery.isBlank()) {
                             settingsRootContent(
                                 isTablet = true,
+                                sectionPage = page,
+                                onSectionClick = ::openInlinePage,
                                 onPlaybackClick = { openInlinePage(SettingsPage.Playback) },
                                 onReaderClick = { openInlinePage(SettingsPage.Reader) },
                                 onAppearanceClick = { openInlinePage(SettingsPage.Appearance) },
@@ -1192,8 +1222,18 @@ private fun TabletSettingsScreen(
                     SettingsPage.LicensesAttributions -> licensesAttributionsContent(
                         isTablet = true,
                     )
-                    SettingsPage.Playback -> playbackSettingsContent(
+                    SettingsPage.Playback -> playbackSettingsHubContent(isTablet = true, onPageClick = ::openInlinePage)
+                    SettingsPage.PlaybackPlayer,
+                    SettingsPage.PlaybackLanguages,
+                    SettingsPage.PlaybackSubtitles,
+                    SettingsPage.PlaybackStreams,
+                    SettingsPage.PlaybackAutoPlay,
+                    SettingsPage.PlaybackVideo,
+                    SettingsPage.PlaybackSkip,
+                    SettingsPage.PlaybackUpNext,
+                    SettingsPage.PlaybackP2p -> playbackSettingsContent(
                         isTablet = true,
+                        activePage = page,
                         showLoadingOverlay = showLoadingOverlay,
                         holdToSpeedEnabled = holdToSpeedEnabled,
                         holdToSpeedValue = holdToSpeedValue,
@@ -1220,8 +1260,10 @@ private fun TabletSettingsScreen(
                     SettingsPage.Reader -> readerSettingsContent(
                         isTablet = true,
                     )
-                    SettingsPage.Appearance -> appearanceSettingsContent(
+                    SettingsPage.Appearance,
+                    SettingsPage.Layout -> appearanceSettingsContent(
                         isTablet = true,
+                        layoutOnly = page == SettingsPage.Layout,
                         selectedTheme = selectedTheme,
                         onThemeSelected = onThemeSelected,
                         amoledEnabled = amoledEnabled,

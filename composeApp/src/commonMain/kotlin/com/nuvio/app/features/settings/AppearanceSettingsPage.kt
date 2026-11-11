@@ -67,6 +67,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 
 internal fun LazyListScope.appearanceSettingsContent(
     isTablet: Boolean,
+    layoutOnly: Boolean = false,
     selectedTheme: AppTheme,
     onThemeSelected: (AppTheme) -> Unit,
     amoledEnabled: Boolean,
@@ -88,6 +89,7 @@ internal fun LazyListScope.appearanceSettingsContent(
     onContinueWatchingClick: () -> Unit,
     onPosterCustomizationClick: () -> Unit,
 ) {
+    if (!layoutOnly) {
     item {
         SettingsSection(
             title = stringResource(Res.string.settings_appearance_section_theme),
@@ -211,6 +213,8 @@ internal fun LazyListScope.appearanceSettingsContent(
         }
     }
 
+    }
+    if (layoutOnly) {
     item {
         SettingsSection(
             title = stringResource(Res.string.settings_appearance_section_home),
@@ -276,6 +280,7 @@ internal fun LazyListScope.appearanceSettingsContent(
                 )
             }
         }
+    }
     }
 }
 

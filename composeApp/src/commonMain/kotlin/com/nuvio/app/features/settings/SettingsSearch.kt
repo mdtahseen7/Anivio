@@ -162,6 +162,9 @@ internal fun settingsSearchEntries(
         )
     }
 
+    val playbackTargets = SettingsPage.entries.filter { it.parentPage == SettingsPage.Playback }
+        .associateBy { stringResource(it.titleRes) }
+
     fun addRow(
         page: SettingsPage,
         key: String,
@@ -180,7 +183,11 @@ internal fun settingsSearchEntries(
             section = section,
             category = category,
             icon = icon,
-            target = SettingsSearchTarget.Page(page),
+            target = SettingsSearchTarget.Page(
+                if (page == SettingsPage.Playback) {
+                    playbackTargets[section] ?: page
+                } else page,
+            ),
         )
     }
 

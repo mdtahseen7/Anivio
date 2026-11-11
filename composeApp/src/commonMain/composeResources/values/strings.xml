@@ -567,6 +567,15 @@
     <string name="compose_settings_root_advanced_description">Startup and profile behavior.</string>
     <string name="compose_settings_root_advanced_section">ADVANCED</string>
     <string name="settings_section_you">YOUR SPACE</string>
+    <string name="settings_section_you_description">Account and profiles</string>
+    <string name="settings_section_personalize_description">Appearance and layout</string>
+    <string name="settings_section_watch_description">Content sources and playback</string>
+    <string name="settings_section_services_description">Integrations and tracking</string>
+    <string name="settings_section_system_description">Notifications, privacy, and advanced settings</string>
+    <string name="settings_section_anivio">Anivio extras</string>
+    <string name="settings_section_anivio_description">Manga reader, downloads, and Watch Party</string>
+    <string name="settings_layout_title">Layout</string>
+    <string name="settings_layout_description">Home, detail pages, posters, and stream lists</string>
     <string name="settings_section_watch">WATCH</string>
     <string name="settings_section_personalize">PERSONALIZE</string>
     <string name="settings_section_services">SERVICES</string>

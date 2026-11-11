@@ -101,6 +101,7 @@ import kotlin.math.roundToInt
 
 internal fun LazyListScope.playbackSettingsContent(
     isTablet: Boolean,
+    activePage: SettingsPage,
     showLoadingOverlay: Boolean,
     holdToSpeedEnabled: Boolean,
     holdToSpeedValue: Float,
@@ -124,6 +125,7 @@ internal fun LazyListScope.playbackSettingsContent(
     item {
         PlaybackSettingsSection(
             isTablet = isTablet,
+            activePage = activePage,
             showLoadingOverlay = showLoadingOverlay,
             holdToSpeedEnabled = holdToSpeedEnabled,
             holdToSpeedValue = holdToSpeedValue,
@@ -277,6 +279,7 @@ private fun subtitleColorLabel(color: Color): String {
 @Composable
 private fun PlaybackSettingsSection(
     isTablet: Boolean,
+    activePage: SettingsPage,
     showLoadingOverlay: Boolean,
     holdToSpeedEnabled: Boolean,
     holdToSpeedValue: Float,
@@ -353,7 +356,7 @@ private fun PlaybackSettingsSection(
     Column(
         verticalArrangement = Arrangement.spacedBy(sectionSpacing),
     ) {
-        SettingsSection(
+        if (activePage == SettingsPage.PlaybackPlayer) SettingsSection(
             title = stringResource(Res.string.settings_playback_section_player),
             isTablet = isTablet,
         ) {
@@ -464,7 +467,7 @@ private fun PlaybackSettingsSection(
             }
         }
 
-        SettingsSection(
+        if (activePage == SettingsPage.PlaybackLanguages) SettingsSection(
             title = stringResource(Res.string.settings_playback_section_subtitle_audio),
             isTablet = isTablet,
         ) {
@@ -563,7 +566,7 @@ private fun PlaybackSettingsSection(
             }
         }
 
-        SettingsSection(
+        if (activePage == SettingsPage.PlaybackSubtitles) SettingsSection(
             title = stringResource(Res.string.settings_playback_section_subtitle_rendering),
             isTablet = isTablet,
         ) {
@@ -688,7 +691,7 @@ private fun PlaybackSettingsSection(
         }
 
         if (P2pSettingsRepository.isVisible) {
-            SettingsSection(
+            if (activePage == SettingsPage.PlaybackP2p) SettingsSection(
                 title = stringResource(Res.string.settings_playback_section_p2p),
                 isTablet = isTablet,
             ) {
@@ -768,7 +771,7 @@ private fun PlaybackSettingsSection(
             }
         }
 
-        SettingsSection(
+        if (activePage == SettingsPage.PlaybackStreams) SettingsSection(
             title = stringResource(Res.string.settings_playback_section_stream_selection),
             isTablet = isTablet,
         ) {
@@ -792,7 +795,7 @@ private fun PlaybackSettingsSection(
             }
         }
 
-        SettingsSection(
+        if (activePage == SettingsPage.PlaybackAutoPlay) SettingsSection(
             title = stringResource(Res.string.settings_playback_section_stream_auto_play),
             isTablet = isTablet,
         ) {
@@ -916,12 +919,12 @@ private fun PlaybackSettingsSection(
             }
         }
 
-        if (!isIos) {
+        if (!isIos && activePage == SettingsPage.PlaybackVideo) {
             val decoderEnabled = !autoPlayPlayerSettings.externalPlayerEnabled
             val exoOptionsEnabled = decoderEnabled && androidPlaybackEngine != AndroidPlaybackEngine.Libmpv
             val libmpvOptionsVisible = androidPlaybackEngine != AndroidPlaybackEngine.ExoPlayer
             val libmpvOptionsEnabled = decoderEnabled && libmpvOptionsVisible
-            SettingsSection(
+            if (activePage == SettingsPage.PlaybackVideo) SettingsSection(
                 title = stringResource(Res.string.settings_playback_section_decoder),
                 isTablet = isTablet,
             ) {
@@ -991,7 +994,7 @@ private fun PlaybackSettingsSection(
             }
         }
 
-        if (isIos) {
+        if (isIos && activePage == SettingsPage.PlaybackVideo) {
             SettingsSection(
                 title = stringResource(Res.string.settings_playback_ios_audio_output_section),
                 isTablet = isTablet,
@@ -1051,7 +1054,7 @@ private fun PlaybackSettingsSection(
             }
         }
 
-        SettingsSection(
+        if (activePage == SettingsPage.PlaybackSkip) SettingsSection(
             title = stringResource(Res.string.settings_playback_section_skip_segments),
             isTablet = isTablet,
         ) {
@@ -1169,7 +1172,7 @@ private fun PlaybackSettingsSection(
             }
         }
 
-        SettingsSection(
+        if (activePage == SettingsPage.PlaybackUpNext) SettingsSection(
             title = stringResource(Res.string.settings_playback_section_next_episode),
             isTablet = isTablet,
         ) {
@@ -3824,3 +3827,31 @@ private fun libassRenderTypeRes(renderType: String): StringResource = when (rend
 
 @Composable
 private fun libassRenderTypeLabel(renderType: String): String = stringResource(libassRenderTypeRes(renderType))
+
+internal fun LazyListScope.playbackSettingsHubContent(
+    isTablet: Boolean,
+    onPageClick: (SettingsPage) -> Unit,
+) {
+    val pages = listOf(
+        SettingsPage.PlaybackPlayer,
+        SettingsPage.PlaybackStreams,
+        SettingsPage.PlaybackAutoPlay,
+        SettingsPage.PlaybackUpNext,
+        SettingsPage.PlaybackSkip,
+        SettingsPage.PlaybackLanguages,
+        SettingsPage.PlaybackSubtitles,
+        SettingsPage.PlaybackVideo,
+    ) + if (P2pSettingsRepository.isVisible) listOf(SettingsPage.PlaybackP2p) else emptyList()
+    pages.forEach { target ->
+        item(key = target.name) {
+            SettingsGroup(isTablet = isTablet) {
+                SettingsNavigationRow(
+                    title = stringResource(target.titleRes),
+                    description = null,
+                    isTablet = isTablet,
+                    onClick = { onPageClick(target) },
+                )
+            }
+        }
+    }
+}
