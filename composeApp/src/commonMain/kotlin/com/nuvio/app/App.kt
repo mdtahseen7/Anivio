@@ -3,6 +3,12 @@ package com.nuvio.app
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.layout.Box
+import com.nuvio.app.core.ui.AvSplash
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.ImageLoader
@@ -42,6 +48,10 @@ fun App(
     appGateController: AppGateController? = null,
 ) {
     AppEnvironment {
+        var splashComplete by rememberSaveable { mutableStateOf(!ownsAppRuntime || bypassAppGate) }
+        var gateReady by remember { mutableStateOf(false) }
+        LaunchedEffect(gateReady, splashComplete) { onAppReady?.invoke(gateReady && splashComplete) }
+        Box {
         AppGate(
             initialTab = initialTab,
             initialRoute = initialRoute,
@@ -55,13 +65,15 @@ fun App(
             onGoBack = onGoBack,
             onReplace = onReplace,
             onActivate = onActivate,
-            onAppReady = onAppReady,
+            onAppReady = { gateReady = it },
             onMainContentMountChanged = null,
             onMainContentVisibleChanged = null,
             onTabTitles = onTabTitles,
             nativeProfileSwitcherController = nativeProfileSwitcherController,
             appGateController = appGateController,
         )
+        if (!splashComplete) AvSplash(onFinished = { splashComplete = true })
+        }
     }
 }
 

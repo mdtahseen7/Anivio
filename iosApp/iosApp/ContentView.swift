@@ -4,9 +4,9 @@ import UIKit
 import ComposeApp
 
 private let nuvioBackgroundColor = UIColor(
-    red: 0.051,
-    green: 0.051,
-    blue: 0.051,
+    red: 2.0 / 255.0,
+    green: 2.0 / 255.0,
+    blue: 0.0,
     alpha: 1.0
 )
 

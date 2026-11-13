@@ -8,7 +8,7 @@ import com.nuvio.app.navigation.AppRoute
 import platform.UIKit.UIColor
 import platform.UIKit.UIViewController
 
-private val nuvioBackgroundColor = UIColor(red = 0.051, green = 0.051, blue = 0.051, alpha = 1.0)
+private val nuvioBackgroundColor = UIColor(red = 2.0 / 255.0, green = 2.0 / 255.0, blue = 0.0, alpha = 1.0)
 
 @Suppress("unused")
 fun MainViewController(): UIViewController = nuvioComposeViewController {

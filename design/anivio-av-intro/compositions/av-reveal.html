@@ -1,0 +1,36 @@
+<template>
+<style>
+#root{position:absolute;inset:0;background:var(--ground,#020200);overflow:hidden}
+#av-center{position:absolute;inset:0;display:grid;place-items:center}
+#av-stage{width:800px;height:800px;will-change:transform}
+#av-art{display:block;width:100%;height:100%}
+</style>
+<div id="root" data-composition-id="av-reveal" data-duration="3.2" data-width="1080" data-height="1080">
+<div id="av-logo-clip" class="clip" data-start="0" data-duration="3.2" data-track-index="0" data-hold="true">
+<div id="av-center"><div id="av-stage">
+<svg id="av-art" viewBox="0 0 1600 1600" role="img" aria-label="Anivio AV alternate logo">
+<defs>
+<clipPath id="av-spine-only"><path d="M0 0H1600V1600H0Z M440 921H762L841 1081H364Z" clip-rule="evenodd" fill-rule="evenodd"/></clipPath>
+<clipPath id="av-bar-only"><path d="M440 921H762L841 1081H364Z"/></clipPath>
+<mask id="av-ink-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="1600" height="1600">
+<g clip-path="url(#av-spine-only)"><path id="av-spine" d="M295 1050 L650 350 L1020 1120 L1320 540" fill="none" stroke="white" stroke-width="330" stroke-linecap="square" stroke-linejoin="miter"/></g>
+<g clip-path="url(#av-bar-only)"><path id="av-crossbar" d="M330 1000 L830 1000" fill="none" stroke="white" stroke-width="180" stroke-linecap="butt"/></g>
+<rect id="av-full-mask" width="1600" height="1600" fill="white" opacity="0"/>
+</mask></defs>
+<image id="av-source-logo" href="assets/anivio-av-original.jpg" width="1600" height="1600" mask="url(#av-ink-mask)"/>
+</svg></div></div></div></div>
+<script>
+// Adapted from svg-stroke-trace. Paths are masks, never a redraw of the logo.
+const spine=document.getElementById('av-spine'),bar=document.getElementById('av-crossbar');
+const spineLength=spine.getTotalLength(),barLength=bar.getTotalLength();
+spine.style.strokeDasharray=`${spineLength} ${spineLength}`;
+bar.style.strokeDasharray=`${barLength} ${barLength}`;
+const tl=gsap.timeline({paused:true});
+tl.fromTo(spine,{strokeDashoffset:spineLength},{strokeDashoffset:0,duration:1.18,ease:'power2.inOut'},0.08);
+tl.fromTo(bar,{strokeDashoffset:barLength},{strokeDashoffset:0,duration:0.42,ease:'power3.out'},0.78);
+tl.fromTo('#av-stage',{scale:0.94,y:34,transformOrigin:'50% 47%'},{scale:1.015,y:26,duration:1.12,ease:'power3.out'},0.08);
+tl.to('#av-stage',{scale:1,y:26,duration:0.38,ease:'power2.out'},1.2);
+tl.fromTo('#av-full-mask',{opacity:0},{opacity:1,duration:0.14,ease:'none'},1.18);
+window.__timelines['av-reveal']=tl;
+</script>
+</template>

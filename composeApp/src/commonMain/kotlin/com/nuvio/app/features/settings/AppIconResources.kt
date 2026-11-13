@@ -7,6 +7,7 @@ import org.jetbrains.compose.resources.StringResource
 
 internal val AppIconOption.labelResource: StringResource
     get() = when (this) {
+        AppIconOption.AV -> Res.string.settings_appearance_app_icon_av
         AppIconOption.ORIGINAL -> Res.string.settings_appearance_app_icon_original
         AppIconOption.ARCTIC_BLUE -> Res.string.settings_appearance_app_icon_arctic_blue
         AppIconOption.EMERALD -> Res.string.settings_appearance_app_icon_emerald
@@ -17,6 +18,7 @@ internal val AppIconOption.labelResource: StringResource
 
 internal val AppIconOption.previewResource: DrawableResource
     get() = when (this) {
+        AppIconOption.AV -> Res.drawable.app_icon_av
         AppIconOption.ORIGINAL -> Res.drawable.app_icon_original
         AppIconOption.ARCTIC_BLUE -> Res.drawable.app_icon_arctic_blue
         AppIconOption.EMERALD -> Res.drawable.app_icon_emerald
@@ -36,7 +38,7 @@ internal val AppIconOption.previewResource: DrawableResource
  * wordmark is ever reintroduced.
  */
 internal val AppIconOption.wordmarkResource: DrawableResource
-    get() = Res.drawable.app_logo_wordmark
+    get() = Res.drawable.app_logo_av_wordmark
 
 @Suppress("UnusedReceiverParameter")
 internal fun AppTheme.wordmarkResource(fallback: AppIconOption): DrawableResource =

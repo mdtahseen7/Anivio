@@ -28,15 +28,15 @@ internal actual object AppIconPlatform {
 
     fun currentLauncherIconResource(context: Context): Int {
         val option = AppIconOption.fromPlatformName(currentIconName(context))
-        val resourceName = if (option == AppIconOption.ORIGINAL) {
-            "ic_launcher"
-        } else {
-            "ic_launcher_${option.key}"
+        val resourceName = when (option) {
+            AppIconOption.AV -> "ic_launcher_av"
+            AppIconOption.ORIGINAL -> "ic_launcher"
+            else -> "ic_launcher_${option.key}"
         }
         return context.resources
             .getIdentifier(resourceName, "mipmap", context.packageName)
             .takeIf { it != 0 }
-            ?: com.nuvio.app.R.mipmap.ic_launcher
+            ?: com.nuvio.app.R.mipmap.ic_launcher_av
     }
 
     fun currentLauncherComponent(context: Context): ComponentName {

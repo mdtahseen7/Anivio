@@ -83,8 +83,9 @@ open class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(scrim = 0xFF020200.toInt()),
             navigationBarStyle = SystemBarStyle.dark(
-                scrim = 0xFF020404.toInt(),
+                scrim = 0xFF020200.toInt(),
             ),
         )
         ThemeSettingsStorage.initialize(applicationContext)
@@ -97,7 +98,7 @@ open class MainActivity : AppCompatActivity() {
         // landscape when the keyboard opens. This also covers every launcher-icon activity because
         // they inherit MainActivity.
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
-        window.setBackgroundDrawableResource(R.color.nuvio_background)
+        window.setBackgroundDrawableResource(R.color.av_splash_background)
         pipRemoteActionReceiver = PipRemoteActionReceiver.register(this)
         SyncClientIdentityStorage.initialize(applicationContext)
         AddonHttpClientProvider.initialize(applicationContext)

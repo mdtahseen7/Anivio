@@ -1,0 +1,4 @@
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/av_splash_background" />
+    <item><bitmap android:src="@drawable/app_icon_av" android:gravity="fill" /></item>
+</layer-list>

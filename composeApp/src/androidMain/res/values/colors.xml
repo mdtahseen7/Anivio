@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Exact RGB of the supplied AV artwork's background, shared with AvSplash. -->
+    <color name="av_splash_background">#020200</color>
     <!--
       Adaptive icon backdrop, per colourway.
 
