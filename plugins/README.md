@@ -11,6 +11,7 @@ All plugins run directly inside Anivio's internal **QuickJS** runtime (single-fi
 | Provider | File | Content Type | Stream Format | Features & Highlights |
 |---|---|---|---|---|
 | **Torrentio** | `torrentio.js` | Anime, Series & Movies | Torrent (P2P) | Ported from Saikou's torrent engine. Queries Nyaa, TokyoTosho, HorribleSubs, etc. via AniZip ID mapping. Full magnet URIs with trackers, seeders (👤), file sizes (💾), and Real-Debrid / TorBox support. |
+| **Pahenime** | `pahenime.js` | Anime | HLS (m3u8) | Multi-server, multi-audio (Japanese/English) 1080p HLS via pahenime.com. Image-disguised HLS is stripped server-side by the Luna `/hls` proxy (no subtitles available on the source). |
 | **KickAssAnime** | `kickassanime.js` | Anime | HLS / DASH | Ported from [Saikou's KAA provider](https://github.com/middlegear/Saikou/commit/9010ae6da96bb2f09bce2c625dd861219730edbf) (GPL-3.0): paginated episodes, SUB/DUB locales, Cat/Vid/Duck/Bird servers, validated manifests, and multilingual subtitles. |
 | **MKissa** | `mkissa.js` | Anime | HLS / MP4 | Fast SUB and DUB stream extraction via the Anivexa API. Exposes custom API mirror URL in provider settings. |
 | **AniBD** | `anibd.js` | Anime | HLS (m3u8) | Multi-server stream extraction with fallback resolution for anime series and films. |
@@ -26,7 +27,7 @@ All plugins run directly inside Anivio's internal **QuickJS** runtime (single-fi
 
 ```
 anivio-plugins/
-├── manifest.json        # Repository manifest listing all 9 scrapers with logos and settings
+├── manifest.json        # Repository manifest listing all 10 scrapers with logos and settings
 ├── icons/               # Bundled local icons (PNG / ICO) for offline / local hosting
 │   ├── anibd.png
 │   ├── anikoto.png
@@ -44,6 +45,7 @@ anivio-plugins/
 ├── megaplay.js          # MegaPlay provider
 ├── mkissa.js            # MKissa provider
 ├── oppaistream.js       # OppaiStream provider
+├── pahenime.js          # Pahenime provider (Luna /hls strip proxy)
 ├── torrentio.js         # Torrentio (P2P / Stremio) provider
 └── watchhentai.js       # WatchHentai provider
 ```
@@ -71,7 +73,7 @@ npx --yes serve -l 3000
    ```
    http://<YOUR_LOCAL_IP>:3000/manifest.json
    ```
-4. The repository and all 9 providers will appear automatically with their respective logos and descriptions.
+4. The repository and all 10 providers will appear automatically with their respective logos and descriptions.
 5. Enable the providers you want to use.
 
 ### Step 3: Test Providers

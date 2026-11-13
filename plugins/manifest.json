@@ -1,6 +1,6 @@
 {
   "name": "Anivio Custom Plugins",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Custom anime, hentai, and torrent stream providers for Anivio.",
   "scrapers": [
     {
@@ -203,6 +203,29 @@
       ],
       "supportedFormats": [
         "torrent"
+      ],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "pahenime",
+      "name": "Pahenime",
+      "description": "Pahenime provider with multi-server, multi-audio (Japanese/English) 1080p HLS streams via the Luna /hls strip proxy.",
+      "version": "1.0.0",
+      "author": "mdtahseen7",
+      "filename": "pahenime.js",
+      "logo": "https://pahenime.com/favicon.ico",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "enabled": true,
+      "hasSettings": true,
+      "contentLanguage": [
+        "ja",
+        "en"
+      ],
+      "supportedFormats": [
+        "hls"
       ],
       "supportsExternalPlayer": true
     }
