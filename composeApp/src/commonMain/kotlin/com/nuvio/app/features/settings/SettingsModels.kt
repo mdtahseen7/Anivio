@@ -196,8 +196,7 @@ internal val SettingsPage.opensInlineOnTablet: Boolean
 
 internal fun SettingsPage.previousPage(): SettingsPage? = when (parentPage) {
     SettingsPage.YourSpace, SettingsPage.Personalize, SettingsPage.WatchSettings,
-    SettingsPage.Services, SettingsPage.SystemSettings, SettingsPage.Anivio,
-    SettingsPage.AboutSettings -> SettingsPage.Root
+    SettingsPage.Services, SettingsPage.SystemSettings, SettingsPage.Anivio -> SettingsPage.Root
     else -> parentPage
 }
 

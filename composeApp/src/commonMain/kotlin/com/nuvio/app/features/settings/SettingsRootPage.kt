@@ -7,6 +7,10 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.rounded.AccountCircle
+import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.GridView
+import androidx.compose.material.icons.rounded.Explore
+import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.Extension
@@ -113,42 +117,83 @@ internal fun LazyListScope.settingsRootContent(
     showAboutPage: Boolean = true,
 ) {
     if (sectionPage == SettingsPage.Root) {
-        val groups = buildList {
-            if (showAccountSection) add(SettingsPage.YourSpace)
-            if (showGeneralSection) addAll(listOf(SettingsPage.Personalize, SettingsPage.WatchSettings, SettingsPage.Services, SettingsPage.Anivio))
-            if (showAdvancedSection) add(SettingsPage.SystemSettings)
-            if (showAboutSection) add(SettingsPage.AboutSettings)
+        fun card(key: String, rows: List<SettingsHubRow>) {
+            if (rows.isEmpty()) return
+            item(key = key) {
+                SettingsGroup(isTablet = isTablet) {
+                    rows.forEachIndexed { index, row ->
+                        if (index > 0) SettingsGroupDivider(isTablet)
+                        SettingsNavigationRow(
+                            title = stringResource(row.title), description = stringResource(row.description),
+                            icon = row.icon, isTablet = isTablet, onClick = row.onClick,
+                        )
+                    }
+                }
+            }
         }
-        groups.forEach { group ->
-            settingsRootContent(
-                isTablet = isTablet,
-                sectionPage = group,
-                onSectionClick = onSectionClick,
-                onPlaybackClick = onPlaybackClick,
-                onReaderClick = onReaderClick,
-                onAppearanceClick = onAppearanceClick,
-                onAdvancedClick = onAdvancedClick,
-                onNotificationsClick = onNotificationsClick,
-                incognitoModeEnabled = incognitoModeEnabled,
-                onIncognitoModeChanged = onIncognitoModeChanged,
-                onContentDiscoveryClick = onContentDiscoveryClick,
-                onIntegrationsClick = onIntegrationsClick,
-                onTrackingClick = onTrackingClick,
-                onAboutClick = onAboutClick,
-                onPrivacyPolicyClick = onPrivacyPolicyClick,
-                onLicensesAttributionsClick = onLicensesAttributionsClick,
-                onCheckForUpdatesClick = onCheckForUpdatesClick,
-                onTestUpdateBannerClick = onTestUpdateBannerClick,
-                onDownloadsClick = onDownloadsClick,
-                onAccountClick = onAccountClick,
-                onSwitchProfileClick = onSwitchProfileClick,
-                onWatchPartyClick = onWatchPartyClick,
-                showAccountSection = showAccountSection,
-                showGeneralSection = showGeneralSection,
-                showAboutSection = showAboutSection,
-                showAdvancedSection = showAdvancedSection,
-                showAboutPage = showAboutPage,
-            )
+        if (showAccountSection) card("settings-account", buildList {
+            add(SettingsHubRow(Res.string.compose_settings_page_account, Res.string.compose_settings_root_account_description, Icons.Rounded.Person, onAccountClick))
+            onSwitchProfileClick?.let { add(SettingsHubRow(Res.string.compose_settings_root_switch_profile_title, Res.string.compose_settings_root_switch_profile_description, Icons.Rounded.People, it)) }
+            onWatchPartyClick?.let { add(SettingsHubRow(Res.string.party_title, Res.string.party_settings_description, Icons.Rounded.Groups, it)) }
+        })
+        if (showGeneralSection) {
+            card("settings-appearance", listOf(
+                SettingsHubRow(Res.string.compose_settings_page_appearance, Res.string.settings_root_appearance_summary, Icons.Rounded.Palette, onAppearanceClick),
+                SettingsHubRow(SettingsPage.Layout.titleRes, Res.string.settings_root_layout_summary, Icons.Rounded.GridView) { onSectionClick(SettingsPage.Layout) },
+            ))
+            card("settings-media", listOf(
+                SettingsHubRow(Res.string.compose_settings_page_content_discovery, Res.string.compose_settings_root_content_discovery_description, Icons.Rounded.Explore, onContentDiscoveryClick),
+                SettingsHubRow(Res.string.compose_settings_page_playback, Res.string.settings_playback_subtitle, Icons.Rounded.PlayArrow, onPlaybackClick),
+            ))
+            card("settings-services", listOf(
+                SettingsHubRow(Res.string.compose_settings_page_integrations, Res.string.compose_settings_root_integrations_description, Icons.Rounded.Link, onIntegrationsClick),
+                SettingsHubRow(Res.string.compose_settings_page_tracking, Res.string.compose_settings_root_tracking_description, Icons.Default.Sync, onTrackingClick),
+            ))
+        }
+        if (showGeneralSection) {
+            item(key = "settings-anivio") {
+                androidx.compose.foundation.layout.Column {
+                    SettingsGroup(isTablet) {
+                        listOf(
+                            SettingsHubRow(SettingsPage.ProfileCustomization.titleRes, Res.string.settings_profile_customization_description, Icons.Rounded.Palette) { onSectionClick(SettingsPage.ProfileCustomization) },
+                            SettingsHubRow(SettingsPage.ProfileSharing.titleRes, Res.string.settings_profile_sharing_description, Icons.Rounded.People) { onSectionClick(SettingsPage.ProfileSharing) },
+                            SettingsHubRow(Res.string.compose_settings_page_reader, Res.string.compose_settings_root_reader_description, Icons.Rounded.MenuBook, onReaderClick),
+                            SettingsHubRow(Res.string.compose_settings_root_downloads_title, Res.string.compose_settings_root_downloads_description, Icons.Rounded.CloudDownload, onDownloadsClick),
+                        ).forEachIndexed { index, row ->
+                            if (index > 0) SettingsGroupDivider(isTablet)
+                            SettingsNavigationRow(title = stringResource(row.title), description = stringResource(row.description), icon = row.icon, isTablet = isTablet, onClick = row.onClick)
+                        }
+                        SettingsGroupDivider(isTablet)
+                        SettingsSwitchRow(
+                            title = stringResource(Res.string.settings_incognito_mode_title),
+                            description = stringResource(Res.string.settings_incognito_mode_description),
+                            icon = Icons.Rounded.VisibilityOff, checked = incognitoModeEnabled,
+                            isTablet = isTablet, onCheckedChange = { enabled ->
+                                onIncognitoModeChanged(enabled)
+                                NuvioToastController.show(if (enabled) "Incognito mode is on" else "Incognito mode is off")
+                            },
+                        )
+                    }
+                }
+            }
+        }
+        card("settings-system", buildList {
+            if (showAdvancedSection) {
+                add(SettingsHubRow(Res.string.compose_settings_page_notifications, Res.string.compose_settings_root_notifications_description, Icons.Rounded.Notifications, onNotificationsClick))
+                add(SettingsHubRow(Res.string.compose_settings_page_advanced, Res.string.compose_settings_root_advanced_description, Icons.Rounded.Build, onAdvancedClick))
+            }
+            if (showAboutSection) add(SettingsHubRow(Res.string.compose_settings_page_about, Res.string.settings_root_about_summary, Icons.Rounded.Info) { onSectionClick(SettingsPage.AboutSettings) })
+        })
+        item(key = "settings-footer") {
+            androidx.compose.foundation.layout.Column(
+                Modifier.fillMaxWidth().padding(vertical = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+            ) {
+                AppBrandWordmark(Modifier.height(28.dp), contentDescription = "Anivio")
+                Text(stringResource(Res.string.compose_about_made_with), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+                Text(stringResource(Res.string.compose_about_version_format, AppVersionConfig.VERSION_NAME, AppVersionConfig.VERSION_CODE.toString()), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
         return
     }

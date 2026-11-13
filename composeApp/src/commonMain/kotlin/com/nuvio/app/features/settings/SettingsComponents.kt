@@ -264,7 +264,7 @@ internal fun SettingsNavigationRow(
             if (icon != null || iconPainter != null) {
                 Surface(
                     modifier = Modifier.size(iconSize),
-                    color = tokens.colors.accent.copy(alpha = tokens.opacity.pressed),
+                    color = tokens.colors.textPrimary.copy(alpha = 0.10f),
                     shape = tokens.shapes.compactCard,
                 ) {
                     Row(
@@ -283,7 +283,7 @@ internal fun SettingsNavigationRow(
                             Icon(
                                 imageVector = icon,
                                 contentDescription = null,
-                                tint = tokens.colors.accent,
+                                tint = tokens.colors.textPrimary,
                             )
                         }
                     }

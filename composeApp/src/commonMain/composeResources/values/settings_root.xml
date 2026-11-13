@@ -1,0 +1,5 @@
+<resources>
+    <string name="settings_root_appearance_summary">Themes, app icon, and language</string>
+    <string name="settings_root_layout_summary">Home, cards, details, streams, and navigation</string>
+    <string name="settings_root_about_summary">App info, updates, and acknowledgements</string>
+</resources>
