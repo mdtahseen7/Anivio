@@ -437,8 +437,8 @@ actual object PluginRepository {
                 return@update state
             }
             val moving = list.removeAt(from)
-            val adjustedTarget = list.indexOfFirst { it.id == targetScraperId }
-            list.add(adjustedTarget.coerceAtLeast(0), moving)
+            // The target is a drop position, including when dragging downward past it.
+            list.add(target, moving)
             state.copy(scrapers = list)
         }
         persist()

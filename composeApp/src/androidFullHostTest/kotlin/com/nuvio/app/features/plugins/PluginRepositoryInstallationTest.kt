@@ -21,6 +21,35 @@ import kotlin.test.assertTrue
 @Config(sdk = [34], application = android.app.Application::class)
 class PluginRepositoryInstallationTest {
     @Test
+    fun draggingProviderToLowerAndHigherPositionsPreservesDropOrder() = runBlocking {
+        val server = MockWebServer()
+        server.start()
+        try {
+            resetRepository()
+            addRepository(server)
+            val originalIds = PluginRepository.uiState.value.scrapers.map { it.id }
+
+            PluginRepository.moveScraperTo(originalIds[0], originalIds[1])
+            assertEquals(originalIds.reversed(), PluginRepository.uiState.value.scrapers.map { it.id })
+            val stored = withTimeout(5_000) {
+                var state: StoredPluginsState? = null
+                while (state?.scrapers?.map { it.id } != originalIds.reversed()) {
+                    delay(20)
+                    state = PluginStorage.loadState(com.nuvio.app.features.profiles.ProfileRepository.activeProfileId)
+                        ?.let { kotlinx.serialization.json.Json.decodeFromString<StoredPluginsState>(it) }
+                }
+                requireNotNull(state)
+            }
+            assertEquals(originalIds.reversed(), stored.scrapers.map { it.id })
+
+            PluginRepository.moveScraperTo(originalIds[0], originalIds[1])
+            assertEquals(originalIds, PluginRepository.uiState.value.scrapers.map { it.id })
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
     fun addingRepositoryDoesNotDownloadProviderScripts() = runBlocking {
         val server = MockWebServer()
         server.start()

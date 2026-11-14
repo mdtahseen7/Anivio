@@ -1,8 +1,8 @@
 package com.nuvio.app.features.plugins
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,10 +31,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,7 +46,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -54,6 +57,7 @@ import com.nuvio.app.core.ui.NuvioInputField
 import com.nuvio.app.core.ui.NuvioPrimaryButton
 import com.nuvio.app.core.ui.NuvioSectionLabel
 import com.nuvio.app.core.ui.NuvioSurfaceCard
+import com.nuvio.app.core.ui.nuvio
 import com.nuvio.app.features.tmdb.TmdbSettingsRepository
 import com.nuvio.app.features.plugins.runtime.PluginRuntime
 import kotlinx.coroutines.launch
@@ -90,10 +94,6 @@ import nuvio.composeapp.generated.resources.plugins_provider_not_installed
 import nuvio.composeapp.generated.resources.plugins_provider_version
 import nuvio.composeapp.generated.resources.plugins_repo_fallback_label
 import nuvio.composeapp.generated.resources.plugins_repo_version
-import nuvio.composeapp.generated.resources.plugins_reorder_down
-import nuvio.composeapp.generated.resources.plugins_reorder_hint
-import nuvio.composeapp.generated.resources.plugins_reorder_title
-import nuvio.composeapp.generated.resources.plugins_reorder_up
 import nuvio.composeapp.generated.resources.plugins_section_add_repo
 import nuvio.composeapp.generated.resources.plugins_section_installed_repos
 import nuvio.composeapp.generated.resources.plugins_section_overview
@@ -103,6 +103,7 @@ import nuvio.composeapp.generated.resources.plugins_test_failed
 import nuvio.composeapp.generated.resources.plugins_test_results_count
 import nuvio.composeapp.generated.resources.plugins_tmdb_required_message
 import org.jetbrains.compose.resources.stringResource
+import sh.calvin.reorderable.ReorderableColumn
 
 private enum class PluginContentFilter { ALL, ANIME, MANGA }
 
@@ -121,6 +122,7 @@ fun PluginsSettingsPageContent(
         TmdbSettingsRepository.uiState
     }.collectAsStateWithLifecycle()
     val coroutineScope = rememberCoroutineScope()
+    val hapticFeedback = LocalHapticFeedback.current
 
     var repositoryUrl by rememberSaveable { mutableStateOf("") }
     var message by rememberSaveable { mutableStateOf<String?>(null) }
@@ -151,7 +153,6 @@ fun PluginsSettingsPageContent(
         val orderById = uiState.scrapers.mapIndexed { index, scraper -> scraper.id to index }.toMap()
         uiState.scrapers.sortedWith(
             compareBy<PluginScraper>(
-                { if (it.enabled) 0 else 1 },
                 { repositoryNameByUrl[it.repositoryUrl]?.lowercase() ?: it.repositoryUrl.lowercase() },
                 { orderById[it.id] ?: Int.MAX_VALUE },
             ),
@@ -163,7 +164,7 @@ fun PluginsSettingsPageContent(
             }
         }
     }
-    // One group per repository, preserving the repo-then-name sort order above.
+    // One group per repository, keeping the saved provider order regardless of enabled state.
     val scrapersByRepo = remember(sortedScrapers) {
         sortedScrapers.groupBy { it.repositoryUrl }
     }
@@ -401,53 +402,74 @@ fun PluginsSettingsPageContent(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    scrapers.forEach { scraper ->
-                        val repositoryIndex = scrapers.indexOfFirst { it.id == scraper.id }
-                        Spacer(modifier = Modifier.height(12.dp))
-                        ProviderRow(
-                            scraper = scraper,
-                            results = testResults[scraper.id],
-                            detailsExpanded = expandedScraperId == scraper.id,
-                            canMoveUp = repositoryIndex > 0,
-                            canMoveDown = repositoryIndex >= 0 && repositoryIndex < scrapers.lastIndex,
-                            onToggleDetails = {
-                                expandedScraperId = if (expandedScraperId == scraper.id) null else scraper.id
-                            },
-                            onReorder = { moveUp ->
-                                PluginRepository.moveScraper(scraper.id, moveUp)
-                            },
-                            isTesting = testingScraperId == scraper.id,
-                            testEnabled = hasTmdbApiKey && scraper.enabled && scraper.code.isNotBlank(),
-                            onTest = {
-                                testingScraperId = scraper.id
-                                coroutineScope.launch {
-                                    PluginRepository.testScraper(scraper.id)
-                                        .onSuccess { testResults[scraper.id] = it }
-                                        .onFailure { error ->
-                                            testResults[scraper.id] = listOf(
-                                                PluginRuntimeResult(
-                                                    title = testErrorTitle,
-                                                    name = error.message ?: testFailedDefault,
-                                                    url = "about:error",
-                                                ),
-                                            )
-                                        }
-                                    testingScraperId = null
+                    Spacer(modifier = Modifier.height(12.dp))
+                    ReorderableColumn(
+                        list = scrapers,
+                        onSettle = { from, to ->
+                            if (from != to) {
+                                PluginRepository.moveScraperTo(scrapers[from].id, scrapers[to].id)
+                            }
+                        },
+                        onMove = {
+                            hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        },
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) { _, scraper, isDragging ->
+                        key(scraper.id) {
+                            ReorderableItem {
+                                val elevation by animateDpAsState(if (isDragging) 6.dp else 0.dp)
+                                Surface(
+                                    color = MaterialTheme.nuvio.colors.surface,
+                                    shadowElevation = elevation,
+                                    shape = RoundedCornerShape(12.dp),
+                                ) {
+                                    ProviderRow(
+                                        modifier = Modifier.longPressDraggableHandle(
+                                            onDragStarted = {
+                                                hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            },
+                                        ),
+                                        scraper = scraper,
+                                        results = testResults[scraper.id],
+                                        detailsExpanded = expandedScraperId == scraper.id,
+                                        onToggleDetails = {
+                                            expandedScraperId = if (expandedScraperId == scraper.id) null else scraper.id
+                                        },
+                                        isTesting = testingScraperId == scraper.id,
+                                        testEnabled = hasTmdbApiKey && scraper.enabled && scraper.code.isNotBlank(),
+                                        onTest = {
+                                            testingScraperId = scraper.id
+                                            coroutineScope.launch {
+                                                PluginRepository.testScraper(scraper.id)
+                                                    .onSuccess { testResults[scraper.id] = it }
+                                                    .onFailure { error ->
+                                                        testResults[scraper.id] = listOf(
+                                                            PluginRuntimeResult(
+                                                                title = testErrorTitle,
+                                                                name = error.message ?: testFailedDefault,
+                                                                url = "about:error",
+                                                            ),
+                                                        )
+                                                    }
+                                                testingScraperId = null
+                                            }
+                                        },
+                                        onToggle = { PluginRepository.toggleScraper(scraper.id, it) },
+                                        onConfigure = if (scraper.hasSettings && scraper.enabled && scraper.code.isNotBlank()) {
+                                            {
+                                                coroutineScope.launch {
+                                                    val layout = PluginRuntime.getPluginSettingsLayout(scraper.code, scraper.id)
+                                                    if (layout != null) {
+                                                        configuringScraper = scraper
+                                                        configuringLayout = layout
+                                                    }
+                                                }
+                                            }
+                                        } else null,
+                                    )
                                 }
-                            },
-                            onToggle = { PluginRepository.toggleScraper(scraper.id, it) },
-                            onConfigure = if (scraper.hasSettings && scraper.enabled && scraper.code.isNotBlank()) {
-                                {
-                                    coroutineScope.launch {
-                                        val layout = PluginRuntime.getPluginSettingsLayout(scraper.code, scraper.id)
-                                        if (layout != null) {
-                                            configuringScraper = scraper
-                                            configuringLayout = layout
-                                        }
-                                    }
-                                }
-                            } else null,
-                        )
+                            }
+                        }
                     }
                 }
             }
@@ -523,13 +545,11 @@ private fun PluginToggleRow(
 
 @Composable
 private fun ProviderRow(
+    modifier: Modifier = Modifier,
     scraper: PluginScraper,
     results: List<PluginRuntimeResult>?,
     detailsExpanded: Boolean,
-    canMoveUp: Boolean,
-    canMoveDown: Boolean,
     onToggleDetails: () -> Unit,
-    onReorder: (Boolean) -> Unit,
     isTesting: Boolean,
     testEnabled: Boolean,
     onTest: () -> Unit,
@@ -539,29 +559,10 @@ private fun ProviderRow(
     val visibleResults = results.orEmpty()
     var actionsExpanded by remember { mutableStateOf(false) }
 
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .pointerInput(scraper.id, canMoveUp, canMoveDown) {
-                    var distance = 0f
-                    detectDragGesturesAfterLongPress(
-                        onDragStart = { distance = 0f },
-                        onDragCancel = { distance = 0f },
-                        onDragEnd = { distance = 0f },
-                        onDrag = { change, dragAmount ->
-                            change.consume()
-                            distance += dragAmount.y
-                            if (distance <= -28f && canMoveUp) {
-                                onReorder(true)
-                                distance = 0f
-                            } else if (distance >= 28f && canMoveDown) {
-                                onReorder(false)
-                                distance = 0f
-                            }
-                        },
-                    )
-                }
                 .clickable(onClick = onToggleDetails),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
