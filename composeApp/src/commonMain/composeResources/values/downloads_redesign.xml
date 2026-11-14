@@ -1,0 +1,17 @@
+<resources>
+    <string name="downloads_tab_anime">Anime</string>
+    <string name="downloads_tab_manga">Manga</string>
+    <string name="downloads_offline_library">Your offline library</string>
+    <string name="downloads_saved_count">%1$d saved</string>
+    <string name="downloads_size_label">Download size</string>
+    <string name="downloads_pending_count">%1$d pending</string>
+    <string name="downloads_pause_all">Pause all</string>
+    <string name="downloads_resume_all">Resume all</string>
+    <string name="downloads_retry_all">Retry failed</string>
+    <string name="downloads_item_actions">Download actions</string>
+    <string name="downloads_read">Read chapter</string>
+    <string name="downloads_empty_hint">Save an episode or movie to watch it here, even without a connection.</string>
+    <string name="downloads_manga_empty_title">Your next chapter, offline</string>
+    <string name="downloads_manga_empty_hint">Download manga chapters and take your reading with you.</string>
+    <string name="downloads_manga_saved">Saved chapters</string>
+</resources>

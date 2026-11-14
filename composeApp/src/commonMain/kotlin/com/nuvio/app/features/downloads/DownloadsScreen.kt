@@ -1,32 +1,16 @@
 package com.nuvio.app.features.downloads
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Dns
-import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.Folder
-import androidx.compose.material.icons.rounded.Pause
-import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -37,20 +21,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil3.compose.AsyncImage
 import com.nuvio.app.core.i18n.localizedByteUnit
 import com.nuvio.app.core.ui.NuvioBottomSheetActionRow
 import com.nuvio.app.core.ui.NuvioModalBottomSheet
 import com.nuvio.app.core.ui.NuvioScreen
-import com.nuvio.app.core.ui.NuvioScreenHeader
 import com.nuvio.app.core.ui.NuvioStatusModal
 import com.nuvio.app.core.ui.NuvioToastController
 import com.nuvio.app.core.ui.dismissNuvioBottomSheet
@@ -106,9 +84,9 @@ fun DownloadsScreen(
         }
     }
 
-    NuvioScreen {
+    NuvioScreen(horizontalPadding = 20.dp, topPadding = 0.dp) {
         stickyHeader {
-            NuvioScreenHeader(
+            DownloadsHeader(
                 title = if (selectedShowId == null) {
                     stringResource(Res.string.compose_settings_root_downloads_title)
                 } else {
@@ -121,18 +99,9 @@ fun DownloadsScreen(
                         onBack()
                     }
                 },
-                actions = {
-                    IconButton(
-                        onClick = {
-                            if (!DownloadsPlatformDownloader.openDownloadsDirectory()) {
-                                NuvioToastController.show(openDownloadsDirectoryFailedText)
-                            }
-                        },
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Folder,
-                            contentDescription = stringResource(Res.string.downloads_open_directory),
-                        )
+                onOpenFolder = {
+                    if (!DownloadsPlatformDownloader.openDownloadsDirectory()) {
+                        NuvioToastController.show(openDownloadsDirectoryFailedText)
                     }
                 },
             )
@@ -146,17 +115,17 @@ fun DownloadsScreen(
                 )
             }
             if (selectedMediaTab == 0) {
-            downloadsRootContent(
-                uiState = uiState,
-                mangaUiState = mangaUiState,
-                defaultServerName = downloadSettings.defaultServerAddonName,
-                onPickDefaultServer = { showServerPicker = true },
-                onOpenDownload = onOpenDownload,
-                onOpenShow = { showId, title ->
-                    onNavigateToShow?.invoke(showId, title) ?: run { selectedShowId = showId }
-                },
-                onDeleteDownload = { downloadPendingDeletionId = it },
-            )
+                downloadsRootContent(
+                    uiState = uiState,
+                    mangaUiState = mangaUiState,
+                    defaultServerName = downloadSettings.defaultServerAddonName,
+                    onPickDefaultServer = { showServerPicker = true },
+                    onOpenDownload = onOpenDownload,
+                    onOpenShow = { showId, title ->
+                        onNavigateToShow?.invoke(showId, title) ?: run { selectedShowId = showId }
+                    },
+                    onDeleteDownload = { downloadPendingDeletionId = it },
+                )
             } else {
                 downloadsMangaContent(
                     uiState = mangaUiState,
@@ -324,7 +293,7 @@ private fun LazyListScope.downloadsRootContent(
 
     if (activeItems.isNotEmpty()) {
         item {
-            SectionTitle(stringResource(Res.string.downloads_section_active))
+            SectionTitle(stringResource(Res.string.downloads_section_active), activeItems.size)
         }
         items(
             items = activeItems,
@@ -343,7 +312,7 @@ private fun LazyListScope.downloadsRootContent(
 
     if (completedMovies.isNotEmpty()) {
         item {
-            SectionTitle(stringResource(Res.string.downloads_section_movies))
+            SectionTitle(stringResource(Res.string.downloads_section_movies), completedMovies.size)
         }
         items(
             items = completedMovies,
@@ -362,125 +331,30 @@ private fun LazyListScope.downloadsRootContent(
 
     if (completedShows.isNotEmpty()) {
         item {
-            SectionTitle(stringResource(Res.string.downloads_section_shows))
+            SectionTitle(stringResource(Res.string.downloads_section_shows), completedShows.size)
         }
         items(
             items = completedShows,
             key = { (item, _) -> item.parentMetaId },
         ) { (item, episodes) ->
-            val showPoster = item.poster ?: item.background
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                    .clickable { onOpenShow(item.parentMetaId, item.title) },
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.surfaceContainer,
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(width = 48.dp, height = 68.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-                    ) {
-                        if (showPoster != null) {
-                            AsyncImage(
-                                model = showPoster,
-                                contentDescription = item.title,
-                                modifier = Modifier
-                                    .size(width = 48.dp, height = 68.dp)
-                                    .clip(RoundedCornerShape(8.dp)),
-                                contentScale = ContentScale.Crop,
-                            )
-                        }
-                    }
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Text(
-                            text = item.title,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = stringResource(Res.string.downloads_episode_count, episodes.size),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Icon(
-                        imageVector = Icons.Rounded.PlayArrow,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+            DownloadedSeriesCard(
+                title = item.title,
+                poster = item.poster ?: item.background,
+                subtitle = stringResource(Res.string.downloads_episode_count, episodes.size),
+                size = formatBytes(episodes.sumOf { it.totalBytes ?: it.downloadedBytes }),
+                onClick = { onOpenShow(item.parentMetaId, item.title) },
+            )
+
+
         }
     }
 
     if (uiState.items.isEmpty()) {
         item {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 40.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = stringResource(Res.string.downloads_empty_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun DownloadsMediaTabs(
-    selectedIndex: Int,
-    onSelected: (Int) -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        listOf("Anime", "Manga").forEachIndexed { index, label ->
-            Surface(
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable { onSelected(index) },
-                shape = RoundedCornerShape(12.dp),
-                color = if (selectedIndex == index) {
-                    MaterialTheme.colorScheme.primaryContainer
-                } else {
-                    MaterialTheme.colorScheme.surfaceContainer
-                },
-            ) {
-                Text(
-                    text = label,
-                    modifier = Modifier.padding(vertical = 10.dp),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = if (selectedIndex == index) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
-            }
+            DownloadEmptyState(
+                title = stringResource(Res.string.downloads_empty_title),
+                subtitle = stringResource(Res.string.downloads_empty_hint),
+            )
         }
     }
 }
@@ -508,41 +382,35 @@ private fun LazyListScope.downloadsMangaContent(
             },
         )
     }
-    val items = uiState.items.sortedWith(
-        compareBy<MangaDownloadItem> { it.title.lowercase() }
-            .thenBy { it.chapterNumber.toDoubleOrNull() ?: Double.MAX_VALUE }
-            .thenBy { it.chapterNumber },
+    val chapterOrder = compareBy<MangaDownloadItem> { it.title.lowercase() }
+        .thenBy { it.chapterNumber.toDoubleOrNull() ?: Double.MAX_VALUE }
+        .thenBy { it.chapterNumber }
+    val groups = listOf(
+        Res.string.downloads_section_active to uiState.activeItems.sortedWith(chapterOrder),
+        Res.string.downloads_manga_saved to uiState.completedItems.sortedWith(chapterOrder),
     )
-
-    if (items.isNotEmpty()) {
-        item { SectionTitle("Manga chapters") }
-        items(
-            items = items,
-            key = { it.id },
-        ) { item ->
-            MangaDownloadRow(
-                item = item,
-                onOpen = { onOpenDownload(item) },
-                onPause = { MangaDownloadsRepository.pauseDownload(item.id) },
-                onResume = { MangaDownloadsRepository.resumeDownload(item.id) },
-                onRetry = { MangaDownloadsRepository.retryDownload(item.id) },
-                onDelete = { onDeleteDownload(item.id) },
-            )
-        }
-    } else {
-        item {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 40.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = "No manga downloads yet",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+    groups.forEach { (title, chapters) ->
+        if (chapters.isNotEmpty()) {
+            item { SectionTitle(stringResource(title), chapters.size) }
+            items(items = chapters, key = { it.id }) { chapter ->
+                MangaDownloadRow(
+                    item = chapter,
+                    onOpen = { onOpenDownload(chapter) },
+                    onPause = { MangaDownloadsRepository.pauseDownload(chapter.id) },
+                    onResume = { MangaDownloadsRepository.resumeDownload(chapter.id) },
+                    onRetry = { MangaDownloadsRepository.retryDownload(chapter.id) },
+                    onDelete = { onDeleteDownload(chapter.id) },
                 )
             }
+        }
+    }
+    if (uiState.items.isEmpty()) {
+        item {
+            DownloadEmptyState(
+                title = stringResource(Res.string.downloads_manga_empty_title),
+                subtitle = stringResource(Res.string.downloads_manga_empty_hint),
+                manga = true,
+            )
         }
     }
 }
@@ -566,46 +434,13 @@ private fun DownloadsManagementBar(
     onResumeAll: () -> Unit,
     onRetryAll: () -> Unit,
 ) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 6.dp),
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer,
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-            Text(
-                text = "${summary.activeCount} active • ${summary.queuedCount} queued • " +
-                    "${summary.completedCount} completed • ${formatBytes(summary.bytes)} stored",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(
-                    onClick = onPauseAll,
-                    enabled = summary.activeCount > 0 || summary.queuedCount > 0,
-                ) {
-                    Icon(Icons.Rounded.Pause, contentDescription = "Pause all downloads")
-                }
-                IconButton(
-                    onClick = onResumeAll,
-                    enabled = summary.pausedCount > 0,
-                ) {
-                    Icon(Icons.Rounded.PlayArrow, contentDescription = "Resume paused downloads")
-                }
-                IconButton(
-                    onClick = onRetryAll,
-                    enabled = summary.failedCount > 0,
-                ) {
-                    Icon(Icons.Rounded.Refresh, contentDescription = "Retry failed downloads")
-                }
-            }
-        }
-    }
+    DownloadsOverview(
+        summary = summary,
+        size = formatBytes(summary.bytes),
+        onPauseAll = onPauseAll,
+        onResumeAll = onResumeAll,
+        onRetryAll = onRetryAll,
+    )
 }
 
 @Composable
@@ -617,114 +452,22 @@ private fun MangaDownloadRow(
     onRetry: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp)
-            .clickable(enabled = item.isPlayable, onClick = onOpen),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-    ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 10.dp, top = 10.dp, end = 4.dp, bottom = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.Top,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(width = 64.dp, height = 84.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    item.poster?.let { poster ->
-                        AsyncImage(
-                            model = poster,
-                            contentDescription = item.title,
-                            modifier = Modifier
-                                .size(width = 64.dp, height = 84.dp)
-                                .clip(RoundedCornerShape(8.dp)),
-                            contentScale = ContentScale.Crop,
-                        )
-                    }
-                    if (item.status == DownloadStatus.Downloading) {
-                        Text(
-                            text = "${(item.progressFraction * 100).toInt()}%",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                }
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                ) {
-                    Text(
-                        text = item.title,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = "Chapter ${item.chapterNumber}${item.chapterTitle?.let { " • $it" }.orEmpty()}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = mangaDownloadStatusText(item),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = when (item.status) {
-                            DownloadStatus.Completed -> MaterialTheme.colorScheme.primary
-                            DownloadStatus.Failed -> MaterialTheme.colorScheme.error
-                            else -> MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    )
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    when (item.status) {
-                        DownloadStatus.Queued -> IconButton(onClick = onPause) {
-                            Icon(Icons.Rounded.Pause, contentDescription = stringResource(Res.string.compose_action_pause))
-                        }
-                        DownloadStatus.Downloading -> IconButton(onClick = onPause) {
-                            Icon(Icons.Rounded.Pause, contentDescription = stringResource(Res.string.compose_action_pause))
-                        }
-                        DownloadStatus.Paused -> IconButton(onClick = onResume) {
-                            Icon(Icons.Rounded.PlayArrow, contentDescription = stringResource(Res.string.action_resume))
-                        }
-                        DownloadStatus.Failed -> IconButton(onClick = onRetry) {
-                            Icon(Icons.Rounded.Refresh, contentDescription = stringResource(Res.string.action_retry))
-                        }
-                        DownloadStatus.Completed -> IconButton(onClick = onOpen) {
-                            Icon(Icons.Rounded.PlayArrow, contentDescription = stringResource(Res.string.action_play))
-                        }
-                    }
-                    IconButton(onClick = onDelete) {
-                        Icon(Icons.Rounded.Delete, contentDescription = stringResource(Res.string.action_delete))
-                    }
-                }
-            }
-            if (item.status == DownloadStatus.Downloading) {
-                LinearProgressIndicator(
-                    progress = { item.progressFraction },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 10.dp)
-                        .padding(bottom = 10.dp)
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp)),
-                )
-            } else {
-                Spacer(modifier = Modifier.height(6.dp))
-            }
-        }
-    }
+    DownloadMediaCard(
+        title = item.title,
+        subtitle = "Chapter ${item.chapterNumber}${item.chapterTitle?.let { " • $it" }.orEmpty()}",
+        artwork = item.poster,
+        portrait = true,
+        status = item.status,
+        statusText = mangaDownloadStatusText(item),
+        progress = item.progressFraction,
+        knownProgress = item.totalPages > 0,
+        playable = item.isPlayable,
+        onOpen = onOpen,
+        onPause = onPause,
+        onResume = onResume,
+        onRetry = onRetry,
+        onDelete = onDelete,
+    )
 }
 
 private fun mangaDownloadStatusText(item: MangaDownloadItem): String = when (item.status) {
@@ -756,18 +499,10 @@ private fun LazyListScope.downloadsShowContent(
 
     if (seasons.isEmpty()) {
         item {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 40.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = stringResource(Res.string.downloads_empty_episodes),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            DownloadEmptyState(
+                title = stringResource(Res.string.downloads_empty_episodes),
+                subtitle = stringResource(Res.string.downloads_empty_hint),
+            )
         }
         return
     }
@@ -780,6 +515,7 @@ private fun LazyListScope.downloadsShowContent(
                 } else {
                     stringResource(Res.string.episodes_season, seasonNumber)
                 },
+                count = entries.size,
             )
         }
 
@@ -810,179 +546,23 @@ private fun DownloadRow(
     onRetry: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    val displayTitle = item.displayTitle()
-    val displaySubtitle = downloadDisplaySubtitle(
-        item = item,
-        displayTitle = displayTitle,
+    val title = item.displayTitle()
+    DownloadMediaCard(
+        title = title,
+        subtitle = downloadDisplaySubtitle(item, title),
+        artwork = item.episodeThumbnail ?: item.background ?: item.poster,
+        portrait = false,
+        status = item.status,
+        statusText = statusText(item),
+        progress = item.progressFraction,
+        knownProgress = (item.totalBytes ?: 0L) > 0L,
+        playable = item.isPlayable,
+        onOpen = onOpen,
+        onPause = onPause,
+        onResume = onResume,
+        onRetry = onRetry,
+        onDelete = onDelete,
     )
-
-    val thumbnailUrl = item.episodeThumbnail ?: item.poster ?: item.background
-
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp)
-            .clickable(enabled = item.isPlayable, onClick = onOpen),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 10.dp, top = 10.dp, end = 4.dp, bottom = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.Top,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(width = 100.dp, height = 60.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (thumbnailUrl != null) {
-                        AsyncImage(
-                            model = thumbnailUrl,
-                            contentDescription = displayTitle,
-                            modifier = Modifier
-                                .size(width = 100.dp, height = 60.dp)
-                                .clip(RoundedCornerShape(8.dp)),
-                            contentScale = ContentScale.Crop,
-                        )
-                    }
-                    if (item.status == DownloadStatus.Downloading) {
-                        Box(
-                            modifier = Modifier
-                                .size(width = 100.dp, height = 60.dp)
-                                .background(
-                                    MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
-                                    RoundedCornerShape(8.dp),
-                                ),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = "${(item.progressFraction * 100).toInt()}%",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
-                    }
-                }
-
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    Text(
-                        text = displayTitle,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    if (displaySubtitle.isNotBlank()) {
-                        Text(
-                            text = displaySubtitle,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    Text(
-                        text = statusText(item),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = when (item.status) {
-                            DownloadStatus.Completed -> MaterialTheme.colorScheme.primary
-                            DownloadStatus.Failed -> MaterialTheme.colorScheme.error
-                            else -> MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    )
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    when (item.status) {
-                        DownloadStatus.Queued -> {
-                            IconButton(onClick = onPause) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Pause,
-                                    contentDescription = stringResource(Res.string.compose_action_pause),
-                                )
-                            }
-                        }
-                        DownloadStatus.Downloading -> {
-                            IconButton(onClick = onPause) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Pause,
-                                    contentDescription = stringResource(Res.string.compose_action_pause),
-                                )
-                            }
-                        }
-                        DownloadStatus.Paused -> {
-                            IconButton(onClick = onResume) {
-                                Icon(
-                                    imageVector = Icons.Rounded.PlayArrow,
-                                    contentDescription = stringResource(Res.string.action_resume),
-                                )
-                            }
-                        }
-                        DownloadStatus.Failed -> {
-                            IconButton(onClick = onRetry) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Refresh,
-                                    contentDescription = stringResource(Res.string.action_retry),
-                                )
-                            }
-                        }
-                        DownloadStatus.Completed -> {
-                            IconButton(onClick = onOpen) {
-                                Icon(
-                                    imageVector = Icons.Rounded.PlayArrow,
-                                    contentDescription = stringResource(Res.string.action_play),
-                                )
-                            }
-                        }
-                    }
-                    IconButton(onClick = onDelete) {
-                        Icon(
-                            imageVector = Icons.Rounded.Delete,
-                            contentDescription = stringResource(Res.string.action_delete),
-                        )
-                    }
-                }
-            }
-
-            if (item.status == DownloadStatus.Downloading) {
-                if (item.totalBytes != null && item.totalBytes > 0L) {
-                    LinearProgressIndicator(
-                        progress = { item.progressFraction },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 10.dp)
-                            .padding(bottom = 10.dp)
-                            .height(4.dp)
-                            .clip(RoundedCornerShape(2.dp)),
-                    )
-                } else {
-                    LinearProgressIndicator(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 10.dp)
-                            .padding(bottom = 10.dp)
-                            .height(4.dp)
-                            .clip(RoundedCornerShape(2.dp)),
-                    )
-                }
-            } else {
-                Spacer(modifier = Modifier.height(6.dp))
-            }
-        }
-    }
 }
 
 private fun DownloadItem.displayTitle(): String =
@@ -1013,58 +593,6 @@ private fun downloadDisplaySubtitle(
         item.episodeTitle?.trim().orEmpty().takeIf { it.isNotBlank() && it != displayTitle },
         item.title.trim().takeIf { it.isNotBlank() && it != displayTitle },
     ).filterNotNull().joinToString(" • ")
-}
-
-@Composable
-private fun DefaultServerRow(
-    serverName: String?,
-    onClick: () -> Unit,
-) {
-    val tokens = MaterialTheme.nuvio
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 6.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(tokens.colors.surfaceElevated)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 14.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            imageVector = Icons.Rounded.Dns,
-            contentDescription = null,
-            tint = tokens.colors.accent,
-            modifier = Modifier.size(22.dp),
-        )
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = stringResource(Res.string.download_default_server),
-                style = MaterialTheme.typography.bodyLarge,
-                color = tokens.colors.textPrimary,
-            )
-            Text(
-                text = serverName?.takeIf { it.isNotBlank() }
-                    ?: stringResource(Res.string.download_default_server_none),
-                style = MaterialTheme.typography.bodySmall,
-                color = tokens.colors.textSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
-
-@Composable
-private fun SectionTitle(title: String) {
-    Text(
-        text = title,
-        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        fontWeight = FontWeight.SemiBold,
-    )
 }
 
 @Composable
