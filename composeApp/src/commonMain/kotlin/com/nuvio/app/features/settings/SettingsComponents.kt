@@ -454,7 +454,7 @@ internal fun HomescreenCatalogRow(
                                 append(" • ")
                                 append(stringResource(Res.string.settings_homescreen_pinned_to_top))
                             }
-                        } else {
+                        } else if (!item.isDiscoverySection) {
                             append(" • ")
                             append(
                                 if (item.heroSourceEnabled) {

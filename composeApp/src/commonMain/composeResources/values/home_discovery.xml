@@ -1,0 +1,12 @@
+<resources>
+    <string name="home_discovery_spotlight">Spotlight</string>
+    <string name="home_discovery_spotlight_description">A closer look at one title, with artwork and a story preview.</string>
+    <string name="home_discovery_shuffle">Surprise me</string>
+    <string name="home_discovery_shuffle_description">A stacked discovery deck. Shuffle until something catches your eye.</string>
+    <string name="home_discovery_horizon">On the horizon</string>
+    <string name="home_discovery_horizon_description">Upcoming titles in a compact release timeline.</string>
+    <string name="home_discovery_details">View details</string>
+    <string name="home_discovery_another">Show another pick</string>
+    <string name="home_discovery_date_tba">Date to be announced</string>
+    <string name="home_discovery_source">Discovery</string>
+</resources>

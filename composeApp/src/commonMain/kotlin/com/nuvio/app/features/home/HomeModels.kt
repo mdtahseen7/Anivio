@@ -58,6 +58,8 @@ data class HomeUiState(
     val heroItems: List<MetaPreview> = emptyList(),
     val sections: List<HomeCatalogSection> = emptyList(),
     val errorMessage: String? = null,
+    /** Cached catalog content for discovery layouts, independent of whether its rail is visible. */
+    val discoverySourceSections: List<HomeCatalogSection> = emptyList(),
 )
 
 internal data class CatalogRequest(

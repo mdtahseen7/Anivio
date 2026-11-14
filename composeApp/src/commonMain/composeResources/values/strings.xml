@@ -798,8 +798,8 @@
     <string name="layout_hide_unreleased_sub">Hide movies and shows that haven't been released yet.</string>
     <string name="layout_catalog_type">Show Catalog Type</string>
     <string name="layout_catalog_type_sub">Show type suffix next to catalog name (Movie/Series).</string>
-    <string name="settings_homescreen_summary">%1$d of %2$d catalogs visible • %3$d hero sources selected</string>
-    <string name="settings_homescreen_summary_hint">Open a catalog only when you need to rename or reorder it.</string>
+    <string name="settings_homescreen_summary">%1$d of %2$d sections visible • %3$d hero sources selected</string>
+    <string name="settings_homescreen_summary_hint">Open a section to rename it. Use its drag handle to change the order.</string>
     <string name="settings_homescreen_visible">Visible</string>
     <string name="settings_hide_secret">Hide value</string>
     <string name="settings_playback_subtitle">Player, subtitles, and auto-play</string>

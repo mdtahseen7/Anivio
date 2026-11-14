@@ -422,6 +422,9 @@ object HomeRepository {
             isLoading = isLoading,
             heroItems = decoratedHeroItems,
             sections = sections,
+            discoverySourceSections = currentDefinitions.mapNotNull { definition ->
+                cachedSections[definition.cacheKey]?.withReleaseFilter()?.takeIf { it.items.isNotEmpty() }
+            },
             errorMessage = if (sections.isEmpty()) lastErrorMessage else null,
         )
 

@@ -71,6 +71,8 @@ import com.nuvio.app.features.details.SeriesPrimaryAction
 import com.nuvio.app.features.details.seriesPrimaryAction
 import com.nuvio.app.features.home.components.HomeCatalogRowSection
 import com.nuvio.app.features.home.components.HomeRankedSection
+import com.nuvio.app.features.home.components.HomeDiscoverySectionView
+import com.nuvio.app.features.home.components.hasContent
 import com.nuvio.app.features.home.components.HomeContinueWatchingSection
 import com.nuvio.app.features.home.components.HomeEmptyStateCard
 import com.nuvio.app.features.home.components.HomeHeroReservedSpace
@@ -903,8 +905,8 @@ fun HomeScreen(
         isResolvingHeroSources
     var firstCatalogReported by remember { mutableStateOf(false) }
 
-    LaunchedEffect(homeUiState.sections.firstOrNull()?.key, onFirstCatalogRendered) {
-        if (firstCatalogReported || homeUiState.sections.isEmpty()) return@LaunchedEffect
+    LaunchedEffect(homeUiState.sections.firstOrNull()?.key ?: homeUiState.discoverySourceSections.firstOrNull()?.key, onFirstCatalogRendered) {
+        if (firstCatalogReported || (homeUiState.sections.isEmpty() && homeUiState.discoverySourceSections.isEmpty())) return@LaunchedEffect
         firstCatalogReported = true
         onFirstCatalogRendered?.invoke()
     }
@@ -917,6 +919,15 @@ fun HomeScreen(
     }
     val sectionsMap = remember(homeUiState.sections) {
         homeUiState.sections.associateBy(HomeCatalogSection::key)
+    }
+    val discoveryContent = remember(homeUiState.discoverySourceSections, homeUiState.heroItems, watchedUiState.watchedKeys, fullyWatchedSeriesKeys, homeSettingsUiState.hideUnreleasedContent) {
+        buildHomeDiscoveryContent(
+            sections = homeUiState.discoverySourceSections,
+            heroItems = homeUiState.heroItems,
+            watchedKeys = watchedUiState.watchedKeys,
+            fullyWatchedSeriesKeys = fullyWatchedSeriesKeys,
+            hideUnreleased = homeSettingsUiState.hideUnreleasedContent,
+        )
     }
     val enabledHomeItems = remember(homeSettingsUiState.items, contentMode) {
         homeSettingsUiState.items.filter { it.enabled && (contentMode == ContentMode.Anime || !it.isCollection) }
@@ -937,6 +948,9 @@ fun HomeScreen(
         enabledHomeItems.any { item ->
             item.isCollection && collectionsMap[item.key] != null
         }
+    }
+    val hasRenderableDiscoverySections = enabledHomeItems.any { settings ->
+        HomeDiscoverySection.fromKey(settings.key)?.let(discoveryContent::hasContent) == true
     }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
@@ -1045,7 +1059,7 @@ fun HomeScreen(
             when {
                 // There is no "no active addons" branch any more: the AniList rows are built in,
                 // so an empty home means still-loading or genuinely-failed, both handled below.
-                homeUiState.isLoading && homeUiState.sections.isEmpty() && !hasRenderableCollectionRows -> {
+                homeUiState.isLoading && homeUiState.sections.isEmpty() && !hasRenderableCollectionRows && !hasRenderableDiscoverySections -> {
                     if (contentMode == ContentMode.Anime) homeContinueWatchingSections(
                         preferences = continueWatchingPreferences,
                         continueWatchingItems = continueWatchingItems,
@@ -1068,7 +1082,7 @@ fun HomeScreen(
 
                 homeUiState.sections.isEmpty() && homeUiState.heroItems.isEmpty() &&
                     (!continueWatchingPreferences.isVisible || !hasContinueWatchingRows) &&
-                    !hasRenderableCollectionRows -> {
+                    !hasRenderableCollectionRows && !hasRenderableDiscoverySections -> {
                     item {
                         if (networkStatusUiState.isOfflineLike) {
                             NuvioNetworkOfflineCard(
@@ -1120,7 +1134,21 @@ fun HomeScreen(
 
                     keyedEnabledHomeItems.forEach { keyedSettingsItem ->
                         val settingsItem = keyedSettingsItem.value
-                        if (settingsItem.isCollection) {
+                        val discoverySection = HomeDiscoverySection.fromKey(settingsItem.key)
+                        if (discoverySection != null) {
+                            if (discoveryContent.hasContent(discoverySection)) {
+                                item(key = keyedSettingsItem.lazyKey) {
+                                    HomeDiscoverySectionView(
+                                        section = discoverySection,
+                                        title = settingsItem.displayTitle,
+                                        content = discoveryContent,
+                                        sectionPadding = homeSectionPadding,
+                                        onItemClick = onPosterClick,
+                                        onItemLongClick = onPosterLongClick,
+                                    )
+                                }
+                            }
+                        } else if (settingsItem.isCollection) {
                             val collection = collectionsMap[settingsItem.key]
                             if (collection != null) {
                                 item(key = keyedSettingsItem.lazyKey) {

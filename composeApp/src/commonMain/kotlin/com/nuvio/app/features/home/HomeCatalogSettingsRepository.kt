@@ -32,6 +32,8 @@ data class HomeCatalogSettingsItem(
 ) {
     val displayTitle: String
         get() = customTitle.ifBlank { defaultTitle }
+    val isDiscoverySection: Boolean
+        get() = HomeDiscoverySection.fromKey(key) != null
 }
 
 data class HomeCatalogSettingsUiState(
@@ -356,11 +358,12 @@ object HomeCatalogSettingsRepository {
         data class UnifiedEntry(val key: String, val isCollection: Boolean)
         val catalogEntries = definitions.map { UnifiedEntry(it.key, false) }
         val collectionEntries = collectionDefinitions.map { UnifiedEntry(it.key, true) }
-        val allEntries = catalogEntries + collectionEntries
+        val discoveryEntries = HomeDiscoverySection.entries.map { UnifiedEntry(it.key, false) }
+        val allEntries = catalogEntries + collectionEntries + discoveryEntries
         val knownKeys = allEntries.mapTo(linkedSetOf(), UnifiedEntry::key)
         var nextOrder = (current.values.maxOfOrNull(StoredHomeCatalogPreference::order) ?: -1) + 1
 
-        val orderedEntries = allEntries.mapIndexed { defaultIndex, entry ->
+        val initiallyOrderedEntries = allEntries.mapIndexed { defaultIndex, entry ->
             Triple(
                 entry,
                 current[entry.key]?.order ?: (nextOrder + defaultIndex),
@@ -373,13 +376,19 @@ object HomeCatalogSettingsRepository {
             ),
         ).map { it.first }
 
+        val missingDiscovery = discoveryEntries.map { it.key }.filterNot { it in current }.toSet()
+        val entryByKey = allEntries.associateBy { it.key }
+        val orderedEntries = seedHomeDiscoveryOrder(
+            initiallyOrderedEntries.map { it.key }, catalogEntries.mapTo(mutableSetOf()) { it.key }, missingDiscovery,
+        ).mapNotNull(entryByKey::get)
+
         val normalized = current
             .filterKeys { it !in knownKeys }
             .toMutableMap()
         var enabledHeroSourceCount = 0
-        orderedEntries.forEach { entry ->
+        orderedEntries.forEachIndexed { index, entry ->
             val stored = current[entry.key]
-            val heroSourceEnabled = if (entry.isCollection) {
+            val heroSourceEnabled = if (entry.isCollection || HomeDiscoverySection.fromKey(entry.key) != null) {
                 false
             } else {
                 (stored?.heroSourceEnabled ?: defaultHeroSourceEnabled(entry.key)) &&
@@ -393,7 +402,7 @@ object HomeCatalogSettingsRepository {
                 customTitle = stored?.customTitle.orEmpty(),
                 enabled = stored?.enabled ?: true,
                 heroSourceEnabled = heroSourceEnabled,
-                order = stored?.order ?: nextOrder++,
+                order = if (missingDiscovery.isNotEmpty()) index else stored?.order ?: nextOrder++,
             )
         }
         preferences = normalized.toMap()
@@ -432,7 +441,19 @@ object HomeCatalogSettingsRepository {
             )
         }
 
-        val items = (catalogItems + collectionItems)
+        val discoveryItems = HomeDiscoverySection.entries.map { section ->
+            val preference = preferences[section.key]
+            HomeCatalogSettingsItem(
+                key = section.key,
+                defaultTitle = runBlocking { getString(section.title) },
+                addonName = runBlocking { getString(section.description) },
+                customTitle = preference?.customTitle.orEmpty(),
+                enabled = preference?.enabled ?: true,
+                heroSourceEnabled = false,
+                order = preference?.order ?: Int.MAX_VALUE,
+            )
+        }
+        val items = (catalogItems + collectionItems + discoveryItems)
             .sortedBy { it.order }
 
         _uiState.value = HomeCatalogSettingsUiState(
@@ -590,7 +611,7 @@ object HomeCatalogSettingsRepository {
     private fun allOrderedKeys(): List<String> {
         val catalogKeys = definitions.map { it.key }
         val collectionKeys = collectionDefinitions.map { it.key }
-        return (catalogKeys + collectionKeys)
+        return (catalogKeys + collectionKeys + HomeDiscoverySection.entries.map { it.key })
             .sortedBy { key -> preferences[key]?.order ?: Int.MAX_VALUE }
     }
 
@@ -623,7 +644,7 @@ object HomeCatalogSettingsRepository {
     private fun defaultPreferenceForMissingKey(key: String): StoredHomeCatalogPreference? {
         val isCollection = collectionDefinitions.any { it.key == key }
         val isCatalog = definitions.any { it.key == key }
-        if (!isCollection && !isCatalog) return null
+        if (!isCollection && !isCatalog && HomeDiscoverySection.fromKey(key) == null) return null
 
         return StoredHomeCatalogPreference(
             key = key,
@@ -647,6 +668,7 @@ object HomeCatalogSettingsRepository {
     private fun knownPreferenceKeys(): Set<String> =
         definitions.mapTo(mutableSetOf()) { it.key }.also { keys ->
             keys.addAll(collectionDefinitions.map { it.key })
+            keys.addAll(HomeDiscoverySection.entries.map { it.key })
         }
 
     private fun HomeCatalogDefinition.addonIdForSync(): String {
