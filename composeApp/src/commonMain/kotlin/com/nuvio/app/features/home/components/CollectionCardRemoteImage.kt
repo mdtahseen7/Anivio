@@ -11,4 +11,5 @@ internal expect fun CollectionCardRemoteImage(
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Crop,
     animateIfPossible: Boolean = false,
+    staticImageUrl: String? = null,
 )

@@ -1,6 +1,6 @@
 package com.nuvio.app.features.watching.application
 
-import com.nuvio.app.core.time.parseZonedIsoDateTimeToEpochMs
+import com.nuvio.app.core.time.EpisodeReleaseDatePlatform
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.watched.WatchedItem
 import com.nuvio.app.features.watched.watchedItemKey
@@ -80,7 +80,7 @@ class WatchingStateTest {
 
     @Test
     fun `latest completed normalizes compact watched timestamps before sorting`() {
-        val expected = parseZonedIsoDateTimeToEpochMs("2026-04-25T10:02:00Z")
+        val expected = EpisodeReleaseDatePlatform.localDateTimeToEpochMs("2026-04-25T10:02:00.000")
 
         val result = WatchingState.latestCompletedBySeries(
             progressEntries = emptyList(),

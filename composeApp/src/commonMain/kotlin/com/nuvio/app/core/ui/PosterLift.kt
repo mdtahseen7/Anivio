@@ -3,6 +3,13 @@ package com.nuvio.app.core.ui
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.pointerInput
+import com.nuvio.app.isDesktop
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.RememberObserver
@@ -96,7 +103,33 @@ internal fun Modifier.posterCardClickable(
         }
         .then(this)
     if (onClick == null && onLongClick == null) return posterModifier
+    val openActions = onLongClick?.let { longClick ->
+        {
+            source.bounds?.let { cardBounds ->
+                PosterZoomAnchorHolder.stash(
+                    PosterZoomAnchor(cardBounds, zoomImageUrl, zoomCornerRadius).also { it.source = source },
+                )
+            }
+            longClick()
+        }
+    }
+    val rightClickModifier = if (isDesktop && openActions != null) {
+        Modifier.pointerInput(openActions) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                if (!currentEvent.buttons.isSecondaryPressed) return@awaitEachGesture
+                down.consume()
+                waitForUpOrCancellation(PointerEventPass.Initial)?.let { up ->
+                    up.consume()
+                    openActions()
+                }
+            }
+        }
+    } else {
+        Modifier
+    }
     return posterModifier
+        .then(rightClickModifier)
         .combinedClickable(
             interactionSource = interactionSource,
             indication = if (onPosterClickAnchor == null) LocalIndication.current else null,
@@ -110,18 +143,7 @@ internal fun Modifier.posterCardClickable(
                     onClick()
                 }
             },
-            onLongClick = onLongClick?.let { longClick ->
-                {
-                    source.bounds?.let { cardBounds ->
-                        PosterZoomAnchorHolder.stash(
-                            PosterZoomAnchor(cardBounds, zoomImageUrl, zoomCornerRadius).also {
-                                it.source = source
-                            },
-                        )
-                    }
-                    longClick()
-                }
-            },
+            onLongClick = openActions,
         )
 }
 

@@ -70,6 +70,7 @@ internal actual fun CollectionCardRemoteImage(
     modifier: Modifier,
     contentScale: ContentScale,
     animateIfPossible: Boolean,
+    staticImageUrl: String?,
 ) {
     if (!animateIfPossible) {
         AsyncImage(

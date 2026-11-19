@@ -151,6 +151,7 @@ private fun CollectionFolderCard(
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop,
                             animateIfPossible = animateGifs && isAnimatedCollectionFolderImage(folder, imageUrl),
+                            staticImageUrl = folder.coverImageUrl?.takeUnless { it == imageUrl },
                         )
                     }
                     !folder.coverEmoji.isNullOrBlank() -> {

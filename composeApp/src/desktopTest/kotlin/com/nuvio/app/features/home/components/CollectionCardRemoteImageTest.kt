@@ -60,6 +60,7 @@ class CollectionCardRemoteImageTest {
                     modifier = Modifier.size(64.dp).testTag("card"),
                     contentScale = ContentScale.Crop,
                     animateIfPossible = true,
+                    staticImageUrl = "$baseUrl/cover.png",
                 )
             }
             val card = compose.onNodeWithTag("card")

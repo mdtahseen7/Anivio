@@ -220,34 +220,21 @@ internal actual fun CollectionCardRemoteImage(
     modifier: Modifier,
     contentScale: ContentScale,
     animateIfPossible: Boolean,
+    staticImageUrl: String?,
 ) {
     val hoverInteractionSource = remember { MutableInteractionSource() }
     val isHovered by hoverInteractionSource.collectIsHoveredAsState()
 
-    val shouldAnimate = animateIfPossible && (isHovered || null.isNullOrBlank())
+    val shouldAnimate = animateIfPossible && (isHovered || staticImageUrl.isNullOrBlank())
 
     var composeBitmap by remember(imageUrl) { mutableStateOf<ImageBitmap?>(null) }
-
-    // Prefetch as soon as the card becomes visible (not on hover) so the codec is already
-    // downloaded/decoded and cached by the time the user actually hovers - hover then reads
-    // straight from gifCodecCache with zero network/decode delay.
-    if (animateIfPossible) {
-        LaunchedEffect(imageUrl) {
-            if (synchronized(gifCodecCache) { !gifCodecCache.containsKey(imageUrl) }) {
-                loadDesktopGifCodec(imageUrl)
-            }
-        }
-    }
 
     if (shouldAnimate) {
         var codecHolder by remember(imageUrl) {
             mutableStateOf(synchronized(gifCodecCache) { gifCodecCache[imageUrl] })
         }
-
         LaunchedEffect(imageUrl) {
-            if (codecHolder == null && synchronized(gifCodecCache) { !gifCodecCache.containsKey(imageUrl) }) {
-                codecHolder = loadDesktopGifCodec(imageUrl)
-            }
+            if (codecHolder == null) codecHolder = loadDesktopGifCodec(imageUrl)
         }
 
         val currentHolder = codecHolder
@@ -326,11 +313,7 @@ internal actual fun CollectionCardRemoteImage(
     }
 
     val context = LocalPlatformContext.current
-    val displayImageUrl = if (animateIfPossible) {
-        imageUrl
-    } else {
-        imageUrl
-    }
+    val displayImageUrl = staticImageUrl?.takeIf { animateIfPossible && it.isNotBlank() } ?: imageUrl
     val request = remember(context, displayImageUrl) {
         ImageRequest.Builder(context)
             .data(displayImageUrl)

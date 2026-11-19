@@ -134,6 +134,7 @@ fun HomeHeroSection(
             maxWidthDp = maxWidth.value,
             viewportHeightDp = viewportHeight?.value,
             mobileBelowSectionHeightHintDp = mobileBelowSectionHeightHint?.value,
+            preferDesktopLayout = isDesktop,
         )
         val heroWidthPx = with(LocalDensity.current) { maxWidth.toPx() }
         val heroHeightPx = with(LocalDensity.current) { layout.heroHeight.toPx() }
@@ -381,6 +382,7 @@ fun HomeHeroReservedSpace(
             maxWidthDp = maxWidth.value,
             viewportHeightDp = viewportHeight?.value,
             mobileBelowSectionHeightHintDp = mobileBelowSectionHeightHint?.value,
+            preferDesktopLayout = isDesktop,
         )
 
         Spacer(
@@ -476,7 +478,7 @@ internal fun homeHeroLayout(
     maxWidthDp: Float,
     viewportHeightDp: Float? = null,
     mobileBelowSectionHeightHintDp: Float? = null,
-    preferDesktopLayout: Boolean = isDesktop,
+    preferDesktopLayout: Boolean = false,
 ): HomeHeroLayout =
     when {
         preferDesktopLayout && maxWidthDp >= 580f -> {

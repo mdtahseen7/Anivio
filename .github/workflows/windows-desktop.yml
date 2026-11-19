@@ -24,6 +24,8 @@ jobs:
           java-version: '17'
 
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
 
       - name: Prepare native dependencies
         shell: pwsh
@@ -43,13 +45,15 @@ jobs:
       - name: Configure Anivio backend
         shell: pwsh
         env:
-          ANIVIO_PROPERTIES: ${{ secrets.NUVIO_LOCAL_PROPERTIES_BASE64 }}
+          ANIVIO_PROPERTIES: ${{ secrets.ANIVIO_DESKTOP_PROPERTIES_BASE64 || secrets.NUVIO_LOCAL_PROPERTIES_BASE64 }}
         run: |
           if ($env:ANIVIO_PROPERTIES) {
             $properties = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:ANIVIO_PROPERTIES))
             $properties -split '\r?\n' |
               Where-Object { $_ -notmatch '^\s*(sdk\.dir|NUVIO_RELEASE_[A-Z_]+)\s*[:=]' } |
               Set-Content -LiteralPath local.properties -Encoding utf8NoBOM
+          } else {
+            Write-Warning 'Building without backend credentials. Account features require desktop runtime configuration.'
           }
 
       - name: Test and package
