@@ -690,7 +690,7 @@
     <string name="settings_debrid_description_template_description">各結果に表示されるメタデータを制御します。空白の場合は元の結果詳細を使用します。</string>
     <string name="settings_debrid_formatter_reset_title">フォーマットをリセット</string>
     <string name="settings_debrid_formatter_reset_subtitle">結果のフォーマットをデフォルトに戻します。</string>
-    <string name="settings_stream_badges_section">FUSIONスタイル</string>
+    <string name="settings_stream_badges_section">Fusionスタイル</string>
     <string name="settings_stream_size_badges_title">サイズバッジ</string>
     <string name="settings_stream_size_badges_description">ストリーム結果とプレーヤーのソースパネルにファイルサイズバッジを表示します。</string>
     <string name="settings_stream_addon_logo_title">アドオンロゴ</string>
@@ -730,7 +730,7 @@
     <string name="settings_mdb_api_key_title">APIキー</string>
     <string name="settings_mdb_enable_ratings">MDBList評価を有効にする</string>
     <string name="settings_mdb_enable_ratings_description">メタデータ詳細画面で外部プロバイダーの評価を取得する</string>
-    <string name="settings_mdb_section_api_key">APIキー</string>
+    <string name="settings_mdb_section_api_key">Apiキー</string>
     <string name="settings_mdb_section_rating_providers">外部評価プロバイダー</string>
     <string name="settings_mdb_section_title">MDBList評価</string>
     <string name="settings_meta_actions">アクション</string>
@@ -1013,7 +1013,7 @@
     <string name="settings_tmdb_preferred_language_description">タイトル、ロゴ、有効なフィールドのTMDBメタデータ言語</string>
     <string name="settings_tmdb_section_localization">ローカライズ</string>
     <string name="settings_tmdb_section_modules">モジュール</string>
-    <string name="settings_tmdb_section_title">TMDB補完</string>
+    <string name="settings_tmdb_section_title">Tmdb補完</string>
     <string name="settings_trakt_approval_redirect">承認後、自動的にリダイレクトされます。</string>
     <string name="settings_trakt_authentication">認証</string>
     <string name="settings_trakt_comments">コメント</string>
@@ -1897,7 +1897,7 @@
     <string name="p2p_consent_cancel">キャンセル</string>
     <string name="p2p_error_unknown">不明なトレントエラー</string>
     <string name="settings_p2p_title">P2Pストリーミング</string>
-    <string name="settings_playback_section_p2p">P2Pストリーミング</string>
+    <string name="settings_playback_section_p2p">P2pストリーミング</string>
     <string name="settings_p2p_subtitle">ピアツーピア（トレント）ストリームを許可する</string>
     <string name="settings_p2p_hide_stats_title">トレント統計を非表示</string>
     <string name="settings_p2p_hide_stats_subtitle">読み込み中および再生中のバッファ・シード数・ピア数・ダウンロード速度を非表示にする</string>

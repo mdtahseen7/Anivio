@@ -887,7 +887,7 @@
     <string name="settings_debrid_description_template_description">یہ طے کرتا ہے کہ ہر result کے نیچے کون سا metadata دکھایا جائے گا۔ اصل تفصیلات استعمال کرنے کے لیے خالی چھوڑ دیں۔</string>
     <string name="settings_debrid_formatter_reset_title">فارمیٹنگ ری سیٹ کریں</string>
     <string name="settings_debrid_formatter_reset_subtitle">ڈیفالٹ result formatting بحال کریں۔</string>
-    <string name="settings_stream_badges_section">FUSION انداز</string>
+    <string name="settings_stream_badges_section">Fusion انداز</string>
     <string name="settings_stream_size_badges_title">سائز بیجز</string>
     <string name="settings_stream_size_badges_description">Stream نتائج اور پلیئر source panels میں فائل سائز کے بیجز دکھائیں۔</string>
     <string name="settings_stream_addon_logo_title">Addon لوگو</string>
@@ -929,7 +929,7 @@
     <string name="settings_mdb_api_key_title">API Key</string>
     <string name="settings_mdb_enable_ratings">MDBList ریٹنگز فعال کریں</string>
     <string name="settings_mdb_enable_ratings_description">میٹا ڈیٹا کی تفصیلات والی اسکرین پر بیرونی فراہم کنندگان سے ریٹنگز حاصل کریں</string>
-    <string name="settings_mdb_section_api_key">API KEY</string>
+    <string name="settings_mdb_section_api_key">API key</string>
     <string name="settings_mdb_section_rating_providers">بیرونی ریٹنگ فراہم کنندگان</string>
     <string name="settings_mdb_section_title">MDBList ریٹنگز</string>
     <string name="settings_meta_actions">ایکشنز</string>
@@ -2213,8 +2213,8 @@
     <string name="plugins_repository_already_installed">یہ Plugin Repository پہلے ہی انسٹال ہے۔</string>
     <string name="plugins_repository_install_failed">Plugin Repository انسٹال نہیں ہو سکی</string>
     <string name="plugins_repository_refresh_failed">Repository ریفریش نہیں ہو سکی</string>
-    <string name="plugins_section_add_repo">REPOSITORY شامل کریں</string>
-    <string name="plugins_section_installed_repos">انسٹال شدہ REPOSITORIES</string>
+    <string name="plugins_section_add_repo">Repository شامل کریں</string>
+    <string name="plugins_section_installed_repos">انسٹال شدہ repositories</string>
     <string name="plugins_section_overview">جائزہ</string>
     <string name="plugins_section_providers">پرووائیڈرز</string>
     <string name="plugins_test_error_title">خرابی</string>

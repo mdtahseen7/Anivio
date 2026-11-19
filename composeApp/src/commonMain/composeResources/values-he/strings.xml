@@ -350,7 +350,7 @@
     <string name="settings_poster_width_large">גדול</string>
     <string name="settings_poster_width_standard">רגיל</string>
     <string name="settings_show_secret">הצג ערך</string>
-    <string name="settings_stream_badges_section">סגנון FUSION</string>
+    <string name="settings_stream_badges_section">סגנון fusion</string>
     <string name="settings_stream_size_badges_title">תגי גודל</string>
     <string name="settings_stream_size_badges_description">הצג תגי גודל קובץ בתוצאות Stream ובפאנלי מקור בנגן.</string>
     <string name="settings_stream_addon_logo_title">הצגת לוגו התוסף</string>
@@ -373,8 +373,8 @@
     <string name="settings_playback_section_next_episode">הפרק הבא</string>
     <string name="settings_playback_section_player">נגן</string>
     <string name="settings_playback_section_skip_segments">דילוג על קטעים</string>
-    <string name="settings_playback_section_stream_auto_play">הפעלה אוטומטית של STREAM</string>
-    <string name="settings_playback_section_stream_selection">בחירת STREAM</string>
+    <string name="settings_playback_section_stream_auto_play">הפעלה אוטומטית של stream</string>
+    <string name="settings_playback_section_stream_selection">בחירת stream</string>
     <string name="settings_playback_section_subtitle_audio">כתוביות ואודיו</string>
     <string name="settings_playback_section_subtitle_rendering">עיבוד כתוביות</string>
     <string name="settings_playback_show_loading_overlay">שכבת טעינה</string>
