@@ -56,7 +56,8 @@ internal actual object DesktopRendererSettings {
     }
 
     private fun loadStoredPreference(): Boolean =
-        store.getBoolean(openGlEnabledKey) ?: false
+        // The transparent player controls window needs a renderer that supports it reliably.
+        store.getBoolean(openGlEnabledKey) ?: isSupported
 
     private fun externalRendererOverride(): String? =
         System.getenv(RenderApiEnvironmentVariable) ?: System.getProperty(RenderApiSystemProperty)
