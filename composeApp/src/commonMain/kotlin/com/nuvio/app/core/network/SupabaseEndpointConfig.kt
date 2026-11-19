@@ -9,18 +9,18 @@ internal object SupabaseEndpointConfig {
     val hasFallback: Boolean
         get() = fallbackBaseUrl.isNotBlank() && !fallbackBaseUrl.equals(primaryBaseUrl, ignoreCase = true)
 
-    fun restEndpointUrls(): List<String> =
-        endpointUrls("/rest/v1/")
-
     fun realtimeUrl(backendUrl: String): String {
         val base = backendUrl.normalizedBaseUrl()
         val socketBase = when {
-            base.startsWith("https://", ignoreCase = true) -> "wss://" + base.substring("https://".length)
-            base.startsWith("http://", ignoreCase = true) -> "ws://" + base.substring("http://".length)
+            base.startsWith("https://", ignoreCase = true) -> "wss://" + base.substringAfter("://")
+            base.startsWith("http://", ignoreCase = true) -> "ws://" + base.substringAfter("://")
             else -> base
         }
         return "$socketBase/realtime/v1?anivio_realtime=1"
     }
+
+    fun restEndpointUrls(): List<String> =
+        endpointUrls("/rest/v1/")
 
     fun fallbackUrlFor(requestUrl: String): String? {
         if (!hasFallback || primaryBaseUrl.isBlank()) return null

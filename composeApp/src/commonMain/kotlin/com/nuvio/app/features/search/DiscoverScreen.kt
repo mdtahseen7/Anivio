@@ -28,7 +28,6 @@ import com.nuvio.app.core.network.NetworkStatusRepository
 import com.nuvio.app.core.ui.NuvioScreen
 import com.nuvio.app.core.ui.nuvioConsumePointerEvents
 import com.nuvio.app.features.anilist.AniListDiscoverRepository
-import com.nuvio.app.features.content.ContentModeRepository
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.home.components.homeSectionHorizontalPaddingForWidth
 import com.nuvio.app.features.home.components.posterGridColumnCountForWidth
@@ -61,18 +60,12 @@ fun DiscoverScreen(
     val scope = rememberCoroutineScope()
 
     val discoverUiState by AniListDiscoverRepository.uiState.collectAsStateWithLifecycle()
-    val contentMode by ContentModeRepository.mode.collectAsStateWithLifecycle()
     val watchedUiState by WatchedRepository.uiState.collectAsStateWithLifecycle()
     val fullyWatchedSeriesKeys by WatchedRepository.fullyWatchedSeriesKeys.collectAsStateWithLifecycle()
     val networkStatusUiState by NetworkStatusRepository.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(scrollToTopRequests) {
         scrollToTopRequests.collect { listState.animateScrollToItem(0) }
-    }
-
-    LaunchedEffect(contentMode) {
-        AniListDiscoverRepository.setContentMode(contentMode)
-        AniListDiscoverRepository.refresh()
     }
 
     // A new page is a new screenful, so start it at the top rather than mid-grid.
@@ -126,6 +119,7 @@ fun DiscoverScreen(
                 state = discoverUiState,
                 columns = discoverColumns,
                 networkCondition = networkStatusUiState.condition,
+                isSourceLoading = false,
                 onTypeSelected = AniListDiscoverRepository::selectType,
                 onCatalogSelected = AniListDiscoverRepository::selectCatalog,
                 onGenreSelected = AniListDiscoverRepository::selectGenre,

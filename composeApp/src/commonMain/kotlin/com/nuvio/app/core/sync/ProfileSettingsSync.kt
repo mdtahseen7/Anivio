@@ -1,6 +1,7 @@
 package com.nuvio.app.core.sync
 
 import co.touchlab.kermit.Logger
+import com.nuvio.app.isDesktop
 import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
 import com.nuvio.app.core.network.SupabaseProvider
@@ -10,8 +11,6 @@ import com.nuvio.app.features.debrid.DebridSettingsRepository
 import com.nuvio.app.features.debrid.DebridSettingsStorage
 import com.nuvio.app.features.details.MetaScreenSettingsStorage
 import com.nuvio.app.features.details.MetaScreenSettingsRepository
-import com.nuvio.app.features.details.MangaReaderProgressRepository
-import com.nuvio.app.features.details.MangaReaderSettingsRepository
 import com.nuvio.app.features.home.HomeCatalogSettingsStorage
 import com.nuvio.app.features.library.LibraryDisplaySettingsStorage
 import com.nuvio.app.features.mdblist.MdbListMetadataService
@@ -24,6 +23,8 @@ import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.core.ui.CardDepthStyleRepository
 import com.nuvio.app.core.ui.CardDepthStyleStorage
 import com.nuvio.app.core.ui.PosterCardStyleRepository
+import com.nuvio.app.core.poster.CustomPosterUrlRepository
+import com.nuvio.app.core.poster.CustomPosterUrlStorage
 import com.nuvio.app.core.ui.PosterCardStyleStorage
 import com.nuvio.app.features.settings.SentrySettingsStorage
 import com.nuvio.app.features.settings.ThemeSettingsStorage
@@ -62,7 +63,7 @@ import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.put
 
-private const val PUSH_DEBOUNCE_MS = 1500L
+private const val PUSH_DEBOUNCE_MS = 500L
 
 object ProfileSettingsSync {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -84,6 +85,9 @@ object ProfileSettingsSync {
 
     private var observeJob: Job? = null
 
+    private val profileSettingsPlatform: String
+        get() = if (isDesktop) DESKTOP_SYNC_PLATFORM else MOBILE_SYNC_PLATFORM
+
     fun startObserving() {
         if (observeJob?.isActive == true) return
         ensureRepositoriesLoaded()
@@ -96,6 +100,12 @@ object ProfileSettingsSync {
         observeJob = null
         skipNextPushSignature = null
         ProviderCredentialSync.clearAccountState()
+    }
+
+    fun onProfileChanged() {
+        if (observeJob?.isActive != true) return
+        skipNextPushSignature = currentObservedStateSignature()
+        ProviderCredentialSync.onProfileChanged()
     }
 
     suspend fun pull(profileId: Int): Boolean {
@@ -113,7 +123,7 @@ object ProfileSettingsSync {
 
                 val params = buildJsonObject {
                     put("p_profile_id", profileId)
-                    put("p_platform", MOBILE_SYNC_PLATFORM)
+                    put("p_platform", profileSettingsPlatform)
                 }
                 val result = SupabaseProvider.client.postgrest.rpc("sync_pull_profile_settings_blob", params)
                 if (ProfileRepository.activeProfileId != profileId) return@withLock false
@@ -179,9 +189,12 @@ object ProfileSettingsSync {
             ThemeSettingsRepository.customThemePreference.map { "custom_theme_colors" },
             ThemeSettingsRepository.amoledEnabled.map { "amoled" },
             ThemeSettingsRepository.liquidGlassNativeTabBarEnabled.map { "liquid_glass_tab_bar" },
+            ThemeSettingsRepository.desktopNavigationLayout.map { "desktop_navigation_layout" },
             ThemeSettingsRepository.navBarGlowEnabled.map { "nav_bar_glow_enabled" },
             ThemeSettingsRepository.navBarStyle.map { "nav_bar_style" },
             PosterCardStyleRepository.uiState.map { "poster_card_style" },
+            CustomPosterUrlRepository.pattern.map { "custom_poster_url" },
+            CustomPosterUrlRepository.enabledScreens.map { "custom_poster_screens" },
             CardDepthStyleRepository.uiState.map { "card_depth_style" },
             PlayerSettingsRepository.uiState.map { "player" },
             StreamBadgeSettingsRepository.uiState.map { "stream_badges" },
@@ -193,19 +206,18 @@ object ProfileSettingsSync {
             ContinueWatchingPreferencesRepository.uiState.map { "continue_watching" },
             TrackingSettingsRepository.uiState.map { "tracking_settings" },
             EpisodeReleaseNotificationsRepository.uiState.map { "episode_release_alerts" },
-            MangaReaderProgressRepository.changes.map { "manga_reader_progress" },
-            MangaReaderSettingsRepository.uiState.map { "manga_reader_settings" },
         )
 
         observeJob = scope.launch {
             combine(signatureFlows) { currentObservedStateSignature() }
-                .drop(1)
                 .distinctUntilChanged()
+                .drop(1)
                 .debounce(PUSH_DEBOUNCE_MS)
                 .collect { signature ->
                     val authState = AuthRepository.state.value
                     if (authState !is AuthState.Authenticated || authState.isAnonymous) return@collect
                     if (isApplyingRemoteBlob || isServerSyncInFlight) return@collect
+                    if (signature != currentObservedStateSignature()) return@collect
                     if (signature == skipNextPushSignature) {
                         skipNextPushSignature = null
                         return@collect
@@ -218,7 +230,7 @@ object ProfileSettingsSync {
     private suspend fun pushToRemoteLocked(profileId: Int, blob: MobileProfileSettingsBlob) {
         val params = buildJsonObject {
             put("p_profile_id", profileId)
-            put("p_platform", MOBILE_SYNC_PLATFORM)
+            put("p_platform", profileSettingsPlatform)
             put("p_settings_json", json.encodeToJsonElement(MobileProfileSettingsBlob.serializer(), blob))
             putSyncOriginClientId()
         }
@@ -232,6 +244,9 @@ object ProfileSettingsSync {
             features = MobileProfileSettingsFeatures(
                 themeSettings = ThemeSettingsStorage.exportToSyncPayload(),
                 posterCardStyleSettingsPayload = PosterCardStyleStorage.loadPayload().orEmpty().trim(),
+                customPosterUrlPattern = CustomPosterUrlStorage.loadPattern().orEmpty().trim(),
+                customPosterEnabledScreens = CustomPosterUrlStorage.loadEnabledScreens()
+                    ?.joinToString(",").orEmpty(),
                 cardDepthStyleSettingsPayload = CardDepthStyleStorage.loadPayload().orEmpty().trim(),
                 playerSettings = withoutProfileCredentials(
                     PROFILE_PLAYER_SETTINGS_FEATURE,
@@ -260,8 +275,6 @@ object ProfileSettingsSync {
                 homeCatalogSettingsPayload = HomeCatalogSettingsStorage.loadPayload().orEmpty().trim(),
                 libraryDisplaySettingsPayload = LibraryDisplaySettingsStorage.loadPayload().orEmpty().trim(),
                 sentrySettingsPayload = SentrySettingsStorage.loadPayload().orEmpty().trim(),
-                mangaReaderProgressPayload = MangaReaderProgressRepository.exportPayload(),
-                mangaReaderSettingsPayload = MangaReaderSettingsRepository.exportPayload(),
             ),
         )
     }
@@ -272,6 +285,15 @@ object ProfileSettingsSync {
 
         PosterCardStyleStorage.savePayload(blob.features.posterCardStyleSettingsPayload)
         PosterCardStyleRepository.onProfileChanged()
+
+        CustomPosterUrlStorage.savePattern(blob.features.customPosterUrlPattern.ifBlank { null })
+        val remoteScreenKeys = blob.features.customPosterEnabledScreens
+            .takeIf { it.isNotBlank() }
+            ?.split(",")
+            ?.toSet()
+        CustomPosterUrlStorage.saveEnabledScreens(remoteScreenKeys)
+        CustomPosterUrlRepository.onProfileChanged()
+        com.nuvio.app.features.home.HomeRepository.applyCurrentSettings()
 
         CardDepthStyleStorage.savePayload(blob.features.cardDepthStyleSettingsPayload)
         CardDepthStyleRepository.onProfileChanged()
@@ -336,17 +358,12 @@ object ProfileSettingsSync {
         HomeCatalogSettingsStorage.savePayload(blob.features.homeCatalogSettingsPayload)
         LibraryDisplaySettingsStorage.savePayload(blob.features.libraryDisplaySettingsPayload)
         SentrySettingsStorage.savePayload(blob.features.sentrySettingsPayload)
-        if (blob.features.mangaReaderProgressPayload.isNotBlank()) {
-            MangaReaderProgressRepository.replacePayload(blob.features.mangaReaderProgressPayload)
-        }
-        if (blob.features.mangaReaderSettingsPayload.isNotBlank()) {
-            MangaReaderSettingsRepository.replacePayload(blob.features.mangaReaderSettingsPayload)
-        }
     }
 
     private fun ensureRepositoriesLoaded() {
         ThemeSettingsRepository.ensureLoaded()
         PosterCardStyleRepository.ensureLoaded()
+        CustomPosterUrlRepository.ensureLoaded()
         CardDepthStyleRepository.ensureLoaded()
         PlayerSettingsRepository.ensureLoaded()
         StreamBadgeSettingsRepository.ensureLoaded()
@@ -358,20 +375,39 @@ object ProfileSettingsSync {
         ContinueWatchingPreferencesRepository.ensureLoaded()
         TrackingSettingsRepository.ensureLoaded()
         EpisodeReleaseNotificationsRepository.ensureLoaded()
-        MangaReaderProgressRepository.ensureLoaded()
-        MangaReaderSettingsRepository.ensureLoaded()
     }
 
     private fun buildSignature(blob: MobileProfileSettingsBlob): String =
         json.encodeToString(MobileProfileSettingsBlob.serializer(), blob)
 
-    private fun currentObservedStateSignature(): String = buildSignature(exportSettingsBlob())
+    private fun currentObservedStateSignature(): String = listOf(
+        "theme=${ThemeSettingsRepository.selectedThemePreference.value?.name}",
+        "custom_theme_colors=${ThemeSettingsRepository.customThemePreference.value}",
+        "amoled=${ThemeSettingsRepository.amoledEnabled.value}",
+        "liquid_glass_tab_bar=${ThemeSettingsRepository.liquidGlassNativeTabBarEnabled.value}",
+        "desktop_navigation_layout=${ThemeSettingsRepository.desktopNavigationLayout.value.name}",
+        "nav_bar_glow_enabled=${ThemeSettingsRepository.navBarGlowEnabled.value}",
+        "nav_bar_style=${ThemeSettingsRepository.navBarStyle.value.key}",
+        "poster_card_style=${PosterCardStyleRepository.uiState.value}",
+        "custom_poster_url=${CustomPosterUrlRepository.pattern.value}",
+        "card_depth_style=${CardDepthStyleRepository.uiState.value}",
+        "player=${PlayerSettingsRepository.uiState.value}",
+        "stream_badges=${StreamBadgeSettingsRepository.uiState.value}",
+        "debrid=${DebridSettingsRepository.uiState.value}",
+        "tmdb=${TmdbSettingsRepository.uiState.value}",
+        "mdblist=${MdbListSettingsRepository.uiState.value}",
+        "meta=${MetaScreenSettingsRepository.uiState.value}",
+        "collection_mobile_settings=${CollectionMobileSettingsRepository.uiState.value}",
+        "continue=${ContinueWatchingPreferencesRepository.uiState.value}",
+        "trakt_settings=${TrackingSettingsRepository.uiState.value}",
+        "episode_release_alerts=${EpisodeReleaseNotificationsRepository.uiState.value.isEnabled}",
+    ).joinToString(separator = "||")
 
 }
 
 @Serializable
 private data class MobileProfileSettingsBlob(
-    val version: Int = 5,
+    val version: Int = 4,
     val features: MobileProfileSettingsFeatures = MobileProfileSettingsFeatures(),
 )
 
@@ -379,6 +415,8 @@ private data class MobileProfileSettingsBlob(
 private data class MobileProfileSettingsFeatures(
     @SerialName("theme_settings") val themeSettings: JsonObject = JsonObject(emptyMap()),
     @SerialName("poster_card_style_settings_payload") val posterCardStyleSettingsPayload: String = "",
+    @SerialName("custom_poster_url_pattern") val customPosterUrlPattern: String = "",
+    @SerialName("custom_poster_enabled_screens") val customPosterEnabledScreens: String = "",
     @SerialName("card_depth_style_settings_payload") val cardDepthStyleSettingsPayload: String = "",
     @SerialName("player_settings") val playerSettings: JsonObject = JsonObject(emptyMap()),
     @SerialName("stream_badge_settings") val streamBadgeSettings: JsonObject = JsonObject(emptyMap()),
@@ -393,8 +431,6 @@ private data class MobileProfileSettingsFeatures(
     @SerialName("home_catalog_settings_payload") val homeCatalogSettingsPayload: String = "",
     @SerialName("library_display_settings_payload") val libraryDisplaySettingsPayload: String = "",
     @SerialName("sentry_settings_payload") val sentrySettingsPayload: String = "",
-    @SerialName("manga_reader_progress_payload") val mangaReaderProgressPayload: String = "",
-    @SerialName("manga_reader_settings_payload") val mangaReaderSettingsPayload: String = "",
 )
 
 @Serializable

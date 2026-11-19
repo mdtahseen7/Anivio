@@ -1,0 +1,31 @@
+<resources>
+    <string name="settings_page_community">Supporters and contributors</string>
+    <string name="settings_community_description">Community contributions, credits and acknowledgements</string>
+    <string name="discord_desktop_presence_description">Show what you’re watching in the Discord desktop app.</string>
+    <string name="discord_desktop_presence_connected">Connected to Discord</string>
+    <string name="discord_desktop_presence_waiting">Waiting for Discord to open</string>
+    <string name="discord_desktop_presence_unconfigured">Discord application ID is missing from this build.</string>
+    <string name="settings_page_layout">Layout</string>
+    <string name="settings_page_layout_description">Home, posters, details, streams and navigation</string>
+    <string name="settings_page_navigation">Navigation</string>
+    <string name="settings_page_video">Video</string>
+    <string name="settings_playback_section_player_hub_description">Loading, gestures and player controls</string>
+    <string name="settings_playback_section_subtitle_audio_hub_description">Audio and subtitle languages</string>
+    <string name="settings_playback_section_subtitle_rendering_hub_description">Font, size, placement, colors and rendering</string>
+    <string name="settings_playback_section_stream_selection_hub_description">Stream reuse and links</string>
+    <string name="settings_playback_section_stream_auto_play_hub_description">Source priority and automatic playback</string>
+    <string name="settings_page_video_hub_description">Video output and decoder options</string>
+    <string name="settings_playback_section_skip_segments_hub_description">Intros, credits and skip providers</string>
+    <string name="settings_playback_section_next_episode_hub_description">Next episode behavior and thresholds</string>
+    <string name="settings_playback_section_p2p_hub_description">Torrent streaming and cache</string>
+    <string name="settings_incognito_title">Incognito mode</string>
+    <string name="settings_incognito_description">Pause new watch history, tracking updates and Discord activity.</string>
+    <string name="settings_incognito_on">Incognito mode is on</string>
+    <string name="settings_incognito_off">Incognito mode is off</string>
+    <string name="settings_playback_subtitle_font">Font family</string>
+    <string name="settings_playback_subtitle_font_default">Default</string>
+    <string name="settings_playback_subtitle_font_sans">Sans serif</string>
+    <string name="settings_playback_subtitle_font_serif">Serif</string>
+    <string name="settings_playback_subtitle_font_monospace">Monospace</string>
+    <string name="discord_desktop_presence_incognito">Activity is paused while incognito mode is on.</string>
+</resources>

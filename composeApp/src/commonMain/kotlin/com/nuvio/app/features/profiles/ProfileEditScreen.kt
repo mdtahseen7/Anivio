@@ -58,7 +58,7 @@ import com.nuvio.app.core.ui.NuvioSurfaceCard
 import com.nuvio.app.core.ui.themePalette
 import com.nuvio.app.core.ui.accentBrush
 import com.nuvio.app.features.membership.ProfileBackgroundRepository
-import com.nuvio.app.features.discord.DiscordAuth
+import com.nuvio.app.features.discordrpc.DiscordProfileAvatar
 import kotlinx.coroutines.launch
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
@@ -75,10 +75,7 @@ fun ProfileEditScreen(
     val isNew = profile == null
     val scope = rememberCoroutineScope()
     val profileState by ProfileRepository.state.collectAsStateWithLifecycle()
-    val discordUiState by remember {
-        DiscordAuth.ensureLoaded()
-        DiscordAuth.uiState
-    }.collectAsStateWithLifecycle()
+    val discordAvatarUrl by DiscordProfileAvatar.url.collectAsStateWithLifecycle()
     val currentProfile = remember(profile?.profileIndex, profileState.profiles, profile) {
         profile?.let { snapshot ->
             profileState.profiles.find { it.profileIndex == snapshot.profileIndex } ?: snapshot
@@ -120,11 +117,6 @@ fun ProfileEditScreen(
     }
 
     val customAvatarUrl = remember(avatarUrl) { normalizedAvatarUrl(avatarUrl) }
-    val resolvedCustomAvatarUrl = if (customAvatarUrl == DISCORD_AVATAR_MARKER) {
-        discordUiState.user?.avatarUrl
-    } else {
-        customAvatarUrl
-    }
     val avatarUrlIsInvalid = avatarUrl.isNotBlank() && customAvatarUrl == null
     val selectedAvatarItem = remember(selectedAvatarId, avatars) {
         selectedAvatarId?.let { id -> avatars.find { it.id == id } }
@@ -155,7 +147,7 @@ fun ProfileEditScreen(
                 onNameChange = { name = it },
                 onUsesPrimaryAddonsChange = { usesPrimaryAddons = it },
                 selectedAvatar = visibleAvatarItem,
-                customAvatarUrl = resolvedCustomAvatarUrl,
+                customAvatarUrl = customAvatarUrl,
                 accentColor = previewAccent,
                 hasAvatarChoices = avatars.isNotEmpty(),
             )
@@ -191,21 +183,17 @@ fun ProfileEditScreen(
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
-                    OutlinedButton(
-                        onClick = {
-                            avatarUrl = DISCORD_AVATAR_MARKER
-                            selectedAvatarId = null
-                        },
-                        enabled = discordUiState.user?.avatarUrl != null,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(
-                            when {
-                                discordUiState.user?.avatarUrl == null -> "Connect Discord to use its profile picture"
-                                avatarUrl == DISCORD_AVATAR_MARKER -> "Using Discord profile picture"
-                                else -> "Use Discord profile picture"
+                    discordAvatarUrl?.let { url ->
+                        OutlinedButton(
+                            onClick = {
+                                avatarUrl = url
+                                selectedAvatarId = null
                             },
-                        )
+                            enabled = avatarUrl != url,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(Res.string.profile_use_discord_avatar))
+                        }
                     }
                 }
             }

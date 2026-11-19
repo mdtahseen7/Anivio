@@ -19,8 +19,6 @@ data class TrackingSettingsUiState(
     val librarySourceMode: LibrarySourceMode = DEFAULT_LIBRARY_SOURCE_MODE,
     val watchProgressSource: WatchProgressSource = DEFAULT_WATCH_PROGRESS_SOURCE,
     val continueWatchingDaysCap: Int = CONTINUE_WATCHING_DAYS_CAP_ALL,
-    val anivioAssetsEnabled: Boolean = true,
-    val anivioMetadataFallbackEnabled: Boolean = true,
 )
 
 /**
@@ -73,18 +71,6 @@ object TrackingSettingsRepository {
         _uiState.value = _uiState.value.copy(continueWatchingDaysCap = normalized)
     }
 
-    fun setAnivioAssetsEnabled(enabled: Boolean) {
-        ensureLoaded()
-        TrackingSettingsStorage.saveAnivioAssetsEnabled(enabled)
-        _uiState.value = _uiState.value.copy(anivioAssetsEnabled = enabled)
-    }
-
-    fun setAnivioMetadataFallbackEnabled(enabled: Boolean) {
-        ensureLoaded()
-        TrackingSettingsStorage.saveAnivioMetadataFallbackEnabled(enabled)
-        _uiState.value = _uiState.value.copy(anivioMetadataFallbackEnabled = enabled)
-    }
-
     private fun reload() {
         _uiState.value = TrackingSettingsUiState(
             librarySourceMode = librarySourceModeFromStorage(
@@ -96,8 +82,6 @@ object TrackingSettingsRepository {
             continueWatchingDaysCap = normalizeContinueWatchingDaysCap(
                 TrackingSettingsStorage.loadContinueWatchingDaysCap() ?: CONTINUE_WATCHING_DAYS_CAP_ALL,
             ),
-            anivioAssetsEnabled = TrackingSettingsStorage.loadAnivioAssetsEnabled() ?: true,
-            anivioMetadataFallbackEnabled = TrackingSettingsStorage.loadAnivioMetadataFallbackEnabled() ?: true,
         )
     }
 }

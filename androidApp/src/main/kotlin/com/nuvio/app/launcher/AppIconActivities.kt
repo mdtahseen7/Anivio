@@ -3,7 +3,6 @@ package com.nuvio.app.launcher
 import com.nuvio.app.MainActivity
 
 class AppIconDefault : MainActivity()
-class AppIconOriginal : MainActivity()
 
 class AppIconArcticBlue : MainActivity()
 

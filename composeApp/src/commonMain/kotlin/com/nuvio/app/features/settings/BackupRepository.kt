@@ -1,128 +1,91 @@
 package com.nuvio.app.features.settings
 
-import com.nuvio.app.features.collection.CollectionMobileSettingsRepository
-import com.nuvio.app.features.collection.CollectionMobileSettingsStorage
+import com.nuvio.app.features.collection.Collection
+import com.nuvio.app.features.collection.CollectionRepository
 import com.nuvio.app.features.collection.CollectionStorage
-import com.nuvio.app.features.details.MangaReaderProgressRepository
-import com.nuvio.app.features.details.MangaReaderSettingsRepository
-import com.nuvio.app.features.details.MangaReaderSettingsStorage
-import com.nuvio.app.features.downloads.DownloadsRepository
-import com.nuvio.app.features.downloads.DownloadsStorage
-import com.nuvio.app.features.downloads.MangaDownloadsRepository
+import com.nuvio.app.features.downloads.DownloadsClock
 import com.nuvio.app.features.library.LibraryRepository
 import com.nuvio.app.features.library.LibraryStorage
-import com.nuvio.app.features.plugins.PluginRepository
+import com.nuvio.app.features.library.StoredLibraryPayload
 import com.nuvio.app.features.profiles.ProfileRepository
+import com.nuvio.app.features.watched.StoredWatchedPayload
 import com.nuvio.app.features.watched.WatchedRepository
 import com.nuvio.app.features.watched.WatchedStorage
+import com.nuvio.app.features.watchprogress.StoredWatchProgressPayload
 import com.nuvio.app.features.watchprogress.WatchProgressRepository
 import com.nuvio.app.features.watchprogress.WatchProgressStorage
-import com.nuvio.app.features.downloads.DownloadsClock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-private const val BACKUP_VERSION = 1
-private const val MAX_BACKUP_CHARS = 12 * 1024 * 1024
+internal const val MaxBackupBytes = 12 * 1024 * 1024
 
 @Serializable
-data class NuvioBackupPayload(
-    val version: Int = BACKUP_VERSION,
-    @SerialName("exported_at_epoch_ms") val exportedAtEpochMs: Long = 0L,
+internal data class DesktopBackup(
+    val version: Int = 1,
+    @SerialName("exported_at_epoch_ms") val exportedAtEpochMs: Long = 0,
     @SerialName("source_profile_id") val sourceProfileId: Int = 1,
-    @SerialName("library_payload") val libraryPayload: String = "",
-    @SerialName("watched_payload") val watchedPayload: String = "",
-    @SerialName("watch_progress_payload") val watchProgressPayload: String = "",
-    @SerialName("manga_reader_progress_payload") val mangaReaderProgressPayload: String = "",
-    @SerialName("manga_reader_settings_payload") val mangaReaderSettingsPayload: String = "",
-    @SerialName("downloads_payload") val downloadsPayload: String = "",
-    @SerialName("manga_downloads_payload") val mangaDownloadsPayload: String = "",
-    @SerialName("collections_payload") val collectionsPayload: String = "",
-    @SerialName("collection_mobile_settings_payload") val collectionMobileSettingsPayload: String = "",
-    @SerialName("plugin_setup_payload") val pluginSetupPayload: String = "",
+    @SerialName("library_payload") val library: String? = null,
+    @SerialName("watched_payload") val watched: String? = null,
+    @SerialName("watch_progress_payload") val progress: String? = null,
+    @SerialName("collections_payload") val collections: String? = null,
 )
 
-data class BackupValidationResult(
-    val valid: Boolean,
-    val message: String? = null,
-)
-
-/**
- * Portable, metadata-only backup for the active profile. Credentials, auth sessions and downloaded
- * media files are deliberately excluded; download records are retained so completed files can be
- * reconciled or removed after restore.
- */
-object BackupRepository {
+internal object BackupRepository {
     private val json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = true
     }
 
-    fun exportToJson(): String {
-        val profileId = ProfileRepository.activeProfileId
+    fun export(): String {
+        val profile = ProfileRepository.activeProfileId
         return json.encodeToString(
-            NuvioBackupPayload(
+            DesktopBackup(
                 exportedAtEpochMs = DownloadsClock.nowEpochMs(),
-                sourceProfileId = profileId,
-                libraryPayload = LibraryStorage.loadPayload(profileId).orEmpty(),
-                watchedPayload = WatchedStorage.loadPayload(profileId).orEmpty(),
-                watchProgressPayload = WatchProgressStorage.loadPayload(profileId).orEmpty(),
-                mangaReaderProgressPayload = MangaReaderProgressRepository.exportPayload(),
-                mangaReaderSettingsPayload = MangaReaderSettingsRepository.exportPayload(),
-                downloadsPayload = DownloadsStorage.loadPayload().orEmpty(),
-                mangaDownloadsPayload = DownloadsStorage.loadMangaPayload().orEmpty(),
-                collectionsPayload = CollectionStorage.loadPayload().orEmpty(),
-                collectionMobileSettingsPayload = CollectionMobileSettingsStorage.loadPayload().orEmpty(),
-                pluginSetupPayload = PluginRepository.exportSetupPayload(),
+                sourceProfileId = profile,
+                library = LibraryStorage.loadPayload(profile).orEmpty(),
+                watched = WatchedStorage.loadPayload(profile).orEmpty(),
+                progress = WatchProgressStorage.loadPayload(profile).orEmpty(),
+                collections = CollectionStorage.loadPayload().orEmpty(),
             ),
         )
     }
 
-    fun validateJson(payload: String): BackupValidationResult {
-        if (payload.length > MAX_BACKUP_CHARS) {
-            return BackupValidationResult(false, "This backup is too large to import safely.")
+    fun parse(text: String): Result<DesktopBackup> = runCatching {
+        require(text.length <= MaxBackupBytes) { "The backup exceeds 12 MB." }
+        val backup = json.decodeFromString<DesktopBackup>(text)
+        require(backup.version == 1) { "This backup version is unsupported." }
+        require(listOf(backup.library, backup.watched, backup.progress, backup.collections).any { it != null }) {
+            "This file contains no supported profile data."
         }
-        val decoded = runCatching { json.decodeFromString<NuvioBackupPayload>(payload) }.getOrNull()
-            ?: return BackupValidationResult(false, "The backup is not valid JSON.")
-        if (decoded.version != BACKUP_VERSION) {
-            return BackupValidationResult(false, "This backup version is not supported.")
-        }
-        return BackupValidationResult(true)
+        backup.library?.takeIf(String::isNotBlank)?.let { json.decodeFromString<StoredLibraryPayload>(it) }
+        backup.watched?.takeIf(String::isNotBlank)?.let { json.decodeFromString<StoredWatchedPayload>(it) }
+        backup.progress?.takeIf(String::isNotBlank)?.let { json.decodeFromString<StoredWatchProgressPayload>(it) }
+        backup.collections?.takeIf(String::isNotBlank)?.let { json.decodeFromString<List<Collection>>(it) }
+        backup
     }
 
-    /** Replaces the active profile's local metadata and reloads every affected repository. */
-    fun restoreFromJson(payload: String): BackupValidationResult {
-        val validation = validateJson(payload)
-        if (!validation.valid) return validation
-        val backup = json.decodeFromString<NuvioBackupPayload>(payload)
-        val profileId = ProfileRepository.activeProfileId
-
-        LibraryStorage.savePayload(profileId, backup.libraryPayload)
-        WatchedStorage.savePayload(profileId, backup.watchedPayload)
-        WatchProgressStorage.savePayload(profileId, backup.watchProgressPayload)
-        MangaReaderProgressRepository.replacePayload(backup.mangaReaderProgressPayload)
-        MangaReaderSettingsStorage.savePayload(backup.mangaReaderSettingsPayload)
-        DownloadsStorage.savePayload(backup.downloadsPayload)
-        DownloadsStorage.saveMangaPayload(backup.mangaDownloadsPayload)
-        CollectionStorage.savePayload(backup.collectionsPayload)
-        CollectionMobileSettingsStorage.savePayload(backup.collectionMobileSettingsPayload)
-        if (backup.pluginSetupPayload.isNotBlank()) {
-            PluginRepository.restoreSetupPayload(backup.pluginSetupPayload)
+    fun restore(profile: Int, backup: DesktopBackup) {
+        check(ProfileRepository.activeProfileId == profile) { "The active profile changed. Reopen the backup in that profile." }
+        backup.library?.let {
+            LibraryRepository.clearLocalState()
+            LibraryStorage.savePayload(profile, it)
+            LibraryRepository.onProfileChanged(profile)
         }
-
-        LibraryRepository.clearLocalState()
-        LibraryRepository.onProfileChanged(profileId)
-        WatchedRepository.clearLocalState()
-        WatchedRepository.onProfileChanged(profileId)
-        WatchProgressRepository.clearLocalState()
-        WatchProgressRepository.onProfileChanged(profileId)
-        MangaReaderProgressRepository.onProfileChanged()
-        MangaReaderSettingsRepository.replacePayload(backup.mangaReaderSettingsPayload)
-        DownloadsRepository.onProfileChanged()
-        MangaDownloadsRepository.onProfileChanged()
-        CollectionMobileSettingsRepository.onProfileChanged()
-        return BackupValidationResult(true)
+        backup.watched?.let {
+            WatchedRepository.clearLocalState()
+            WatchedStorage.savePayload(profile, it)
+            WatchedRepository.onProfileChanged(profile)
+        }
+        backup.progress?.let {
+            WatchProgressRepository.clearLocalState()
+            WatchProgressStorage.savePayload(profile, it)
+            WatchProgressRepository.onProfileChanged(profile)
+        }
+        backup.collections?.let {
+            CollectionStorage.savePayload(it)
+            CollectionRepository.onProfileChanged()
+            CollectionRepository.initialize()
+        }
     }
 }

@@ -34,6 +34,9 @@ object ThemeSettingsRepository {
     private val _liquidGlassNativeTabBarEnabled = MutableStateFlow(false)
     val liquidGlassNativeTabBarEnabled: StateFlow<Boolean> = _liquidGlassNativeTabBarEnabled.asStateFlow()
 
+    private val _desktopNavigationLayout = MutableStateFlow(DesktopNavigationLayout.Default)
+    val desktopNavigationLayout: StateFlow<DesktopNavigationLayout> = _desktopNavigationLayout.asStateFlow()
+
     private val _selectedAppLanguage = MutableStateFlow(AppLanguage.DEVICE)
     val selectedAppLanguage: StateFlow<AppLanguage> = _selectedAppLanguage.asStateFlow()
 
@@ -42,9 +45,6 @@ object ThemeSettingsRepository {
 
     private val _navBarGlowEnabled = MutableStateFlow(true)
     val navBarGlowEnabled: StateFlow<Boolean> = _navBarGlowEnabled.asStateFlow()
-
-    private val _homeTopBarEnabled = MutableStateFlow(true)
-    val homeTopBarEnabled: StateFlow<Boolean> = _homeTopBarEnabled.asStateFlow()
 
     private var hasLoaded = false
     private var observesMembership = false
@@ -56,6 +56,7 @@ object ThemeSettingsRepository {
     }
 
     fun onProfileChanged() {
+        IncognitoModeRepository.reload()
         loadFromDisk()
     }
 
@@ -67,12 +68,12 @@ object ThemeSettingsRepository {
         _customThemeColors.value = CustomThemeColors.solid(CustomThemeColors.Default.second)
         _amoledEnabled.value = false
         _liquidGlassNativeTabBarEnabled.value = false
+        _desktopNavigationLayout.value = DesktopNavigationLayout.Default
         NativeTabBridge.publishAccentColor(ThemeColors.White.nativeAccentHex)
         NativeTabBridge.publishLiquidGlassEnabled(false)
         _selectedAppLanguage.value = AppLanguage.DEVICE
         _navBarGlowEnabled.value = true
         _navBarStyle.value = NavBarStyle.ADAPTIVE
-        _homeTopBarEnabled.value = true
     }
 
     private fun loadFromDisk() {
@@ -94,12 +95,14 @@ object ThemeSettingsRepository {
         val liquidGlassEnabled = ThemeSettingsStorage.loadLiquidGlassNativeTabBarEnabled() ?: false
         _liquidGlassNativeTabBarEnabled.value = liquidGlassEnabled
         NativeTabBridge.publishLiquidGlassEnabled(liquidGlassEnabled)
+        _desktopNavigationLayout.value = DesktopNavigationLayout.fromName(
+            ThemeSettingsStorage.loadDesktopNavigationLayout(),
+        )
         val appLanguage = AppLanguage.fromCode(ThemeSettingsStorage.loadSelectedAppLanguage())
         ThemeSettingsStorage.applySelectedAppLanguage(appLanguage.code)
         _selectedAppLanguage.value = appLanguage
         _navBarGlowEnabled.value = ThemeSettingsStorage.loadNavBarGlowEnabled() ?: true
         _navBarStyle.value = NavBarStyle.fromKey(ThemeSettingsStorage.loadNavBarStyle())
-        _homeTopBarEnabled.value = ThemeSettingsStorage.loadHomeTopBarEnabled() ?: true
     }
 
     fun setTheme(theme: AppTheme) {
@@ -138,6 +141,13 @@ object ThemeSettingsRepository {
         NativeTabBridge.publishLiquidGlassEnabled(enabled)
     }
 
+    fun setDesktopNavigationLayout(layout: DesktopNavigationLayout) {
+        ensureLoaded()
+        if (_desktopNavigationLayout.value == layout) return
+        _desktopNavigationLayout.value = layout
+        ThemeSettingsStorage.saveDesktopNavigationLayout(layout.name)
+    }
+
     fun setAppLanguage(language: AppLanguage) {
         ensureLoaded()
         if (_selectedAppLanguage.value == language) return
@@ -158,13 +168,6 @@ object ThemeSettingsRepository {
         if (_navBarGlowEnabled.value == enabled) return
         _navBarGlowEnabled.value = enabled
         ThemeSettingsStorage.saveNavBarGlowEnabled(enabled)
-    }
-
-    fun setHomeTopBarEnabled(enabled: Boolean) {
-        ensureLoaded()
-        if (_homeTopBarEnabled.value == enabled) return
-        _homeTopBarEnabled.value = enabled
-        ThemeSettingsStorage.saveHomeTopBarEnabled(enabled)
     }
 
     private fun observeMembership() {

@@ -71,10 +71,10 @@ internal fun pluginPbkdf2(
     require(keySizeBits > 0 && keySizeBits % 8 == 0) { "PBKDF2 key size must be a positive byte-aligned bit length" }
 
     val prf = normalizePbkdf2Prf(algorithm)
-    
+
     val derivedKeyLen = keySizeBits / 8
     val derivedKey = ByteArray(derivedKeyLen)
-    
+
     password.usePinned { pinnedPassword ->
         salt.usePinned { pinnedSalt ->
             derivedKey.usePinned { pinnedDerivedKey ->
@@ -93,12 +93,12 @@ internal fun pluginPbkdf2(
                     derivedKey = derivedKeyPtr,
                     derivedKeyLen = derivedKeyLen.toULong()
                 )
-                
+
                 require(status == kCCSuccess) { "PBKDF2 failed with status: $status" }
             }
         }
     }
-    
+
     return derivedKey
 }
 
@@ -119,14 +119,14 @@ internal fun pluginAesEncrypt(
         var encryptedData: ByteArray? = null
         memScoped {
             val cryptorRefVar = alloc<com.nuvio.app.features.plugins.cryptointerop.CCCryptorRefVar>()
-            
+
             key.usePinned { pinnedKey ->
                 iv.usePinned { pinnedIv ->
                     data.usePinned { pinnedData ->
                         val keyPtr = if (key.isNotEmpty()) pinnedKey.addressOf(0) else null
                         val ivPtr = if (iv.isNotEmpty()) pinnedIv.addressOf(0) else null
                         val dataPtr = if (data.isNotEmpty()) pinnedData.addressOf(0) else null
-                        
+
                         val status = CCCryptorCreateWithMode(
                             op = kCCEncrypt,
                             mode = kCCModeGCM,
@@ -141,13 +141,13 @@ internal fun pluginAesEncrypt(
                             options = 0U,
                             cryptorRef = cryptorRefVar.ptr
                         )
-                        
+
                         if (status != kCCSuccess) {
                             error("CCCryptorCreateWithMode failed with status: $status")
                         }
-                        
+
                         val cryptorRef = cryptorRefVar.value ?: error("Cryptor reference was null")
-                        
+
                         try {
                             val cipherTextBytes = ByteArray(data.size)
                             cipherTextBytes.usePinned { pinnedCipher ->
@@ -162,11 +162,11 @@ internal fun pluginAesEncrypt(
                                     error("CCCryptorGCMEncrypt failed with status: $cryptStatus")
                                 }
                             }
-                            
+
                             val tagBytes = ByteArray(16)
                             val tagLengthVar = alloc<platform.posix.size_tVar>()
                             tagLengthVar.value = 16UL
-                            
+
                             tagBytes.usePinned { pinnedTag ->
                                 val tagPtr = pinnedTag.addressOf(0)
                                 val finalStatus = CCCryptorGCMFinal(
@@ -178,7 +178,7 @@ internal fun pluginAesEncrypt(
                                     error("CCCryptorGCMFinal failed with status: $finalStatus")
                                 }
                             }
-                            
+
                             encryptedData = cipherTextBytes + tagBytes
                         } finally {
                             CCCryptorRelease(cryptorRef)
@@ -189,18 +189,18 @@ internal fun pluginAesEncrypt(
         }
         return encryptedData ?: ByteArray(0)
     }
-    
+
     val isEcb = mode.uppercase().contains("ECB")
     val isNoPadding = mode.uppercase().contains("NOPADDING")
 
     val dataOutAvailable = data.size + 16 // AES block size
     val dataOut = ByteArray(dataOutAvailable)
-    
+
     var finalData: ByteArray? = null
-    
+
     memScoped {
         val dataOutMoved = alloc<platform.posix.size_tVar>()
-        
+
         var options = 0U
         if (isEcb) {
             options = options or kCCOptionECBMode
@@ -226,7 +226,7 @@ internal fun pluginAesEncrypt(
                             dataOutAvailable = dataOutAvailable.toULong(),
                             dataOutMoved = dataOutMoved.ptr
                         )
-                        
+
                         if (status == kCCSuccess) {
                             finalData = dataOut.copyOf(dataOutMoved.value.toInt())
                         } else {
@@ -237,7 +237,7 @@ internal fun pluginAesEncrypt(
             }
         }
     }
-    
+
     return finalData ?: ByteArray(0)
 }
 
@@ -259,12 +259,12 @@ internal fun pluginAesDecrypt(
         val ciphertextLen = data.size - 16
         val ciphertext = data.copyOfRange(0, ciphertextLen)
         val tagBytes = data.copyOfRange(ciphertextLen, data.size)
-        
+
         var decryptedData: ByteArray? = null
-        
+
         memScoped {
             val cryptorRefVar = alloc<com.nuvio.app.features.plugins.cryptointerop.CCCryptorRefVar>()
-            
+
             key.usePinned { pinnedKey ->
                 iv.usePinned { pinnedIv ->
                     ciphertext.usePinned { pinnedCipher ->
@@ -273,7 +273,7 @@ internal fun pluginAesDecrypt(
                             val ivPtr = if (iv.isNotEmpty()) pinnedIv.addressOf(0) else null
                             val cipherPtr = if (ciphertext.isNotEmpty()) pinnedCipher.addressOf(0) else null
                             val tagPtr = pinnedTag.addressOf(0)
-                            
+
                             val status = CCCryptorCreateWithMode(
                                 op = kCCDecrypt,
                                 mode = kCCModeGCM,
@@ -288,13 +288,13 @@ internal fun pluginAesDecrypt(
                                 options = 0U,
                                 cryptorRef = cryptorRefVar.ptr
                             )
-                            
+
                             if (status != kCCSuccess) {
                                 error("CCCryptorCreateWithMode failed with status: $status")
                             }
-                            
+
                             val cryptorRef = cryptorRefVar.value ?: error("Cryptor reference was null")
-                            
+
                             try {
                                 val plainTextBytes = ByteArray(ciphertextLen)
                                 plainTextBytes.usePinned { pinnedPlain ->
@@ -309,10 +309,10 @@ internal fun pluginAesDecrypt(
                                         error("CCCryptorGCMDecrypt failed with status: $cryptStatus")
                                     }
                                 }
-                                
+
                                 val tagLengthVar = alloc<platform.posix.size_tVar>()
                                 tagLengthVar.value = 16UL
-                                
+
                                 val finalStatus = CCCryptorGCMFinal(
                                     cryptorRef = cryptorRef,
                                     tag = tagPtr,
@@ -321,7 +321,7 @@ internal fun pluginAesDecrypt(
                                 if (finalStatus != kCCSuccess) {
                                     error("CCCryptorGCMFinal failed with status: $finalStatus (tag verification failed)")
                                 }
-                                
+
                                 decryptedData = plainTextBytes
                             } finally {
                                 CCCryptorRelease(cryptorRef)
@@ -333,18 +333,18 @@ internal fun pluginAesDecrypt(
         }
         return decryptedData ?: ByteArray(0)
     }
-    
+
     val isEcb = mode.uppercase().contains("ECB")
     val isNoPadding = mode.uppercase().contains("NOPADDING")
 
     val dataOutAvailable = data.size + 16 // AES block size
     val dataOut = ByteArray(dataOutAvailable)
-    
+
     var finalData: ByteArray? = null
-    
+
     memScoped {
         val dataOutMoved = alloc<platform.posix.size_tVar>()
-        
+
         var options = 0U
         if (isEcb) {
             options = options or kCCOptionECBMode
@@ -370,7 +370,7 @@ internal fun pluginAesDecrypt(
                             dataOutAvailable = dataOutAvailable.toULong(),
                             dataOutMoved = dataOutMoved.ptr
                         )
-                        
+
                         if (status == kCCSuccess) {
                             finalData = dataOut.copyOf(dataOutMoved.value.toInt())
                         } else {
@@ -381,7 +381,7 @@ internal fun pluginAesDecrypt(
             }
         }
     }
-    
+
     return finalData ?: ByteArray(0)
 }
 

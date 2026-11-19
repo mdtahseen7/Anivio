@@ -6,8 +6,9 @@ import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.buildAddonResourceUrl
 import com.nuvio.app.features.addons.enabledAddons
 import com.nuvio.app.features.addons.fetchAddonResponseText
+import com.nuvio.app.core.poster.withCustomPosterUrls
 import com.nuvio.app.features.anime.PublicAnimeSource
-import com.nuvio.app.features.anilist.isAniListMediaId
+import com.nuvio.app.features.anilist.isAniListId
 import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.home.filterReleasedItems
 import com.nuvio.app.features.mdblist.MdbListMetadataService
@@ -51,16 +52,9 @@ object MetaDetailsRepository {
         val mdbListSettings = MdbListSettingsRepository.snapshot()
         val metaScreenSettingsFingerprint = buildMetaScreenSettingsFingerprint(mdbListSettings)
 
-        if (cachedMetaByRequestKey[requestKey]?.baseMeta?.needsEpisodeRetry() == true) {
-            cachedMetaByRequestKey.remove(requestKey)
-        }
-
         cachedMetaByRequestKey[requestKey]?.let { cachedEntry ->
             cachedEntry.metaScreenMeta
-                ?.takeIf {
-                    cachedEntry.metaScreenSettingsFingerprint == metaScreenSettingsFingerprint &&
-                        !it.needsEpisodeRetry()
-                }
+                ?.takeIf { cachedEntry.metaScreenSettingsFingerprint == metaScreenSettingsFingerprint }
                 ?.let { cachedMeta ->
                     _uiState.value = MetaDetailsUiState(meta = cachedMeta.withUnreleasedFilter())
                     activeRequestKey = requestKey
@@ -68,7 +62,7 @@ object MetaDetailsRepository {
                 }
 
             val cachedBaseMeta = cachedEntry.baseMeta
-            if (!shouldEnrichForMetaScreen(cachedBaseMeta, id, mdbListSettings) && !cachedBaseMeta.needsEpisodeRetry()) {
+            if (!shouldEnrichForMetaScreen(cachedBaseMeta, id, mdbListSettings)) {
                 _uiState.value = MetaDetailsUiState(meta = cachedBaseMeta.withUnreleasedFilter())
                 activeRequestKey = requestKey
                 return
@@ -101,7 +95,7 @@ object MetaDetailsRepository {
             return
         }
 
-        if (currentState.meta?.type == type && currentState.meta.id == id && !currentState.isLoading && !currentState.meta.needsEpisodeRetry()) {
+        if (currentState.meta?.type == type && currentState.meta.id == id && !currentState.isLoading) {
             log.d { "Skipping reload for cached meta — type=$type id=$id" }
             activeRequestKey = requestKey
             return
@@ -118,7 +112,7 @@ object MetaDetailsRepository {
         scope.launch {
             // AniList ids are served by the built-in source, not by addons. On failure we fall
             // through to the addon/TMDB path below rather than erroring outright.
-            if (isAniListMediaId(id) || id.startsWith("mal:", ignoreCase = true)) {
+            if (isAniListId(id) || id.startsWith("mal:", ignoreCase = true)) {
                 val aniListResult = withContext(Dispatchers.Default) {
                     PublicAnimeSource.details(
                         id = id,
@@ -215,9 +209,10 @@ object MetaDetailsRepository {
 
         val metaScreenSettingsFingerprint = buildMetaScreenSettingsFingerprint(MdbListSettingsRepository.snapshot())
         val cachedEntry = cachedMetaByRequestKey[requestKey] ?: return null
-        return cachedEntry.metaScreenMeta
+        val cachedMeta = cachedEntry.metaScreenMeta
             ?.takeIf { cachedEntry.metaScreenSettingsFingerprint == metaScreenSettingsFingerprint }
             ?: cachedEntry.baseMeta
+        return cachedMeta.withUnreleasedFilter()
     }
 
     fun clear() {
@@ -230,10 +225,8 @@ object MetaDetailsRepository {
         val requestKey = "$type:$id"
         cachedMetaByRequestKey[requestKey]?.let { return it.baseMeta }
 
-        if (isAniListMediaId(id) || id.startsWith("mal:", ignoreCase = true)) {
-            val publicMeta = PublicAnimeSource.details(id = id, contentType = type)
-                ?.meta
-                ?.enrichWithAnivioArtwork()
+        if (isAniListId(id) || id.startsWith("mal:", ignoreCase = true)) {
+            val publicMeta = PublicAnimeSource.details(id = id, contentType = type)?.meta
             if (publicMeta != null) {
                 if (cacheResult) cachedMetaByRequestKey[requestKey] = CachedMetaEntry(baseMeta = publicMeta)
                 return publicMeta
@@ -383,26 +376,23 @@ object MetaDetailsRepository {
         mdbListSettings: com.nuvio.app.features.mdblist.MdbListSettings,
         metaScreenSettingsFingerprint: String,
     ) {
-        // Anivio is optional artwork enrichment. Existing AniList/TVDB/addon values remain the
-        // fallback, and the bounded best-effort lookup cannot block the details page indefinitely.
-        val artworkEnrichedMeta = meta.enrichWithAnivioArtwork()
-        val cachedEntry = CachedMetaEntry(baseMeta = artworkEnrichedMeta)
+        val cachedEntry = CachedMetaEntry(baseMeta = meta)
         cachedMetaByRequestKey[requestKey] = cachedEntry
 
-        if (!shouldEnrichForMetaScreen(artworkEnrichedMeta, fallbackItemId, mdbListSettings)) {
-            _uiState.value = MetaDetailsUiState(meta = artworkEnrichedMeta.withUnreleasedFilter())
+        if (!shouldEnrichForMetaScreen(meta, fallbackItemId, mdbListSettings)) {
+            _uiState.value = MetaDetailsUiState(meta = meta.withUnreleasedFilter())
             activeRequestKey = requestKey
             return
         }
 
         _uiState.value = MetaDetailsUiState(
             isLoading = true,
-            meta = artworkEnrichedMeta,
+            meta = meta,
         )
         val enrichedMeta = withContext(Dispatchers.Default) {
             enrichForMetaScreen(
                 requestKey = requestKey,
-                meta = artworkEnrichedMeta,
+                meta = meta,
                 fallbackItemId = fallbackItemId,
                 settings = mdbListSettings,
                 settingsFingerprint = metaScreenSettingsFingerprint,
@@ -508,20 +498,20 @@ object MetaDetailsRepository {
     }
 
     private fun MetaDetails.withUnreleasedFilter(): MetaDetails {
-        if (!HomeCatalogSettingsRepository.snapshot().hideUnreleasedContent) return this
+        val posterPattern = com.nuvio.app.core.poster.CustomPosterUrlRepository.let {
+            it.ensureLoaded()
+            it.patternForScreen(com.nuvio.app.core.poster.CustomPosterScreen.DETAILS)
+        }
+        val base = withCustomPosterUrls(posterPattern)
+        if (!HomeCatalogSettingsRepository.snapshot().hideUnreleasedContent) return base
         val todayIsoDate = CurrentDateProvider.todayIsoDate()
-        val releasedMoreLikeThis = moreLikeThis.filterReleasedItems(todayIsoDate)
-        return copy(
+        val releasedMoreLikeThis = base.moreLikeThis.filterReleasedItems(todayIsoDate)
+        return base.copy(
             moreLikeThis = releasedMoreLikeThis,
-            moreLikeThisSource = moreLikeThisSource.takeIf { releasedMoreLikeThis.isNotEmpty() },
-            collectionItems = collectionItems.filterReleasedItems(todayIsoDate),
+            moreLikeThisSource = base.moreLikeThisSource.takeIf { releasedMoreLikeThis.isNotEmpty() },
+            collectionItems = base.collectionItems.filterReleasedItems(todayIsoDate),
         )
     }
-
-    private fun MetaDetails.needsEpisodeRetry(): Boolean =
-        !type.equals("movie", ignoreCase = true) &&
-            hasScheduledVideos &&
-            videos.none { it.season != null || it.episode != null }
 
    
     fun findEmbeddedStreams(videoId: String): List<com.nuvio.app.features.streams.StreamItem> {

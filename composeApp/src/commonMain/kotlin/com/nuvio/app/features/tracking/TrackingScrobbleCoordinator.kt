@@ -1,8 +1,8 @@
 package com.nuvio.app.features.tracking
 
 import co.touchlab.kermit.Logger
-import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.settings.IncognitoModeRepository
+import com.nuvio.app.features.profiles.ProfileRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -21,8 +21,7 @@ object TrackingScrobbleCoordinator {
         action: TrackingScrobbleAction,
         event: TrackingScrobbleEvent,
     ): List<TrackingScrobbleFailure> {
-        IncognitoModeRepository.ensureLoaded()
-        if (IncognitoModeRepository.enabled.value) return emptyList()
+        if (IncognitoModeRepository.isEnabled()) return emptyList()
         if (profileId != ProfileRepository.activeProfileId) return emptyList()
         TrackingProviderRegistry.ensureLoaded()
         val failures = dispatchTrackingScrobble(
@@ -44,8 +43,7 @@ object TrackingScrobbleCoordinator {
         action: TrackingScrobbleAction,
         event: TrackingScrobbleEvent,
     ): List<TrackingScrobbleFailure> {
-        IncognitoModeRepository.ensureLoaded()
-        if (IncognitoModeRepository.enabled.value) return emptyList()
+        if (IncognitoModeRepository.isEnabled()) return emptyList()
         if (profileId != ProfileRepository.activeProfileId) return emptyList()
         TrackingProviderRegistry.ensureLoaded()
         val failures = dispatchTrackingSeekScrobble(

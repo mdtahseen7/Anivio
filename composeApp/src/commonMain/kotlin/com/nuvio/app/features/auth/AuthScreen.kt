@@ -537,7 +537,6 @@ private fun AuthLargeLayout(
             horizontalAlignment = Alignment.Start,
         ) {
             AppBrandWordmark(
-                tint = AuthTextPrimary,
                 contentDescription = null,
                 modifier = Modifier.height(60.dp * scale),
             )
@@ -638,7 +637,6 @@ private fun AuthBrandLockup(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         AppBrandWordmark(
-            tint = AuthTextPrimary,
             contentDescription = null,
             modifier = Modifier.height(logoHeight),
         )

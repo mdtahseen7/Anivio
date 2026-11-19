@@ -1,0 +1,87 @@
+name: Build Windows preview
+
+on:
+  push:
+    branches: [codex/windows-preview]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  player-bridge:
+    runs-on: windows-2022
+    timeout-minutes: 35
+    if: github.ref == 'refs/heads/codex/windows-preview'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Prepare WebView2 SDK
+        shell: pwsh
+        run: |
+          $version = '1.0.4078.44'
+          $sdk = Join-Path $env:RUNNER_TEMP 'webview2'
+          $archive = Join-Path $env:RUNNER_TEMP 'webview2.zip'
+          Invoke-WebRequest "https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/$version/microsoft.web.webview2.$version.nupkg" -OutFile $archive
+          Expand-Archive $archive $sdk
+          "WEBVIEW2_SDK=$sdk" >> $env:GITHUB_ENV
+      - name: Build the preview EXE
+        shell: pwsh
+        env:
+          ANIVIO_SUPABASE_URL: ${{ secrets.ANIVIO_SUPABASE_URL }}
+          ANIVIO_SUPABASE_ANON_KEY: ${{ secrets.ANIVIO_SUPABASE_ANON_KEY }}
+          DISCORD_APP_ID: ${{ secrets.DISCORD_APP_ID }}
+          ANILIST_CLIENT_ID: ${{ secrets.ANILIST_CLIENT_ID }}
+          MAL_CLIENT_ID: ${{ secrets.MAL_CLIENT_ID }}
+        run: |
+          $address = $null
+          if (![Uri]::TryCreate($env:ANIVIO_SUPABASE_URL, [UriKind]::Absolute, [ref]$address) -or $address.Scheme -ne 'https' -or $address.UserInfo) {
+            throw 'Configure the HTTPS Anivio Supabase endpoint for this preview.'
+          }
+          $key = $env:ANIVIO_SUPABASE_ANON_KEY
+          if ($key -notmatch '^sb_publishable_[A-Za-z0-9_-]+$') {
+            if ($key -notmatch '^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$') { throw 'Expected a Supabase client key.' }
+            $payload = $key.Split('.')[1].Replace('-', '+').Replace('_', '/')
+            $payload = $payload.PadRight([int]([Math]::Ceiling($payload.Length / 4.0) * 4), '=')
+            $role = ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($payload)) | ConvertFrom-Json).role
+            if ($role -ne 'anon') { throw 'Only a Supabase anon or publishable key can be included in a preview.' }
+          }
+          git lfs pull --include="composeApp/src/desktopMain/native/windows/runtime/**,composeApp/src/desktopMain/resources/torrserver/windows-amd64/TorrServer.exe" --exclude=""
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $mpv = Get-Item composeApp/src/desktopMain/native/windows/runtime/libmpv-2.dll -ErrorAction Stop
+          if ($mpv.Length -lt 1000000) { throw 'libmpv is still a Git LFS pointer' }
+          New-Item -ItemType File -Path local.properties -Force | Out-Null
+          .\gradlew.bat ":composeApp:packageExe" "-Pnuvio.webview2.dir=$env:WEBVIEW2_SDK" "-Pcompose.desktop.packaging.checkJdkVendor=false" --no-configuration-cache --console=plain --max-workers=2
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $installers = @(Get-ChildItem composeApp/build/compose/binaries/main/exe -Filter '*.exe' -File)
+          if ($installers.Count -ne 1) { throw 'Expected exactly one Windows installer.' }
+          New-Item -ItemType Directory -Path preview | Out-Null
+          Copy-Item -LiteralPath $installers[0].FullName -Destination preview/Anivio-Windows-Preview-x64.exe
+          $hash = (Get-FileHash preview/Anivio-Windows-Preview-x64.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  Anivio-Windows-Preview-x64.exe" | Set-Content preview/SHA256SUMS.txt
+          "SHA-256: $hash" >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Upload the preview
+        id: upload
+        uses: actions/upload-artifact@v7
+        continue-on-error: true
+        with:
+          name: Anivio-Windows-Preview-x64
+          path: preview/
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Attach to an unpublished draft if Actions storage is unavailable
+        if: steps.upload.outcome == 'failure'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "windows-preview-$($env:GITHUB_SHA.Substring(0, 12))-$env:GITHUB_RUN_ID"
+          gh release create $tag preview/Anivio-Windows-Preview-x64.exe preview/SHA256SUMS.txt --draft --prerelease --target "$env:GITHUB_SHA" --title "Windows preview $($env:GITHUB_SHA.Substring(0, 12))" --notes 'Unpublished Windows installer for testing the desktop preview branch.'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

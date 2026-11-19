@@ -9,9 +9,8 @@ import nuvio.composeapp.generated.resources.app_logo_av_wordmark
 class AppIconOptionTest {
     @Test
     fun primaryIconUsesPlatformDefault() {
-        assertEquals(null, AppIconOption.AV.platformName)
-        assertEquals(AppIconOption.AV, AppIconOption.fromPlatformName(null))
-        assertEquals("AppIconOriginal", AppIconOption.ORIGINAL.platformName)
+        assertEquals(null, AppIconOption.ORIGINAL.platformName)
+        assertEquals(AppIconOption.ORIGINAL, AppIconOption.fromPlatformName(null))
     }
 
     @Test
@@ -22,15 +21,14 @@ class AppIconOptionTest {
     }
 
     @Test
-    fun catalogueContainsNewDefaultAndSixPreservedAlternatives() {
+    fun catalogueKeepsSixLegacyIconsAndAddsAv() {
         assertEquals(7, AppIconOption.entries.size)
-        assertEquals(AppIconOption.AV, AppIconOption.entries.first())
-        assertEquals(6, AppIconOption.entries.count { it.platformName != null })
+        assertEquals(AppIconOption.AV, AppIconOption.fromPlatformName("AppIconAV"))
     }
 
     @Test
     fun unknownIconFallsBackToOriginal() {
-        assertEquals(AppIconOption.AV, AppIconOption.fromPlatformName("UnknownIcon"))
+        assertEquals(AppIconOption.ORIGINAL, AppIconOption.fromPlatformName("UnknownIcon"))
     }
 
     @Test

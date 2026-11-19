@@ -49,17 +49,22 @@ actual fun PlatformPlayerSurface(
     externalSubtitles: List<com.nuvio.app.features.streams.StreamSubtitle>,
     streamType: String?,
     useYoutubeChunkedPlayback: Boolean,
-    playbackEngine: AndroidPlaybackEngine?,
     modifier: Modifier,
     playWhenReady: Boolean,
     initialPositionMs: Long?,
     initialPositionRequestKey: String?,
     resizeMode: PlayerResizeMode,
     useNativeController: Boolean,
+    playerControlsState: PlayerControlsState,
+    onPlayerControlsAction: (PlayerControlsAction) -> Boolean,
+    onPlayerControlsEvent: (String, Double) -> Boolean,
+    onPlayerControlsScrubChange: (Long) -> Boolean,
+    onPlayerControlsScrubFinished: (Long) -> Boolean,
     onInitialPositionHandled: (key: String, handled: Boolean) -> Unit,
     onControllerReady: (PlayerEngineController) -> Unit,
     onSnapshot: (PlayerPlaybackSnapshot) -> Unit,
     onError: (String?) -> Unit,
+    sourceAvailable: Boolean,
 ) {
     sanitizePlaybackResponseHeaders(sourceResponseHeaders)
     val latestOnControllerReady = rememberUpdatedState(onControllerReady)
@@ -125,11 +130,6 @@ actual fun PlatformPlayerSurface(
 
             override fun configureIosVideoOutput(settings: PlayerSettingsUiState) {
                 bridge.applyIosVideoOutputSettings(settings)
-            }
-            override fun configureAudio(settings: PlayerSettingsUiState) {
-                bridge.configureAudioProcessing(settings.audioDelayMs, settings.audioAmplificationDb,
-                    if (settings.audioDownmix) settings.audioChannels.let { if (it == "auto") "stereo" else it } else "auto",
-                    !settings.audioMaintainVolume, settings.audioCenterMixLevel)
             }
 
             override fun setPlaybackSpeed(speed: Float) {
@@ -198,6 +198,10 @@ actual fun PlatformPlayerSurface(
                 if (trackId != null) {
                     bridge.selectAudioTrack(trackId)
                 }
+            }
+
+            override fun applyAudioLanguagePreferences(languages: List<String>) {
+                bridge.applyAudioLanguagePreferences(languages)
             }
 
             override fun selectSubtitleTrack(index: Int) {
@@ -273,7 +277,6 @@ actual fun PlatformPlayerSurface(
                     outlineColor = style.outlineColor.toMpvColorString(),
                     outlineSize = if (style.outlineEnabled) style.outlineWidth.toFloat() else 0f,
                     bold = style.bold,
-                    fontFamily = style.fontFamily.storageValue,
                     fontSize = style.toMpvSubtitleFontSize(),
                     subPos = style.toMpvSubtitlePosition(),
                     stripSdh = style.stripSdh,
@@ -314,6 +317,7 @@ actual fun PlatformPlayerSurface(
                 PlayerResizeMode.Fit -> 0
                 PlayerResizeMode.Fill -> 1
                 PlayerResizeMode.Zoom -> 2
+                PlayerResizeMode.Stretch -> 0
             }
         )
     }

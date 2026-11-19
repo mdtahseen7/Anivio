@@ -1,39 +1,67 @@
 package com.nuvio.app.features.settings
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import com.nuvio.app.core.ui.nuvio
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import com.nuvio.app.features.player.EnhancementResolution
+import com.nuvio.app.features.player.PlayerSettingsRepository
+import com.nuvio.app.features.player.PlayerSettingsUiState
 import com.nuvio.app.features.player.VideoEnhancement
-import com.nuvio.app.features.player.VideoEnhancementOptions
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun VideoEnhancementSettings(isTablet: Boolean, selected: VideoEnhancement, enabled: Boolean) {
-    var show by remember { mutableStateOf(false) }
-    SettingsSection(title = stringResource(Res.string.enhancement_title), isTablet = isTablet) {
+internal fun VideoEnhancementSettings(isTablet: Boolean, settings: PlayerSettingsUiState) {
+    var showMode by remember { mutableStateOf(false) }
+    var showOutput by remember { mutableStateOf(false) }
+    val title = stringResource(Res.string.enhancement_title)
+    SettingsSection(title = title, isTablet = isTablet) {
         SettingsGroup(isTablet = isTablet) {
-            SettingsNavigationRow(title = stringResource(Res.string.enhancement_mode),
-                description = stringResource(if (enabled) selected.label else Res.string.enhancement_unavailable),
-                isTablet = isTablet, enabled = enabled, onClick = { show = true })
+            SettingsNavigationRow(
+                title = stringResource(Res.string.enhancement_mode),
+                description = stringResource(settings.videoEnhancement.label),
+                enabled = !settings.nvidiaRtxSuperResolutionEnabled,
+                isTablet = isTablet,
+                onClick = { showMode = true },
+            )
+            SettingsGroupDivider(isTablet = isTablet)
+            SettingsNavigationRow(
+                title = stringResource(Res.string.enhancement_output_title),
+                description = stringResource(settings.enhancementResolution.label),
+                enabled = !settings.nvidiaRtxSuperResolutionEnabled,
+                isTablet = isTablet,
+                onClick = { showOutput = true },
+            )
         }
     }
-    if (show) BasicAlertDialog(onDismissRequest = { show = false }) {
-        Surface(shape = RoundedCornerShape(28.dp), color = MaterialTheme.nuvio.colors.background) {
-            Column(Modifier.padding(20.dp).heightIn(max = 600.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(stringResource(Res.string.enhancement_title), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.nuvio.colors.textPrimary)
-                Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
-                    VideoEnhancementOptions(selected, enabled)
-                }
-                TextButton(onClick = { show = false }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(Res.string.action_close)) }
-            }
-        }
+    if (showMode) {
+        TrackingAdaptivePicker(
+            isTablet = isTablet,
+            title = title,
+            subtitle = stringResource(Res.string.enhancement_limits),
+            selectedValue = settings.videoEnhancement,
+            options = VideoEnhancement.entries.map { mode ->
+                TrackingPickerOption(mode, stringResource(mode.label), stringResource(mode.description))
+            },
+            onSelected = PlayerSettingsRepository::setVideoEnhancement,
+            onDismiss = { showMode = false },
+        )
+    }
+    if (showOutput) {
+        TrackingAdaptivePicker(
+            isTablet = isTablet,
+            title = stringResource(Res.string.enhancement_output_title),
+            subtitle = stringResource(settings.enhancementResolution.description),
+            selectedValue = settings.enhancementResolution,
+            options = EnhancementResolution.entries.map { output ->
+                TrackingPickerOption(output, stringResource(output.label), stringResource(output.description))
+            },
+            onSelected = PlayerSettingsRepository::setEnhancementResolution,
+            onDismiss = { showOutput = false },
+        )
     }
 }

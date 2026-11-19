@@ -7,6 +7,7 @@ import com.nuvio.app.features.debrid.toastMessage
 import com.nuvio.app.features.details.MetaDetailsRepository
 import com.nuvio.app.features.details.MetaVideo
 import com.nuvio.app.features.downloads.DownloadItem
+import com.nuvio.app.features.downloads.DownloadSubtitles
 import com.nuvio.app.features.downloads.DownloadsRepository
 import com.nuvio.app.features.p2p.P2pSettingsRepository
 import com.nuvio.app.features.p2p.P2pStreamingEngine
@@ -57,6 +58,7 @@ internal fun PlayerScreenRuntime.openExternalSourceUrl(stream: StreamItem): Bool
     showSourcesPanel = false
     showEpisodesPanel = false
     controlsVisible = true
+    PlayerStreamsRepository.pauseSearchForPlayback()
     return true
 }
 
@@ -171,6 +173,7 @@ internal fun PlayerScreenRuntime.switchToP2pSourceStream(stream: StreamItem) {
         season = activeSeasonNumber,
         episode = activeEpisodeNumber,
     )
+    activeExternalSubtitles = stream.externalSubtitles
     activeSourceUrl = p2pSentinelUrl(infoHash, stream.p2pFileIdx)
     activeSourceAudioUrl = null
     activeSourceHeaders = emptyMap()
@@ -191,6 +194,7 @@ internal fun PlayerScreenRuntime.switchToP2pSourceStream(stream: StreamItem) {
     activeInitialProgressFraction = null
     showSourcesPanel = false
     controlsVisible = true
+    PlayerStreamsRepository.pauseSearchForPlayback()
 }
 
 internal fun PlayerScreenRuntime.switchToP2pEpisodeStream(
@@ -215,6 +219,7 @@ internal fun PlayerScreenRuntime.switchToP2pEpisodeStream(
         season = episode.season,
         episode = episode.episode,
     )
+    activeExternalSubtitles = stream.externalSubtitles
     activeSourceUrl = p2pSentinelUrl(infoHash, stream.p2pFileIdx)
     activeSourceAudioUrl = null
     activeSourceHeaders = emptyMap()
@@ -267,6 +272,7 @@ internal fun PlayerScreenRuntime.switchToSource(stream: StreamItem) {
     if (playerSettingsUiState.streamReuseLastLinkEnabled && currentVideoId != null) {
         saveDirectStreamForReuse(stream, url, currentVideoId, activeSeasonNumber, activeEpisodeNumber)
     }
+    activeExternalSubtitles = stream.externalSubtitles
     activeSourceUrl = url
     activeSourceAudioUrl = null
     activeSourceHeaders = sanitizePlaybackHeaders(stream.behaviorHints.proxyHeaders?.request)
@@ -283,6 +289,7 @@ internal fun PlayerScreenRuntime.switchToSource(stream: StreamItem) {
     activeInitialProgressFraction = null
     showSourcesPanel = false
     controlsVisible = true
+    PlayerStreamsRepository.pauseSearchForPlayback()
 }
 
 internal fun PlayerScreenRuntime.switchToEpisodeStream(stream: StreamItem, episode: MetaVideo) {
@@ -317,6 +324,7 @@ internal fun PlayerScreenRuntime.switchToEpisodeStream(stream: StreamItem, episo
     if (playerSettingsUiState.streamReuseLastLinkEnabled) {
         saveDirectStreamForReuse(stream, url, epVideoId, episode.season, episode.episode)
     }
+    activeExternalSubtitles = stream.externalSubtitles
     activeSourceUrl = url
     activeSourceAudioUrl = null
     activeSourceHeaders = sanitizePlaybackHeaders(stream.behaviorHints.proxyHeaders?.request)
@@ -351,6 +359,7 @@ internal fun PlayerScreenRuntime.switchToDownloadedEpisode(downloadItem: Downloa
         ?.let { (it / 100f).coerceIn(0f, 1f) }
     val epResumePositionMs = epEntry?.lastPositionMs?.takeIf { it > 0L } ?: 0L
 
+    activeExternalSubtitles = DownloadSubtitles.localSubtitles(localFileUri)
     activeSourceUrl = localFileUri
     activeSourceAudioUrl = null
     activeSourceHeaders = emptyMap()
@@ -376,7 +385,20 @@ internal fun PlayerScreenRuntime.switchToDownloadedEpisode(downloadItem: Downloa
     controlsVisible = true
 }
 
-internal fun PlayerScreenRuntime.playNextEpisode() {
+internal fun PlayerScreenRuntime.playNextEpisode(automatic: Boolean = false) {
+    if (isPartyControlLocked && (automatic || partyBlocksControl())) return
+    if (nextEpisodeAutoPlaySearching || nextEpisodeAutoPlayCountdown != null) return
+    val playbackKey = activePlaybackKey
+    val nextVideoId = nextEpisodeInfo?.takeIf { it.hasAired }?.videoId ?: return
+    fun isCurrentRequest(): Boolean = playbackKey == activePlaybackKey &&
+        nextEpisodeInfo?.videoId == nextVideoId &&
+        (!automatic || (
+            playerSettingsUiState.streamAutoPlayNextEpisodeEnabled &&
+                !nextEpisodeCardDismissed && isAtNextEpisodeThreshold()
+            ))
+    if (!isCurrentRequest()) return
+    nextEpisodeAutoPlayAutomatic = automatic
+
     scope.launchPlayerNextEpisodeAutoPlay(
         previousJob = nextEpisodeAutoPlayJob,
         nextEpisodeInfo = nextEpisodeInfo,
@@ -386,21 +408,35 @@ internal fun PlayerScreenRuntime.playNextEpisode() {
         contentType = contentType,
         settings = playerSettingsUiState,
         currentStreamBingeGroup = currentStreamBingeGroup,
-        currentStreamAddonName = activeProviderName,
         currentServerKey = com.nuvio.app.features.streams.streamServerKey(activeProviderAddonId, activeStreamTitle),
-        onDownloadedEpisodeSelected = { item, episode -> switchToDownloadedEpisode(item, episode) },
-        onEpisodeStreamSelected = { stream, episode -> switchToEpisodeStream(stream, episode) },
-        onManualSelectionRequired = { nextVideo ->
-            episodeStreamsPanelState = EpisodeStreamsPanelState(
-                showStreams = true,
-                selectedEpisode = nextVideo,
-            )
-            showEpisodesPanel = true
+        onDownloadedEpisodeSelected = { item, episode ->
+            if (isCurrentRequest()) switchToDownloadedEpisode(item, episode)
         },
-        onSearchingChanged = { nextEpisodeAutoPlaySearching = it },
-        onSourceNameChanged = { nextEpisodeAutoPlaySourceName = it },
-        onCountdownChanged = { nextEpisodeAutoPlayCountdown = it },
-        onNextEpisodeCardVisibleChanged = { showNextEpisodeCard = it },
+        onEpisodeStreamSelected = { stream, episode ->
+            if (isCurrentRequest()) switchToEpisodeStream(stream, episode)
+        },
+        onManualSelectionRequired = { nextVideo ->
+            if (isCurrentRequest()) {
+                nextEpisodeCardDismissed = true
+                episodeStreamsPanelState = EpisodeStreamsPanelState(
+                    showStreams = true,
+                    selectedEpisode = nextVideo,
+                )
+                showEpisodesPanel = true
+            }
+        },
+        onSearchingChanged = {
+            if (playbackKey == activePlaybackKey) nextEpisodeAutoPlaySearching = it
+        },
+        onSourceNameChanged = {
+            if (playbackKey == activePlaybackKey) nextEpisodeAutoPlaySourceName = it
+        },
+        onCountdownChanged = {
+            if (playbackKey == activePlaybackKey) nextEpisodeAutoPlayCountdown = it
+        },
+        onNextEpisodeCardVisibleChanged = {
+            if (playbackKey == activePlaybackKey) showNextEpisodeCard = it
+        },
     )?.let { job ->
         nextEpisodeAutoPlayJob = job
     }
@@ -437,10 +473,7 @@ private fun PlayerScreenRuntime.resetEpisodePanelAndNextEpisodeState() {
     showSourcesPanel = false
     showEpisodesPanel = false
     episodeStreamsPanelState = EpisodeStreamsPanelState()
-    nextEpisodeAutoPlayJob?.cancel()
-    nextEpisodeAutoPlaySearching = false
-    nextEpisodeAutoPlaySourceName = null
-    nextEpisodeAutoPlayCountdown = null
+    cancelNextEpisodeAutoPlay()
     PlayerStreamsRepository.clearEpisodeStreams()
     // Clear per-episode subtitle state immediately so next episode doesn't show stale subs
     selectedAddonSubtitleId = null
@@ -524,9 +557,6 @@ private fun PlayerScreenRuntime.saveDirectStreamForReuse(
         videoSize = stream.behaviorHints.videoSize,
         bingeGroup = stream.behaviorHints.bingeGroup,
         streamType = stream.streamType,
-        contentLanguage = resolveContentLanguage(
-            language = metaUiState.meta?.language,
-            country = metaUiState.meta?.country,
-        ),
+        contentLanguage = contentLanguage,
     )
 }

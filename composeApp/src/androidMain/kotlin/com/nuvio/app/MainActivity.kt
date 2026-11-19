@@ -3,9 +3,8 @@ package com.nuvio.app
 import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
-import android.view.WindowManager
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.SystemBarStyle
 import androidx.appcompat.app.AppCompatActivity
@@ -25,7 +24,6 @@ import com.nuvio.app.features.downloads.DownloadSettingsStorage
 import com.nuvio.app.features.downloads.DownloadsLiveStatusPlatform
 import com.nuvio.app.features.downloads.DownloadsPlatformDownloader
 import com.nuvio.app.features.downloads.DownloadsStorage
-import com.nuvio.app.features.downloads.DownloadBackgroundExecution
 import com.nuvio.app.features.library.LibraryDisplaySettingsStorage
 import com.nuvio.app.features.membership.MemberAssetStorage
 import com.nuvio.app.features.library.LibraryStorage
@@ -45,7 +43,6 @@ import com.nuvio.app.features.p2p.P2pSettingsStorage
 import com.nuvio.app.features.p2p.P2pStreamingEngine
 import com.nuvio.app.features.plugins.PluginStorage
 import com.nuvio.app.features.profiles.AvatarStorage
-import com.nuvio.app.features.profiles.ProfileBackgroundAppearanceStorage
 import com.nuvio.app.features.profiles.ProfilePinCacheStorage
 import com.nuvio.app.features.profiles.ProfileStorage
 import com.nuvio.app.features.details.SeasonViewModeStorage
@@ -54,12 +51,13 @@ import com.nuvio.app.features.search.SearchHistoryStorage
 import com.nuvio.app.features.settings.SentrySettingsStorage
 import com.nuvio.app.features.settings.AppIconPlatform
 import com.nuvio.app.features.settings.ThemeSettingsStorage
+import com.nuvio.app.features.mdblist.PlatformMdbListAuthPersistence
+import com.nuvio.app.features.mdblist.PlatformMdbListSyncStorage
 import com.nuvio.app.core.anilist.TvdbSettingsStorage
 import com.nuvio.app.features.anilist.AniListAuthStorage
 import com.nuvio.app.features.anilist.AniListCacheStorage
 import com.nuvio.app.features.mal.MalAuthStorage
 import com.nuvio.app.features.mal.MalCacheStorage
-import com.nuvio.app.features.profile.ProfileShareSettingsStorage
 import com.nuvio.app.features.discord.DiscordAuthStorage
 import com.nuvio.app.features.discord.DiscordBootstrap
 import com.nuvio.app.features.mal.MalTrackingBootstrap
@@ -68,6 +66,7 @@ import com.nuvio.app.features.tracking.TrackingSettingsStorage
 import com.nuvio.app.features.updater.AndroidAppUpdaterPlatform
 import com.nuvio.app.core.ui.CardDepthStyleStorage
 import com.nuvio.app.core.ui.PosterCardStyleStorage
+import com.nuvio.app.core.poster.CustomPosterUrlStorage
 import com.nuvio.app.features.watched.WatchedStorage
 import com.nuvio.app.features.streams.StreamLinkCacheStorage
 import com.nuvio.app.features.streams.StreamBadgeSettingsStorage
@@ -83,10 +82,8 @@ open class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         enableEdgeToEdge(
-            // The splash draws its own background; home artwork must extend behind this bar.
-            statusBarStyle = SystemBarStyle.dark(scrim = android.graphics.Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(
-                scrim = 0xFF020200.toInt(),
+                scrim = 0xFF020404.toInt(),
             ),
         )
         ThemeSettingsStorage.initialize(applicationContext)
@@ -94,12 +91,7 @@ open class MainActivity : AppCompatActivity() {
         SentrySettingsStorage.initialize(applicationContext)
         SentryInitializer.start(application)
         super.onCreate(savedInstanceState)
-        // Compose's IME padding needs a resized viewport. Without this Android falls back to
-        // panning the fullscreen player, which moves the watch-party chat composer off-screen in
-        // landscape when the keyboard opens. This also covers every launcher-icon activity because
-        // they inherit MainActivity.
-        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
-        window.setBackgroundDrawableResource(R.color.av_splash_background)
+        window.setBackgroundDrawableResource(R.color.nuvio_background)
         pipRemoteActionReceiver = PipRemoteActionReceiver.register(this)
         SyncClientIdentityStorage.initialize(applicationContext)
         AddonHttpClientProvider.initialize(applicationContext)
@@ -109,20 +101,16 @@ open class MainActivity : AppCompatActivity() {
         LibraryStorage.initialize(applicationContext)
         WatchedStorage.initialize(applicationContext)
         MetaScreenSettingsStorage.initialize(applicationContext)
+        com.nuvio.app.features.shuffle.EpisodeShuffleStorage.initialize(applicationContext)
         HomeCatalogSettingsStorage.initialize(applicationContext)
         HomeCatalogCacheStorage.initialize(applicationContext)
         PlayerSettingsStorage.initialize(applicationContext)
-        com.nuvio.app.features.cloudflare.CfClearanceStorage.initialize(applicationContext)
         PlayerTrackPreferenceStorage.initialize(applicationContext)
         P2pSettingsStorage.initialize(applicationContext)
         P2pStreamingEngine.initialize(applicationContext)
         ExternalPlayerPlatform.initialize(applicationContext)
         SubtitleFileCache.initialize(applicationContext)
         ProfileStorage.initialize(applicationContext)
-        com.nuvio.app.features.profile.ProfileStatsStorage.initialize(applicationContext)
-        com.nuvio.app.features.profile.ProfileShare.initialize(applicationContext)
-        ProfileShareSettingsStorage.initialize(applicationContext)
-        ProfileBackgroundAppearanceStorage.initialize(applicationContext)
         AvatarStorage.initialize(applicationContext)
         ProfilePinCacheStorage.initialize(applicationContext)
         MemberAssetStorage.initialize(applicationContext)
@@ -130,10 +118,13 @@ open class MainActivity : AppCompatActivity() {
         SearchHistoryStorage.initialize(applicationContext)
         SeasonViewModeStorage.initialize(applicationContext)
         PosterCardStyleStorage.initialize(applicationContext)
+        CustomPosterUrlStorage.initialize(applicationContext)
         CardDepthStyleStorage.initialize(applicationContext)
         DebridSettingsStorage.initialize(applicationContext)
         TmdbSettingsStorage.initialize(applicationContext)
         MdbListSettingsStorage.initialize(applicationContext)
+        PlatformMdbListAuthPersistence.initialize(applicationContext)
+        PlatformMdbListSyncStorage.initialize(applicationContext)
         TrackingSettingsStorage.initialize(applicationContext)
         AniListAuthStorage.initialize(applicationContext)
         AniListCacheStorage.initialize(applicationContext)
@@ -145,8 +136,6 @@ open class MainActivity : AppCompatActivity() {
         TvdbSettingsStorage.initialize(applicationContext)
         LibraryDisplaySettingsStorage.initialize(applicationContext)
         ContinueWatchingPreferencesStorage.initialize(applicationContext)
-        com.nuvio.app.features.details.MangaReaderSettingsStorage.initialize(applicationContext)
-        com.nuvio.app.features.details.MangaReaderProgressStorage.initialize(applicationContext)
         ResumePromptStorage.initialize(applicationContext)
         ContinueWatchingEnrichmentStorage.initialize(applicationContext)
         EpisodeReleaseNotificationsStorage.initialize(applicationContext)
@@ -160,7 +149,6 @@ open class MainActivity : AppCompatActivity() {
         DownloadSettingsStorage.initialize(applicationContext)
         DownloadsStorage.initialize(applicationContext)
         DownloadsPlatformDownloader.initialize(applicationContext)
-        DownloadBackgroundExecution.initialize(applicationContext)
         DownloadsLiveStatusPlatform.initialize(applicationContext)
         AndroidAppUpdaterPlatform.initialize(applicationContext)
         PlatformLocalAccountDataCleaner.initialize(applicationContext)

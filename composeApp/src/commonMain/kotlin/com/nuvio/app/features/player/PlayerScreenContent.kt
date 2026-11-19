@@ -1,7 +1,9 @@
 package com.nuvio.app.features.player
 
-import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Box
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.asPaddingValues
@@ -12,12 +14,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerButton
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.features.addons.AddonRepository
+import com.nuvio.app.isDesktop
 import com.nuvio.app.features.details.MetaDetailsRepository
 import com.nuvio.app.features.details.MetaScreenSettingsRepository
 import com.nuvio.app.features.p2p.P2pSettingsRepository
@@ -29,6 +37,7 @@ import nuvio.composeapp.generated.resources.compose_player_airs_prefix
 import nuvio.composeapp.generated.resources.compose_player_downloaded
 import nuvio.composeapp.generated.resources.compose_player_resize_fill
 import nuvio.composeapp.generated.resources.compose_player_resize_fit
+import nuvio.composeapp.generated.resources.compose_player_resize_stretch
 import nuvio.composeapp.generated.resources.compose_player_resize_zoom
 import nuvio.composeapp.generated.resources.generic_unknown
 import nuvio.composeapp.generated.resources.parental_alcohol
@@ -42,10 +51,9 @@ import nuvio.composeapp.generated.resources.parental_violence
 import nuvio.composeapp.generated.resources.compose_player_tba
 import org.jetbrains.compose.resources.stringResource
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 internal fun PlayerScreenContent(args: PlayerScreenArgs) {
-    LockPlayerToLandscape()
-
     val playerSettingsUiState by remember {
         PlayerSettingsRepository.ensureLoaded()
         PlayerSettingsRepository.uiState
@@ -80,21 +88,25 @@ internal fun PlayerScreenContent(args: PlayerScreenArgs) {
     BoxWithConstraints(
         modifier = args.modifier
             .fillMaxSize()
-            .background(Color.Black),
+            .background(Color.Black)
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        if (event.type == PointerEventType.Press) {
+                            if (event.button == PointerButton.Back) {
+                                event.changes.forEach { it.consume() }
+                            } else if (event.button == PointerButton.Forward) {
+                                event.changes.forEach { it.consume() }
+                            }
+                        }
+                    }
+                }
+            },
     ) {
         val density = LocalDensity.current
         val horizontalSafePadding = playerHorizontalSafePadding()
-        val isInPip = rememberIsInPictureInPicture()
-        val dockPartyPanel = !isInPip && maxWidth > maxHeight
-        val partyPanelWidth = minOf(420.dp, maxWidth * 0.45f)
-        val animatedPartyInset by animateDpAsState(
-            targetValue = if (runtime.showPartyPanel && dockPartyPanel) partyPanelWidth else 0.dp,
-            animationSpec = tween(if (runtime.showPartyPanel) 250 else 200),
-            label = "partyPanelInset",
-        )
-        val partyInset = if (dockPartyPanel) animatedPartyInset else 0.dp
-        val playerWidth = maxWidth - partyInset
-        val metrics = remember(playerWidth) { PlayerLayoutMetrics.fromWidth(playerWidth) }
+        val metrics = remember(maxWidth) { PlayerLayoutMetrics.fromWidth(maxWidth) }
 
         runtime.scope = rememberCoroutineScope()
         runtime.hapticFeedback = LocalHapticFeedback.current
@@ -109,12 +121,12 @@ internal fun PlayerScreenContent(args: PlayerScreenArgs) {
         runtime.episodeStreamsRepoState = episodeStreamsRepoState
         runtime.metaUiState = metaUiState
         runtime.addonsUiState = addonsUiState
-        runtime.addonSubtitles = addonSubtitles
+        runtime.addonSubtitles = mergeStreamAndAddonSubtitles(addonSubtitles, runtime.externalSubtitles)
         runtime.isLoadingAddonSubtitles = isLoadingAddonSubtitles
         runtime.horizontalSafePadding = horizontalSafePadding
         runtime.metrics = metrics
         runtime.sliderEdgePadding = horizontalSafePadding + metrics.horizontalPadding
-        runtime.overlayBottomPadding = if (playerSettingsUiState.useLegacyPlayerLayout) {
+        runtime.overlayBottomPadding = if (isDesktop || playerSettingsUiState.useLegacyPlayerLayout) {
             sliderOverlayBottomPadding(metrics)
         } else {
             playerTimelineBottomInsets(metrics).asPaddingValues().calculateBottomPadding() +
@@ -126,6 +138,7 @@ internal fun PlayerScreenContent(args: PlayerScreenArgs) {
         runtime.resizeModeFitLabel = stringResource(Res.string.compose_player_resize_fit)
         runtime.resizeModeFillLabel = stringResource(Res.string.compose_player_resize_fill)
         runtime.resizeModeZoomLabel = stringResource(Res.string.compose_player_resize_zoom)
+        runtime.resizeModeStretchLabel = stringResource(Res.string.compose_player_resize_stretch)
         runtime.downloadedLabel = stringResource(Res.string.compose_player_downloaded)
         runtime.airsPrefix = stringResource(Res.string.compose_player_airs_prefix)
         runtime.tbaLabel = stringResource(Res.string.compose_player_tba)
@@ -146,9 +159,10 @@ internal fun PlayerScreenContent(args: PlayerScreenArgs) {
                 args.parentMetaId,
             )?.videos ?: emptyList()
         }
-        if (runtime.lastSyncedSettingsResizeMode != playerSettingsUiState.resizeMode) {
-            runtime.resizeMode = playerSettingsUiState.resizeMode
-            runtime.lastSyncedSettingsResizeMode = playerSettingsUiState.resizeMode
+        val settingsResizeMode = playerSettingsUiState.resizeMode.supportedOnCurrentPlatform()
+        if (runtime.lastSyncedSettingsResizeMode != settingsResizeMode) {
+            runtime.resizeMode = settingsResizeMode
+            runtime.lastSyncedSettingsResizeMode = settingsResizeMode
         }
         runtime.resetIdentityStateIfNeeded()
 
@@ -164,6 +178,19 @@ internal fun PlayerScreenContent(args: PlayerScreenArgs) {
             ),
         )
         runtime.BindPlayerRuntimeEffects()
-        runtime.RenderPlayerRuntimeUi(partyPanelWidth, partyInset, dockPartyPanel, !isInPip)
+        runtime.BindPartyEffects()
+        val isInPip = rememberIsInPictureInPicture()
+        val dockParty = !isInPip && maxWidth > maxHeight
+        val partyPanelWidth = (maxWidth * 0.34f).coerceIn(270.dp, 420.dp)
+        val inset by animateDpAsState(
+            targetValue = if (runtime.showPartyPanel && dockParty) partyPanelWidth else 0.dp,
+            animationSpec = tween(230),
+        )
+        Box(Modifier.fillMaxSize().padding(start = inset)) {
+            runtime.RenderPlayerRuntimeUi()
+        }
+        Box(Modifier.fillMaxSize()) {
+            RenderParty(runtime = runtime, panelWidth = partyPanelWidth, modal = !dockParty, panelAllowed = !isInPip)
+        }
     }
 }

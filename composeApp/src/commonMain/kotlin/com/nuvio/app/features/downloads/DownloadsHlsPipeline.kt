@@ -4,6 +4,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.serialization.Serializable
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
@@ -43,9 +44,8 @@ internal fun mergeDownloadHeaders(vararg layers: Map<String, String>?): Map<Stri
 /**
  * Downloads an HLS playlist (and all of its segments) to a caller-provided sink.
  * Supports master playlists (picks the highest-bandwidth variant), media initialization
- * segments ([EXT-X-MAP]) and relative/absolute segment URIs. AES-128 encrypted playlists are
- * decrypted on the fly (key fetched from the EXT-X-KEY URI, IV explicit or derived from the
- * media sequence); SAMPLE-AES is rejected since it can only be undone inside the codec pipeline.
+ * segments ([EXT-X-MAP]) and relative/absolute segment URIs. Encrypted playlists
+ * (AES-128/SAMPLE-AES) are rejected with a descriptive error.
  */
 internal object DownloadsHlsPipeline {
 
@@ -77,33 +77,24 @@ internal object DownloadsHlsPipeline {
         val playlist = parseMediaPlaylist(playlistBody)
             ?: error("Unsupported HLS playlist format")
 
-        if (playlist.sampleAesEncrypted) {
-            error("Sample-AES encrypted HLS streams cannot be downloaded")
+        if (playlist.encrypted) {
+            error("Encrypted HLS streams cannot be downloaded")
         }
 
-        // Cache fetched AES-128 keys by their URI so a playlist that reuses one key fetches it once.
-        val keyCache = mutableMapOf<String, ByteArray>()
-        suspend fun keyBytesFor(keyUri: String): ByteArray =
-            keyCache.getOrPut(keyUri) {
-                val resolved = resolveSegmentUri(mediaPlaylistUrl, keyUri)
-                httpDownloadBytes(url = resolved, headers = headers).also {
-                    if (it.size != 16) error("Unexpected AES-128 key length ${it.size}")
-                }
-            }
-
         var downloadedBytes = 0L
+        val initializedSegmentUris = mutableListOf<String>()
 
         playlist.initializationUri?.let { initUri ->
             if (isCancelled()) return
             val uri = resolveSegmentUri(mediaPlaylistUrl, initUri)
-            // The init segment is not encrypted even in an AES-128 playlist, so it is appended as-is.
             val chunk = downloadSegmentWithRetry(uri, headers)
             appendChunk(chunk)
+            initializedSegmentUris += initUri
             downloadedBytes += chunk.size
             onProgress(downloadedBytes, null)
         }
 
-        val segments = playlist.segments
+        val segments = playlist.segmentUris
         if (segments.isEmpty()) {
             error("HLS playlist contains no segments")
         }
@@ -118,17 +109,10 @@ internal object DownloadsHlsPipeline {
         segments.chunked(SEGMENT_CONCURRENCY).forEach { window ->
             if (isCancelled()) return
             val chunks = coroutineScope {
-                window.map { segment ->
+                window.map { segmentUri ->
                     async {
-                        val uri = resolveSegmentUri(mediaPlaylistUrl, segment.uri)
-                        val raw = downloadSegmentWithRetry(uri, headers)
-                        val encryption = segment.encryption
-                        if (encryption == null) {
-                            raw
-                        } else {
-                            val key = keyBytesFor(encryption.keyUri)
-                            hlsAes128CbcDecrypt(raw, key, encryption.iv)
-                        }
+                        val uri = resolveSegmentUri(mediaPlaylistUrl, segmentUri)
+                        downloadSegmentWithRetry(uri, headers)
                     }
                 }.awaitAll()
             }
@@ -205,110 +189,12 @@ internal object DownloadsHlsPipeline {
         return variants
     }
 
-    /**
-     * Downloads any in-manifest subtitle renditions (`#EXT-X-MEDIA:TYPE=SUBTITLES`) referenced by an
-     * HLS master playlist and returns the concatenated WebVTT text for each. ExoPlayer renders these
-     * tracks automatically during online playback, so without this a downloaded episode would lose the
-     * subtitles the user saw while streaming. Returns an empty list for media playlists or when no
-     * subtitle renditions are present.
-     */
-    suspend fun extractSubtitles(
-        playlistUrl: String,
-        headers: Map<String, String>,
-    ): List<HlsSubtitleTrack> {
-        val masterBody = runCatching {
-            httpDownloadText(url = playlistUrl, headers = headers, maxBytes = MAX_PLAYLIST_BYTES)
-        }.getOrNull() ?: return emptyList()
-        if (!masterBody.contains("#EXT-X-STREAM-INF")) return emptyList()
-
-        val renditions = parseSubtitleRenditions(masterBody)
-        if (renditions.isEmpty()) return emptyList()
-
-        val tracks = mutableListOf<HlsSubtitleTrack>()
-        renditions.forEachIndexed { index, rendition ->
-            val subtitlePlaylistUrl = resolveSegmentUri(playlistUrl, rendition.uri)
-            val text = runCatching {
-                downloadWebVttTrack(subtitlePlaylistUrl, headers)
-            }.getOrNull()
-            if (!text.isNullOrBlank()) {
-                tracks += HlsSubtitleTrack(
-                    language = rendition.language ?: rendition.name ?: "sub$index",
-                    name = rendition.name,
-                    content = text,
-                )
-            }
-        }
-        return tracks
-    }
-
-    /** Parses `#EXT-X-MEDIA:TYPE=SUBTITLES` lines out of a master playlist. */
-    private fun parseSubtitleRenditions(body: String): List<SubtitleRendition> {
-        val renditions = mutableListOf<SubtitleRendition>()
-        body.lineSequence().map { it.trim() }.forEach { line ->
-            if (!line.startsWith("#EXT-X-MEDIA:")) return@forEach
-            val type = Regex("TYPE=([A-Za-z0-9-]+)").find(line)?.groupValues?.get(1)?.uppercase()
-            if (type != "SUBTITLES") return@forEach
-            val uri = Regex("URI=\"([^\"]+)\"").find(line)?.groupValues?.get(1) ?: return@forEach
-            val language = Regex("LANGUAGE=\"([^\"]+)\"").find(line)?.groupValues?.get(1)
-            val name = Regex("NAME=\"([^\"]+)\"").find(line)?.groupValues?.get(1)
-            renditions += SubtitleRendition(uri = uri, language = language, name = name)
-        }
-        return renditions
-    }
-
-    /**
-     * Resolves a subtitle rendition URI (which may itself be a tiny media playlist pointing at one or
-     * more .vtt segments, or a direct .vtt/.srt file) and returns a single concatenated WebVTT document.
-     */
-    private suspend fun downloadWebVttTrack(
-        subtitleUri: String,
-        headers: Map<String, String>,
-    ): String {
-        val lower = subtitleUri.substringBefore('?').lowercase()
-        // A direct subtitle file (no playlist indirection).
-        if (lower.endsWith(".vtt") || lower.endsWith(".srt") || lower.endsWith(".ass") || lower.endsWith(".ssa")) {
-            return httpDownloadText(url = subtitleUri, headers = headers, maxBytes = MAX_PLAYLIST_BYTES)
-        }
-
-        val playlistBody = httpDownloadText(url = subtitleUri, headers = headers, maxBytes = MAX_PLAYLIST_BYTES)
-        if (!playlistBody.contains("#EXTM3U")) {
-            // Not a playlist after all — treat the body as the subtitle itself.
-            return playlistBody
-        }
-
-        val segmentUris = playlistBody.lineSequence()
-            .map { it.trim() }
-            .filter { it.isNotEmpty() && !it.startsWith("#") }
-            .map { resolveSegmentUri(subtitleUri, it) }
-            .toList()
-        if (segmentUris.isEmpty()) return ""
-
-        val builder = StringBuilder()
-        segmentUris.forEach { uri ->
-            val part = runCatching {
-                httpDownloadText(url = uri, headers = headers, maxBytes = MAX_PLAYLIST_BYTES)
-            }.getOrNull().orEmpty()
-            if (part.isNotBlank()) {
-                if (builder.isNotEmpty()) builder.append('\n')
-                builder.append(part)
-            }
-        }
-        return builder.toString()
-    }
-
     private fun parseMediaPlaylist(body: String): MediaPlaylist? {
         if (!body.contains("#EXTM3U")) return null
 
         var initializationUri: String? = null
-        val segments = mutableListOf<MediaSegment>()
-        var sampleAesEncrypted = false
-
-        // The active EXT-X-KEY applies to every following segment until the next EXT-X-KEY. A
-        // media sequence counter is tracked so AES-128 segments without an explicit IV can derive
-        // one from their sequence number per RFC 8216 §5.2.
-        var currentKeyUri: String? = null
-        var currentExplicitIv: ByteArray? = null
-        var mediaSequence = parseStartMediaSequence(body)
+        val segmentUris = mutableListOf<String>()
+        var encrypted = false
 
         body.lineSequence().map { it.trim() }.forEach { line ->
             when {
@@ -322,71 +208,22 @@ internal object DownloadsHlsPipeline {
                         ?.groupValues
                         ?.get(1)
                         ?.uppercase()
-                    when (method) {
-                        null, "NONE" -> {
-                            currentKeyUri = null
-                            currentExplicitIv = null
-                        }
-                        "AES-128" -> {
-                            currentKeyUri = Regex("URI=\"([^\"]+)\"").find(line)?.groupValues?.get(1)
-                            currentExplicitIv = Regex("IV=0[xX]([0-9A-Fa-f]+)").find(line)
-                                ?.groupValues
-                                ?.get(1)
-                                ?.let(::hexToBytes)
-                        }
-                        else -> {
-                            // SAMPLE-AES (or any other non-decryptable method): flag and stop.
-                            sampleAesEncrypted = true
-                        }
+                    if (method != null && method != "NONE") {
+                        encrypted = true
                     }
                 }
                 line.startsWith("#EXT-X-BYTERANGE") -> Unit
                 line.isNotEmpty() && !line.startsWith("#") -> {
-                    val keyUri = currentKeyUri
-                    val encryption = if (keyUri != null) {
-                        SegmentEncryption(
-                            keyUri = keyUri,
-                            iv = currentExplicitIv ?: ivFromSequence(mediaSequence),
-                        )
-                    } else {
-                        null
-                    }
-                    segments += MediaSegment(uri = line, encryption = encryption)
-                    mediaSequence++
+                    segmentUris += line
                 }
             }
         }
 
         return MediaPlaylist(
             initializationUri = initializationUri,
-            segments = segments,
-            sampleAesEncrypted = sampleAesEncrypted,
+            segmentUris = segmentUris,
+            encrypted = encrypted,
         )
-    }
-
-    private fun parseStartMediaSequence(body: String): Long =
-        Regex("#EXT-X-MEDIA-SEQUENCE:(\\d+)").find(body)
-            ?.groupValues
-            ?.get(1)
-            ?.toLongOrNull()
-            ?: 0L
-
-    /** 16-byte big-endian IV from a segment's media sequence number (RFC 8216 §5.2 default IV). */
-    private fun ivFromSequence(sequence: Long): ByteArray {
-        val iv = ByteArray(16)
-        var value = sequence
-        for (i in 0 until 8) {
-            iv[15 - i] = (value and 0xFF).toByte()
-            value = value ushr 8
-        }
-        return iv
-    }
-
-    private fun hexToBytes(hex: String): ByteArray {
-        val clean = if (hex.length % 2 == 1) "0$hex" else hex
-        return ByteArray(clean.length / 2) { i ->
-            clean.substring(i * 2, i * 2 + 2).toInt(16).toByte()
-        }
     }
 
     private fun resolveSegmentUri(playlistUrl: String, segmentUri: String): String {
@@ -425,35 +262,13 @@ internal object DownloadsHlsPipeline {
         val bandwidth: Long,
     )
 
+    @Serializable
     private data class MediaPlaylist(
         val initializationUri: String? = null,
-        val segments: List<MediaSegment> = emptyList(),
-        val sampleAesEncrypted: Boolean = false,
-    )
-
-    private data class MediaSegment(
-        val uri: String,
-        val encryption: SegmentEncryption? = null,
-    )
-
-    private class SegmentEncryption(
-        val keyUri: String,
-        val iv: ByteArray,
+        val segmentUris: List<String> = emptyList(),
+        val encrypted: Boolean = false,
     )
 }
-
-/** A subtitle track extracted from an HLS master playlist, as a concatenated WebVTT document. */
-internal data class HlsSubtitleTrack(
-    val language: String,
-    val name: String?,
-    val content: String,
-)
-
-private data class SubtitleRendition(
-    val uri: String,
-    val language: String?,
-    val name: String?,
-)
 
 expect suspend fun httpDownloadText(
     url: String,

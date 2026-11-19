@@ -1,24 +1,10 @@
 package com.nuvio.app.core.deeplink
 
-import com.nuvio.app.features.party.partyInviteLink
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class AppUrlBridgeTest {
-
-    @Test
-    fun `shares watch party invitations on the Anivio website`() {
-        assertEquals("https://anivio.eu.cc/party?code=ABC234", partyInviteLink("abc 234"))
-    }
-
-    @Test
-    fun `opens watch party invitations from Anivio and legacy app links`() {
-        assertEquals(AppDeepLink.Party("ABC234"), parseAppDeepLink("anivio://party/ABC234"))
-        assertEquals(AppDeepLink.Party("ABC234"), parseAppDeepLink("nuvio://party/ABC234"))
-        assertNull(parseAppDeepLink("anivio://party/ABC"))
-        assertNull(parseAppDeepLink("anivio://example.com/manifest.json"))
-    }
 
     @Test
     fun `parses existing notification meta deeplink`() {

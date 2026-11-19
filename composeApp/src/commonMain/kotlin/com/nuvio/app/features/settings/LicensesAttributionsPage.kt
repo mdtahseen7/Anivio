@@ -28,12 +28,13 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
+import com.nuvio.app.core.ui.NuvioAsyncImage as AsyncImage
 import com.nuvio.app.core.ui.NuvioScreen
 import com.nuvio.app.core.ui.NuvioScreenHeader
 import com.nuvio.app.features.cloud.PremiumizeCloudLibraryPosterUrl
 import com.nuvio.app.features.cloud.TorboxCloudLibraryPosterUrl
 import com.nuvio.app.features.cloud.cloudLibraryDisplayArtworkUrl
+import com.nuvio.app.isDesktop
 import com.nuvio.app.isIos
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.StringResource
@@ -45,14 +46,15 @@ private const val AniZipUrl = "https://ani.zip"
 private const val KitsuUrl = "https://kitsu.app"
 private const val FanartUrl = "https://fanart.tv"
 private const val TvdbUrl = "https://thetvdb.com"
-private const val MangaBakaUrl = "https://mangabaka.org"
 private const val ImdbDatasetsUrl = "https://developer.imdb.com/non-commercial-datasets/"
 private const val PremiumizeUrl = "https://www.premiumize.me"
 private const val TorboxUrl = "https://torbox.app"
 private const val MdbListUrl = "https://mdblist.com"
 private const val IntroDbUrl = "https://introdb.app/"
+private const val MpvUrl = "https://github.com/mpv-player/mpv"
 private const val MpvKitUrl = "https://github.com/mpvkit/MPVKit"
 private const val ApacheLicenseUrl = "https://www.apache.org/licenses/LICENSE-2.0"
+private const val HazeLicenseUrl = "https://github.com/chrisbanes/haze/blob/1.7.2/LICENSE"
 private const val DiscordUrl = "https://discord.com"
 
 /**
@@ -70,7 +72,7 @@ private data class AttributionItem(
     val link: String,
 )
 
-private data class LicenseItem(
+internal data class LicenseItem(
     val titleRes: StringResource,
     val bodyRes: StringResource,
     val licenseRes: StringResource? = null,
@@ -150,26 +152,21 @@ private fun LicensesAttributionsBody(
                 item = platformLicenseItem(),
                 isTablet = isTablet,
             )
-            if (!isIos) {
-                val enhancementItems = listOf(
-                    LicenseItem(
-                        titleRes = Res.string.enhancement_credit_anime4k_title,
-                        bodyRes = Res.string.enhancement_credit_anime4k_body,
-                        licenseRes = Res.string.enhancement_credit_anime4k_license,
-                        link = "https://github.com/bloc97/Anime4K",
-                    ),
-                    LicenseItem(
-                        titleRes = Res.string.enhancement_credit_fsrcnnx_title,
-                        bodyRes = Res.string.enhancement_credit_fsrcnnx_body,
-                        licenseRes = Res.string.enhancement_credit_fsrcnnx_license,
-                        link = "https://github.com/igv/FSRCNN-TensorFlow/releases/tag/1.1",
-                    ),
-                )
-                enhancementItems.forEach { item ->
-                    PlainStackDivider()
-                    LicenseRow(item = item, isTablet = isTablet)
-                }
-            }
+        }
+
+        PlainSettingsStack(
+            title = stringResource(Res.string.settings_licenses_attributions_section_ui),
+            isTablet = isTablet,
+        ) {
+            LicenseRow(
+                item = LicenseItem(
+                    titleRes = Res.string.settings_licenses_attributions_haze_title,
+                    bodyRes = Res.string.settings_licenses_attributions_haze_body,
+                    licenseRes = Res.string.settings_licenses_attributions_haze_license,
+                    link = HazeLicenseUrl,
+                ),
+                isTablet = isTablet,
+            )
         }
     }
 }
@@ -437,13 +434,6 @@ private fun attributionItems(): List<AttributionItem> = listOf(
         link = TvdbUrl,
     ),
     AttributionItem(
-        titleRes = Res.string.settings_licenses_attributions_mangabaka_title,
-        bodyRes = Res.string.settings_licenses_attributions_mangabaka_body,
-        logo = null,
-        logoUrl = faviconUrl("mangabaka.org"),
-        link = MangaBakaUrl,
-    ),
-    AttributionItem(
         titleRes = Res.string.settings_licenses_attributions_fanart_title,
         bodyRes = Res.string.settings_licenses_attributions_fanart_body,
         logo = null,
@@ -503,16 +493,21 @@ private fun appLicenseItems(): List<LicenseItem> = listOf(
     ),
 )
 
-private fun platformLicenseItem(): LicenseItem =
-    if (isIos) {
-        LicenseItem(
+internal fun platformLicenseItem(): LicenseItem =
+    when {
+        isDesktop -> LicenseItem(
+            titleRes = Res.string.settings_licenses_attributions_mpv_title,
+            bodyRes = Res.string.settings_licenses_attributions_mpv_body,
+            licenseRes = Res.string.settings_licenses_attributions_mpv_license,
+            link = MpvUrl,
+        )
+        isIos -> LicenseItem(
             titleRes = Res.string.settings_licenses_attributions_mpvkit_title,
             bodyRes = Res.string.settings_licenses_attributions_mpvkit_body,
             licenseRes = Res.string.settings_licenses_attributions_mpvkit_license,
             link = MpvKitUrl,
         )
-    } else {
-        LicenseItem(
+        else -> LicenseItem(
             titleRes = Res.string.settings_licenses_attributions_exoplayer_title,
             bodyRes = Res.string.settings_licenses_attributions_exoplayer_body,
             licenseRes = Res.string.settings_licenses_attributions_exoplayer_license,

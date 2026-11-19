@@ -4,11 +4,12 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.nuvio.app.core.diagnostics.SentryNetworkBreadcrumbInterceptor
 import com.nuvio.app.core.network.IPv4FirstDns
-import com.nuvio.app.features.cloudflare.CfClearanceRepository
-import com.nuvio.app.features.cloudflare.isCloudflareChallenge
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import java.io.IOException
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.network_empty_response_body
 import nuvio.composeapp.generated.resources.network_request_failed_http
@@ -30,8 +31,6 @@ actual object AddonStorage {
     private const val preferencesName = "nuvio_addons"
     private const val addonUrlsKey = "installed_manifest_urls"
     private const val addonEnabledStatesKey = "installed_manifest_enabled_states"
-    private const val addonFailureReasonsKey = "installed_manifest_failure_reasons"
-    private const val preferredAddonUrlsKey = "preferred_addon_urls"
 
     private var preferences: SharedPreferences? = null
 
@@ -72,63 +71,6 @@ actual object AddonStorage {
             ?.putString("${addonEnabledStatesKey}_$profileId", payload)
             ?.apply()
     }
-
-    actual fun loadAddonFailureReasons(profileId: Int): Map<String, String> =
-        preferences
-            ?.getString("${addonFailureReasonsKey}_$profileId", null)
-            .orEmpty()
-            .lineSequence()
-            .mapNotNull { line ->
-                val separator = line.indexOf('\t')
-                if (separator <= 0) null else {
-                    val url = line.substring(0, separator).trim()
-                    val reason = line.substring(separator + 1).trim()
-                    url.takeIf { it.isNotEmpty() }?.let { it to reason }
-                }
-            }
-            .toMap()
-
-    actual fun saveAddonFailureReasons(profileId: Int, reasons: Map<String, String>) {
-        val payload = reasons.entries.joinToString(separator = "\n") { (url, reason) ->
-            "$url\t${reason.replace("\n", " ")}"
-        }
-        preferences
-            ?.edit()
-            ?.putString("${addonFailureReasonsKey}_$profileId", payload)
-            ?.apply()
-    }
-
-    actual fun loadPreferredAddonUrls(profileId: Int): Map<String, List<String>> =
-        preferences
-            ?.getString("${preferredAddonUrlsKey}_$profileId", null)
-            .orEmpty()
-            .lineSequence()
-            .mapNotNull { line ->
-                val separator = line.indexOf('\t')
-                if (separator <= 0) null else {
-                    val type = line.substring(0, separator).trim()
-                    val urls = line.substring(separator + 1)
-                        .split('|')
-                        .map(String::trim)
-                        .filter(String::isNotEmpty)
-                    type.takeIf { it.isNotEmpty() }?.let { it to urls }
-                }
-            }
-            .toMap()
-
-    actual fun savePreferredAddonUrls(profileId: Int, preferences: Map<String, List<String>>) {
-        val payload = preferences.entries.joinToString(separator = "\n") { (type, urls) ->
-            "$type\t${urls.joinToString("|")}"
-        }
-        this.preferences
-            ?.edit()
-            ?.putString("${preferredAddonUrlsKey}_$profileId", payload)
-            ?.apply()
-    }
-}
-
-internal actual fun clearAddonHttpCache() {
-    AddonHttpClientProvider.clearCache()
 }
 
 private fun parseEnabledStateLine(line: String): Pair<String, Boolean>? {
@@ -156,10 +98,6 @@ internal object AddonHttpClientProvider {
     }
 
     fun get(): OkHttpClient = client
-
-    fun clearCache() {
-        client.cache?.evictAll()
-    }
 }
 
 private fun buildAddonHttpClient(cache: Cache? = null): OkHttpClient =
@@ -247,17 +185,6 @@ private fun readResponseBody(body: ResponseBody?): String {
     }
 }
 
-/**
- * Merges a stored Cloudflare clearance (cookie + its matching User-Agent) into [headers] when the
- * setting is on and a fresh token exists for [url]'s host. The clearance values override any
- * Cookie/User-Agent the caller supplied, since cf_clearance is bound to that exact UA.
- */
-private fun applyCfClearance(url: String, headers: Map<String, String>): Map<String, String> {
-    val cf = CfClearanceRepository.freshClearanceHeadersFor(url) ?: return headers
-    val base = headers.filterKeys { !it.equals("User-Agent", true) && !it.equals("Cookie", true) }
-    return base + mapOf("User-Agent" to cf.userAgent, "Cookie" to cf.cookie)
-}
-
 private suspend fun executeTextRequest(
     method: String,
     url: String,
@@ -265,7 +192,7 @@ private suspend fun executeTextRequest(
     body: String = "",
 ): String = withContext(Dispatchers.IO) {
     val normalizedMethod = method.uppercase()
-    val sanitizedHeaders = applyCfClearance(url, headers.withoutAcceptEncoding())
+    val sanitizedHeaders = headers.withoutAcceptEncoding()
     val builder = Request.Builder().url(url)
     sanitizedHeaders.forEach { (key, value) ->
         builder.header(key, value)
@@ -284,9 +211,6 @@ private suspend fun executeTextRequest(
     AddonHttpClientProvider.get().newCall(request).execute().use { response ->
         val payload = readResponseBody(response.body)
         if (!response.isSuccessful) {
-            if (isCloudflareChallenge(response.code, payload)) {
-                CfClearanceRepository.noteChallengeHost(url)
-            }
             error(runBlocking { getString(Res.string.network_request_failed_http, response.code) })
         }
         if (payload.isBlank()) {
@@ -346,10 +270,11 @@ actual suspend fun httpRequestRaw(
     body: String,
     followRedirects: Boolean,
     maxResponseBodyBytes: Int,
+    bodyBytes: ByteArray?,
 ): RawHttpResponse =
     withContext(Dispatchers.IO) {
         val normalizedMethod = method.uppercase()
-        val sanitizedHeaders = applyCfClearance(url, headers.withoutAcceptEncoding())
+        val sanitizedHeaders = headers.withoutAcceptEncoding()
         val builder = Request.Builder().url(url)
         sanitizedHeaders.forEach { (key, value) ->
             builder.header(key, value)
@@ -358,7 +283,8 @@ actual suspend fun httpRequestRaw(
         val request = if (requestAllowsBody(normalizedMethod)) {
             val contentType = sanitizedHeaders.getHeaderIgnoreCase("Content-Type")
                 ?: if (normalizedMethod == "POST") "application/x-www-form-urlencoded" else "application/json"
-            val requestBody = body.toByteArray(Charsets.UTF_8).toRequestBody(contentType.toMediaType())
+            val requestBody = (bodyBytes ?: body.toByteArray(Charsets.UTF_8))
+                .toRequestBody(contentType.toMediaType())
             builder.method(normalizedMethod, requestBody)
         } else {
             builder.method(normalizedMethod, null)
@@ -373,21 +299,38 @@ actual suspend fun httpRequestRaw(
                 .build()
         }
 
-        client.newCall(request).execute().use { response ->
-            val responseBody = readResponseBodyLimited(response.body, maxResponseBodyBytes)
-            if (isCloudflareChallenge(response.code, responseBody)) {
-                CfClearanceRepository.noteChallengeHost(url)
+        val call = client.newCall(request)
+        val cancelHandle = coroutineContext[Job]?.invokeOnCompletion { cause ->
+            if (cause is CancellationException) {
+                call.cancel()
             }
-            RawHttpResponse(
-                status = response.code,
-                statusText = response.message,
-                url = response.request.url.toString(),
-                body = responseBody,
-                headers = response.headers.toMultimap().mapValues { (_, values) ->
-                    values.joinToString(",")
-                }.mapKeys { (name, _) ->
-                    name.lowercase()
-                },
-            )
+        }
+        try {
+            call.execute().use { response ->
+                val contentType = response.body?.contentType()
+                val readResult = response.body?.byteStream()?.use { stream ->
+                    readAtMostBytes(stream, maxResponseBodyBytes.coerceAtLeast(0))
+                } ?: LimitedReadResult(ByteArray(0), truncated = false)
+                val charset = contentType?.charset(Charsets.UTF_8) ?: Charsets.UTF_8
+                val decoded = runCatching { String(readResult.bytes, charset) }
+                    .getOrElse { String(readResult.bytes, Charsets.UTF_8) }
+                RawHttpResponse(
+                    status = response.code,
+                    statusText = response.message,
+                    url = response.request.url.toString(),
+                    body = if (readResult.truncated) "$decoded\n...[truncated]" else decoded,
+                    bodyBytes = readResult.bytes,
+                    headers = response.headers.toMultimap().mapValues { (_, values) ->
+                        values.joinToString(",")
+                    }.mapKeys { (name, _) ->
+                        name.lowercase()
+                    },
+                )
+            }
+        } catch (error: IOException) {
+            if (call.isCanceled()) throw CancellationException("Cancelled HTTP request", error)
+            throw error
+        } finally {
+            cancelHandle?.dispose()
         }
     }

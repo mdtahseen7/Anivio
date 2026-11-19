@@ -40,6 +40,8 @@ internal data class StreamCandidate(
     val priority: Int,
     val url: String,
     val score: Double,
+    val bitrate: Long,
+    val mimeType: String,
     val hasN: Boolean,
     val height: Int,
     val fps: Int,
@@ -135,19 +137,30 @@ class InAppYouTubeExtractor {
     private val log = Logger.withTag(TRAILER_EXTRACTOR_TAG)
 
     suspend fun extractPlaybackSource(youtubeUrl: String): TrailerPlaybackSource? = withContext(Dispatchers.Default) {
-        if (youtubeUrl.isBlank()) return@withContext null
+        if (youtubeUrl.isBlank()) {
+            TrailerExtractionPlatform.diagnostic("blocked stage=input reason=blank_url")
+            return@withContext null
+        }
 
         runCatching {
             withTimeout(EXTRACTOR_TIMEOUT_MS) {
                 extractPlaybackSourceInternal(youtubeUrl)
             }
         }.onFailure {
+            TrailerExtractionPlatform.diagnostic(
+                "blocked stage=extraction error=${it::class.simpleName} message=${it.message.orEmpty()}",
+            )
             log.w { "Trailer extractor failed for $youtubeUrl: ${it.message}" }
         }.getOrNull()
     }
 
     private suspend fun extractPlaybackSourceInternal(youtubeUrl: String): TrailerPlaybackSource? {
-        val videoId = extractVideoId(youtubeUrl) ?: return null
+        val videoId = extractVideoId(youtubeUrl)
+        if (videoId == null) {
+            TrailerExtractionPlatform.diagnostic("blocked stage=input reason=invalid_youtube_url")
+            return null
+        }
+        TrailerExtractionPlatform.diagnostic("extract start videoId=$videoId")
 
         val watchUrl = "https://www.youtube.com/watch?v=$videoId&hl=en"
         val watchResponse = TrailerExtractionPlatform.performRequest(
@@ -160,6 +173,9 @@ class InAppYouTubeExtractor {
         if (!watchResponse.ok) {
             throw IllegalStateException("Failed to fetch watch page (${watchResponse.status})")
         }
+        TrailerExtractionPlatform.diagnostic(
+            "watch ok status=${watchResponse.status} bytes=${watchResponse.body.length}",
+        )
 
         val watchConfig = getWatchConfig(watchResponse.body)
         val apiKey = watchConfig.apiKey
@@ -172,6 +188,10 @@ class InAppYouTubeExtractor {
 
         for (client in CLIENTS) {
             runCatching {
+                val progressiveStart = progressive.size
+                val videoStart = adaptiveVideo.size
+                val audioStart = adaptiveAudio.size
+                val manifestStart = manifestUrls.size
                 val playerResponse = fetchPlayerResponse(
                     apiKey = apiKey,
                     videoId = videoId,
@@ -179,7 +199,8 @@ class InAppYouTubeExtractor {
                     visitorData = watchConfig.visitorData,
                 )
 
-                val streamingData = playerResponse.objectValue("streamingData") ?: return@runCatching
+                val streamingData = playerResponse.objectValue("streamingData")
+                    ?: throw IllegalStateException("missing streamingData")
                 val hlsManifestUrl = streamingData.stringValue("hlsManifestUrl")
                 if (!hlsManifestUrl.isNullOrBlank()) {
                     manifestUrls += Triple(client.key, client.priority, hlsManifestUrl)
@@ -205,6 +226,8 @@ class InAppYouTubeExtractor {
                         priority = client.priority,
                         url = url,
                         score = videoScore(height, fps, bitrate),
+                        bitrate = bitrate.toLong(),
+                        mimeType = mimeType,
                         hasN = hasNParam(url),
                         height = height,
                         fps = fps,
@@ -234,6 +257,8 @@ class InAppYouTubeExtractor {
                             priority = client.priority,
                             url = url,
                             score = videoScore(height, fps, bitrate),
+                            bitrate = bitrate.toLong(),
+                            mimeType = mimeType,
                             hasN = hasNParam(url),
                             height = height,
                             fps = fps,
@@ -256,6 +281,8 @@ class InAppYouTubeExtractor {
                             priority = client.priority,
                             url = url,
                             score = audioScore(bitrate, audioSampleRate),
+                            bitrate = bitrate.toLong(),
+                            mimeType = mimeType,
                             hasN = hasNParam(url),
                             height = 0,
                             fps = 0,
@@ -264,10 +291,21 @@ class InAppYouTubeExtractor {
                         )
                     }
                 }
+                TrailerExtractionPlatform.diagnostic(
+                    "client=${client.key} ok progressive=${progressive.size - progressiveStart} " +
+                        "video=${adaptiveVideo.size - videoStart} audio=${adaptiveAudio.size - audioStart} " +
+                        "hls=${manifestUrls.size - manifestStart}",
+                )
+            }.onFailure {
+                TrailerExtractionPlatform.diagnostic(
+                    "blocked stage=client client=${client.key} error=${it::class.simpleName} " +
+                        "message=${it.message.orEmpty()}",
+                )
             }
         }
 
         if (manifestUrls.isEmpty() && progressive.isEmpty() && adaptiveVideo.isEmpty() && adaptiveAudio.isEmpty()) {
+            TrailerExtractionPlatform.diagnostic("blocked stage=candidates reason=no_streams")
             return null
         }
 
@@ -290,12 +328,34 @@ class InAppYouTubeExtractor {
                 ) {
                     bestManifest = candidate
                 }
+            }.onFailure {
+                TrailerExtractionPlatform.diagnostic(
+                    "blocked stage=hls client=$clientKey error=${it::class.simpleName} " +
+                        "message=${it.message.orEmpty()}",
+                )
             }
         }
 
         val bestProgressive = sortCandidates(progressive).firstOrNull()
-        val bestVideo = pickBestForClient(adaptiveVideo, PREFERRED_SEPARATE_CLIENT)
-        val bestAudio = pickBestForClient(adaptiveAudio, PREFERRED_SEPARATE_CLIENT)
+        val supportedVideo = adaptiveVideo.filter(TrailerExtractionPlatform::supportsSeparateVideo)
+        val supportedAudio = adaptiveAudio.filter(TrailerExtractionPlatform::supportsSeparateAudio)
+        val bestVideo = pickBestForClient(
+            supportedVideo,
+            PREFERRED_SEPARATE_CLIENT,
+        )
+        val bestAudio = pickBestForClient(
+            supportedAudio,
+            PREFERRED_SEPARATE_CLIENT,
+        )
+        TrailerExtractionPlatform.diagnostic(
+            "candidates progressive=${progressive.size} adaptiveVideo=${adaptiveVideo.size} " +
+                "adaptiveAudio=${adaptiveAudio.size} hls=${manifestUrls.size} " +
+                "supportedVideo=${supportedVideo.size} supportedAudio=${supportedAudio.size}",
+        )
+        TrailerExtractionPlatform.diagnostic("best video=${bestVideo.diagnosticSummary()}")
+        TrailerExtractionPlatform.diagnostic("best audio=${bestAudio.diagnosticSummary()}")
+        TrailerExtractionPlatform.diagnostic("best progressive=${bestProgressive.diagnosticSummary()}")
+        TrailerExtractionPlatform.diagnostic("best hls=${bestManifest.diagnosticSummary()}")
 
         return TrailerExtractionPlatform.buildPlaybackSource(
             bestManifest = bestManifest,
@@ -664,4 +724,21 @@ private fun toJsonElement(value: Any): JsonElement {
         is List<*> -> JsonArray(value.mapNotNull { it?.let(::toJsonElement) })
         else -> JsonPrimitive(value.toString())
     }
+}
+
+internal fun StreamCandidate?.diagnosticSummary(): String {
+    if (this == null) return "none"
+    val parsed = parseUrl(url)
+    val itag = parsed?.query?.get("itag")?.firstOrNull() ?: "unknown"
+    val media = if (height > 0) "${height}p/${fps}fps" else "audio"
+    val codec = mimeType.substringAfter("codecs=\"", "unknown").substringBefore('"')
+    return "client=$client itag=$itag media=$media container=$ext codec=$codec " +
+        "bitrate=${bitrate / 1_000}kbps host=${parsed?.host ?: "unknown"} n=$hasN"
+}
+
+internal fun ManifestCandidate?.diagnosticSummary(): String {
+    if (this == null) return "none"
+    val parsed = parseUrl(selectedVariantUrl)
+    return "client=$client media=${height}p container=hls bitrate=${bandwidth / 1_000}kbps " +
+        "host=${parsed?.host ?: "unknown"}"
 }

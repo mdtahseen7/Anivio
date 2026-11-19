@@ -5,25 +5,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonObject
 
 class HomeCatalogCacheTest {
-    @Test
-    fun `old artwork is refreshed without discarding catalog rows`() {
-        val current = requireNotNull(HomeCatalogCache.encodePayload(
-            sections = mapOf("anilist:trending|v1" to section(items = listOf(preview("anilist:1")))),
-            heroArtwork = mapOf("series:anilist:1" to preview("anilist:1", logo = "old-logo")),
-            nowEpochMs = NOW,
-            attemptedArtwork = mapOf("series:anilist:1" to NOW),
-        ))
-        val legacy = JsonObject(Json.parseToJsonElement(current).jsonObject.filterKeys { it != "artworkVersion" }).toString()
-        val restored = requireNotNull(HomeCatalogCache.decodePayload(legacy, NOW))
-        assertEquals(1, restored.rows.size)
-        assertTrue(restored.heroArtwork.isEmpty())
-        assertTrue(restored.attemptedArtwork.isEmpty())
-    }
 
     @Test
     fun `round trips rows and hero artwork`() {
@@ -42,23 +25,6 @@ class HomeCatalogCacheTest {
         assertEquals(24, row.availableItemCount)
         assertTrue(row.hasMore)
         assertEquals("https://logo", snapshot?.heroArtwork?.get("series:anilist:1")?.logo)
-    }
-
-    @Test
-    fun `round trips artwork attempts and the stored timestamp`() {
-        val payload = HomeCatalogCache.encodePayload(
-            sections = mapOf("anilist:trending|v1" to section(items = listOf(preview("anilist:1")))),
-            heroArtwork = emptyMap(),
-            nowEpochMs = NOW,
-            attemptedArtwork = mapOf("series:anilist:9" to NOW - 1_000L),
-        )
-
-        val snapshot = requireNotNull(payload).let {
-            HomeCatalogCache.decodePayload(payload = it, nowEpochMs = NOW)
-        }
-
-        assertEquals(NOW, snapshot?.storedAtEpochMs)
-        assertEquals(NOW - 1_000L, snapshot?.attemptedArtwork?.get("series:anilist:9"))
     }
 
     @Test

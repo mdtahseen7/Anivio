@@ -5,14 +5,14 @@ import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
 import com.nuvio.app.core.auth.isAnonymous
 import com.nuvio.app.core.network.SupabaseProvider
+import com.nuvio.app.core.poster.CustomPosterUrlRepository
+import com.nuvio.app.core.sync.ProfileSettingsSync
 import com.nuvio.app.core.sync.putSyncOriginClientId
 import com.nuvio.app.core.tracking.ensureTrackingProvidersRegistered
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.collection.CollectionMobileSettingsRepository
 import com.nuvio.app.features.collection.CollectionRepository
 import com.nuvio.app.features.downloads.DownloadsRepository
-import com.nuvio.app.features.downloads.MangaDownloadsRepository
-import com.nuvio.app.features.details.MangaReaderProgressRepository
 import com.nuvio.app.features.details.MetaScreenSettingsRepository
 import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.home.HomeRepository
@@ -24,8 +24,6 @@ import com.nuvio.app.features.mdblist.MdbListSettingsRepository
 import com.nuvio.app.features.notifications.EpisodeReleaseNotificationsRepository
 import com.nuvio.app.features.p2p.P2pSettingsRepository
 import com.nuvio.app.features.player.PlayerSettingsRepository
-import com.nuvio.app.features.profile.ProfileStatsRepository
-import com.nuvio.app.features.profile.ProfileShareSettingsRepository
 import com.nuvio.app.features.plugins.PluginRepository
 import com.nuvio.app.features.search.SearchHistoryRepository
 import com.nuvio.app.features.search.SearchRepository
@@ -47,6 +45,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -71,6 +72,7 @@ object ProfileRepository {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val log = Logger.withTag("ProfileRepository")
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+    private val profileSwitchMutex = Mutex()
     private fun localizedString(resource: StringResource): String = runBlocking { getString(resource) }
 
     private val _state = MutableStateFlow(ProfileState())
@@ -151,8 +153,17 @@ object ProfileRepository {
         }
     }
 
-    fun selectProfile(profileIndex: Int) {
+    suspend fun switchToProfile(profileIndex: Int) {
+        profileSwitchMutex.withLock {
+            withContext(Dispatchers.Default) {
+                selectProfile(profileIndex)
+            }
+        }
+    }
+
+    private fun selectProfile(profileIndex: Int) {
         activeProfileIndex = profileIndex
+        CustomPosterUrlRepository.onProfileChanged()
         val selectedProfile = _state.value.profiles.find { it.profileIndex == profileIndex }
         _state.value = _state.value.copy(
             activeProfile = selectedProfile,
@@ -160,9 +171,6 @@ object ProfileRepository {
         )
         persist()
         WatchedRepository.onProfileChanged(profileIndex)
-        ProfileStatsRepository.onProfileChanged()
-        ProfileShareSettingsRepository.onProfileChanged()
-        ProfileBackgroundAppearanceRepository.onProfileChanged(profileIndex)
         TrackingSettingsRepository.onProfileChanged()
         ensureTrackingProvidersRegistered()
         TrackingProviderRegistry.onProfileChanged()
@@ -182,6 +190,7 @@ object ProfileRepository {
         HomeCatalogSettingsRepository.onProfileChanged()
         HomeRepository.clear()
         MetaScreenSettingsRepository.onProfileChanged()
+        com.nuvio.app.features.shuffle.EpisodeShuffleRepository.onProfileChanged()
         ContinueWatchingPreferencesRepository.onProfileChanged()
         com.nuvio.app.features.watchprogress.ContinueWatchingEnrichmentCache.onProfileChanged()
         EpisodeReleaseNotificationsRepository.onProfileChanged()
@@ -192,9 +201,7 @@ object ProfileRepository {
         CollectionRepository.onProfileChanged()
         CollectionMobileSettingsRepository.onProfileChanged()
         DownloadsRepository.onProfileChanged()
-        MangaDownloadsRepository.onProfileChanged()
-        MangaReaderProgressRepository.onProfileChanged()
-        com.nuvio.app.features.details.MangaReaderSettingsRepository.onProfileChanged()
+        ProfileSettingsSync.onProfileChanged()
     }
 
     suspend fun pushProfiles(profiles: List<ProfilePushPayload>) {
@@ -271,7 +278,6 @@ object ProfileRepository {
                     name = name,
                     avatarColorHex = avatarColorHex,
                     usesPrimaryAddons = usesPrimaryAddons,
-                    usesPrimaryPlugins = profile.usesPrimaryPlugins,
                     avatarId = avatarId,
                     avatarUrl = avatarUrl,
                     profileBackgroundId = profileBackgroundId,

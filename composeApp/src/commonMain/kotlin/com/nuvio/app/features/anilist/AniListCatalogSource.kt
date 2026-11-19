@@ -5,11 +5,9 @@ import com.nuvio.app.core.anilist.AniListAiringPage
 import com.nuvio.app.core.anilist.AniListClient
 import com.nuvio.app.core.anilist.AniListMedia
 import com.nuvio.app.core.anilist.AniListPage
-import com.nuvio.app.core.anilist.ANILIST_MEDIA_FIELDS
 import com.nuvio.app.core.anilist.toMetaPreview
 import com.nuvio.app.features.catalog.CatalogPage
 import com.nuvio.app.features.catalog.dedupeCatalogItems
-import com.nuvio.app.features.anivio.enrichPreviewPostersWithAnivio
 import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.home.MetaPreview
 import kotlinx.coroutines.Dispatchers
@@ -52,7 +50,7 @@ object AniListCatalogSource {
             )
         }
 
-        val catalog = aniListCatalog(catalogId) ?: mangaCatalog(catalogId) ?: error("Unknown AniList catalog: $catalogId")
+        val catalog = aniListCatalog(catalogId) ?: error("Unknown AniList catalog: $catalogId")
         val nowSeconds = aniListNowBucketSeconds()
         val perPage = if (maxItems == null) ANILIST_MAX_PER_PAGE else catalog.homePerPage
         val alias = ALIAS_PREFIX + "0"
@@ -83,7 +81,7 @@ object AniListCatalogSource {
         maxItems: Int? = null,
         forceRefresh: Boolean = false,
     ): Map<String, CatalogPage> = withContext(Dispatchers.Default) {
-        val catalogs = catalogIds.mapNotNull { aniListCatalog(it) ?: mangaCatalog(it) }
+        val catalogs = catalogIds.mapNotNull(::aniListCatalog)
         if (catalogs.isEmpty()) return@withContext emptyMap()
 
         val nowSeconds = aniListNowBucketSeconds()
@@ -119,31 +117,6 @@ object AniListCatalogSource {
         }.toMap()
     }
 
-    /** Enriches ids supplied by an external ranking without changing their external order. */
-    suspend fun resolveMediaIds(
-        ids: List<Int>,
-        forceRefresh: Boolean = false,
-    ): Map<Int, MetaPreview> = withContext(Dispatchers.Default) {
-        val distinctIds = ids.distinct().filter { it > 0 }
-        if (distinctIds.isEmpty()) return@withContext emptyMap()
-        val data = AniListClient.query(
-            query = """
-                query {
-                    Page(page: 1, perPage: ${distinctIds.size.coerceAtMost(50)}) {
-                        media(id_in: [${distinctIds.joinToString(",")}], type: ANIME) {
-                            $ANILIST_MEDIA_FIELDS
-                        }
-                    }
-                }
-            """.trimIndent(),
-            forceRefresh = forceRefresh,
-        )
-        val page = data["Page"]?.let {
-            AniListClient.json.decodeFromJsonElement(AniListPage.serializer(), it)
-        } ?: return@withContext emptyMap()
-        page.media.mapNotNull { media -> media.toMetaPreview()?.let { media.id to it } }.toMap()
-    }
-
     private fun AniListCatalog.pageSelection(
         alias: String,
         page: Int,
@@ -158,7 +131,7 @@ object AniListCatalogSource {
         }
         """.trimIndent()
 
-    private suspend fun JsonObject.readCatalogPage(
+    private fun JsonObject.readCatalogPage(
         alias: String,
         catalog: AniListCatalog,
         requestedPage: Int,
@@ -196,9 +169,8 @@ object AniListCatalogSource {
                 rawItemCount = mediaPage.media.size
             }
 
-            val baseItems = dedupeCatalogItems(media.mapNotNull { it.toMetaPreview() })
+            val items: List<MetaPreview> = dedupeCatalogItems(media.mapNotNull { it.toMetaPreview() })
                 .let { previews -> if (maxItems == null) previews else previews.take(maxItems) }
-            val items: List<MetaPreview> = enrichPreviewPostersWithAnivio(baseItems)
 
             CatalogPage(
                 items = items,

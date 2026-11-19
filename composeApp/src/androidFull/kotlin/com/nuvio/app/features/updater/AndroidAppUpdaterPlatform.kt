@@ -8,6 +8,8 @@ import android.os.Build
 import android.provider.Settings
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import nuvio.composeapp.generated.resources.Res
@@ -24,6 +26,7 @@ import java.util.concurrent.TimeUnit
 object AndroidAppUpdaterPlatform {
     private const val preferencesName = "nuvio_updater"
     private const val ignoredTagKey = "ignored_release_tag"
+    private const val updateChannelKey = "update_channel"
 
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(60, TimeUnit.SECONDS)
@@ -46,9 +49,6 @@ object AndroidAppUpdaterPlatform {
         return context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
     }
 
-    fun getUpdateChannel(): String? = preferences().getString("update_channel", null)
-    fun setUpdateChannel(channel: String) { preferences().edit().putString("update_channel", channel).apply() }
-
     fun getIgnoredTag(): String? =
         preferences().getString(ignoredTagKey, null)
 
@@ -58,7 +58,17 @@ object AndroidAppUpdaterPlatform {
         }.apply()
     }
 
-    suspend fun downloadApk(
+    fun getUpdateChannel(): String? = preferences().getString(updateChannelKey, null)
+
+    fun setUpdateChannel(channel: String) {
+        preferences().edit().putString(updateChannelKey, channel).apply()
+    }
+
+    fun deleteDownloadedUpdate(path: String) {
+        File(path).delete()
+    }
+
+    suspend fun downloadUpdateAsset(
         assetUrl: String,
         assetName: String,
         onProgress: (downloadedBytes: Long, totalBytes: Long?) -> Unit,
@@ -93,7 +103,9 @@ object AndroidAppUpdaterPlatform {
                         val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
                         var downloadedBytes = 0L
                         while (true) {
+                            currentCoroutineContext().ensureActive()
                             val read = input.read(buffer)
+                            currentCoroutineContext().ensureActive()
                             if (read <= 0) break
                             output.write(buffer, 0, read)
                             downloadedBytes += read
@@ -132,7 +144,7 @@ object AndroidAppUpdaterPlatform {
         context.startActivity(intent)
     }
 
-    fun installDownloadedApk(path: String): Result<Unit> = runCatching {
+    fun installDownloadedUpdate(path: String): Result<Unit> = runCatching {
         val context = requireContext()
         val apkFile = File(path)
         check(apkFile.exists()) { runBlocking { getString(Res.string.updates_downloaded_file_missing) } }

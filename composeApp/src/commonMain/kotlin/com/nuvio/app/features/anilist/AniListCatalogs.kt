@@ -8,8 +8,6 @@ import com.nuvio.app.features.anime.PublicAnimeRouter
 import com.nuvio.app.features.home.HomeCatalogDefinition
 import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.home.HomeCatalogSource
-import com.nuvio.app.features.content.ContentMode
-import com.nuvio.app.features.content.ContentModeRepository
 import kotlinx.coroutines.runBlocking
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.anilist_row_movies
@@ -18,7 +16,6 @@ import nuvio.composeapp.generated.resources.anilist_row_recently_released
 import nuvio.composeapp.generated.resources.anilist_row_trending
 import nuvio.composeapp.generated.resources.anilist_row_upcoming
 import nuvio.composeapp.generated.resources.anilist_source_name
-import nuvio.composeapp.generated.resources.anime_source_anivio
 import nuvio.composeapp.generated.resources.tracking_source_mal
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.getString
@@ -30,7 +27,7 @@ const val ANILIST_ADDON_ID = "anilist"
  * Bumped whenever [ANILIST_CATALOGS] changes, so cached home sections keyed on
  * [HomeCatalogDefinition.cacheKey] are invalidated.
  */
-private const val ANILIST_CATALOG_VERSION = "5"
+private const val ANILIST_CATALOG_VERSION = "3"
 
 /** Page size used for the home-row preview fetch. */
 private const val DEFAULT_HOME_PER_PAGE = 25
@@ -129,9 +126,6 @@ internal val ANILIST_CATALOGS: List<AniListCatalog> = listOf(
 internal fun aniListCatalog(catalogId: String): AniListCatalog? =
     ANILIST_CATALOGS.firstOrNull { it.id == catalogId }
 
-internal fun mangaCatalog(catalogId: String): AniListCatalog? =
-    MANGA_CATALOGS.firstOrNull { it.id == catalogId }
-
 /**
  * Truncated to a bucket so repeated refreshes reuse the same query string — and therefore the same
  * [com.nuvio.app.core.anilist.AniListClient] cache entry — instead of missing the cache on every tick
@@ -157,18 +151,14 @@ internal fun aniListNowBucketSeconds(): Long {
  * days and should keep the longer default so they cost nothing to revisit.
  */
 internal fun AniListCatalog.cacheTtlMs(): Long =
-    if (isAiringFeed || id == "trending") {
-        AniListClient.VOLATILE_CACHE_TTL_MS
-    } else {
-        AniListClient.DEFAULT_CACHE_TTL_MS
-    }
+    if (isAiringFeed) AniListClient.VOLATILE_CACHE_TTL_MS else AniListClient.DEFAULT_CACHE_TTL_MS
 
 /**
  * Signature contribution for the AniList rows. Deliberately string-resource free: this is called
  * from composition via `buildHomeCatalogRefreshSignature`, so it must not block on resource loading.
  */
 fun aniListCatalogRefreshSignature(): String =
-    aniListCatalogDescriptorSignature() + ":" + activeAniListCatalogs().joinToString(",") { it.id }
+    aniListCatalogDescriptorSignature() + ":" + ANILIST_CATALOGS.joinToString(",") { it.id }
 
 /**
  * Carries the adult preference so cached home sections are invalidated when it is toggled — the row
@@ -177,10 +167,10 @@ fun aniListCatalogRefreshSignature(): String =
  * The active provider is included for the same reason: AniList and MAL fill the same row keys, so
  * without it a source switch would redisplay the other provider's cached pages.
  */
-internal fun aniListCatalogDescriptorSignature(mode: ContentMode = ContentModeRepository.mode.value): String {
+internal fun aniListCatalogDescriptorSignature(): String {
     val includeAdult = HomeCatalogSettingsRepository.snapshot().adultContentEnabled
     val source = PublicAnimeRouter.activeProvider.name.lowercase()
-    return "anilist-v$ANILIST_CATALOG_VERSION:adult=$includeAdult:src=$source:mode=${mode.name}"
+    return "anilist-v$ANILIST_CATALOG_VERSION:adult=$includeAdult:src=$source"
 }
 
 /**
@@ -191,17 +181,16 @@ internal fun aniListCatalogDescriptorSignature(mode: ContentMode = ContentModeRe
  * currently coming from. [aniListCatalogDescriptorSignature] carries the provider, which is what
  * makes these definitions rebuild on a source switch.
  */
-fun buildAniListCatalogDefinitions(mode: ContentMode = ContentModeRepository.mode.value): List<HomeCatalogDefinition> {
+fun buildAniListCatalogDefinitions(): List<HomeCatalogDefinition> {
     val sourceName = runBlocking {
         getString(
             when (PublicAnimeRouter.activeProvider) {
                 PublicAnimeProvider.MAL -> Res.string.tracking_source_mal
-                PublicAnimeProvider.ANIVIO -> Res.string.anime_source_anivio
                 PublicAnimeProvider.ANILIST -> Res.string.anilist_source_name
             },
         )
     }
-    return activeAniListCatalogs(mode).map { catalog ->
+    return ANILIST_CATALOGS.map { catalog ->
         val title = runBlocking { getString(catalog.titleResource) }
         HomeCatalogDefinition(
             key = "$ANILIST_ADDON_ID:${catalog.contentType}:${catalog.id}",
@@ -214,28 +203,10 @@ fun buildAniListCatalogDefinitions(mode: ContentMode = ContentModeRepository.mod
             type = catalog.contentType,
             catalogId = catalog.id,
             supportsPagination = true,
-            descriptorSignature = aniListCatalogDescriptorSignature(mode),
+            descriptorSignature = aniListCatalogDescriptorSignature(),
             source = HomeCatalogSource.ANILIST,
             defaultHeroSourceEnabled = catalog.isDefaultHeroSource,
-            isRecencyBased = catalog.isAiringFeed || catalog.id == "trending",
+            isRecencyBased = catalog.isAiringFeed,
         )
     }
 }
-
-private fun activeAniListCatalogs(mode: ContentMode = ContentModeRepository.mode.value): List<AniListCatalog> =
-    if (mode == ContentMode.Manga) MANGA_CATALOGS else ANILIST_CATALOGS
-
-private val MANGA_CATALOGS = listOf(
-    AniListCatalog("manga-trending", Res.string.anilist_row_trending, "manga", true) { _, adult ->
-        "media(type: MANGA, sort: TRENDING_DESC${aniListAdultFilter(adult)}) { $ANILIST_MEDIA_FIELDS }"
-    },
-    AniListCatalog("manga-popular", Res.string.anilist_row_popular, "manga") { _, adult ->
-        "media(type: MANGA, sort: POPULARITY_DESC${aniListAdultFilter(adult)}) { $ANILIST_MEDIA_FIELDS }"
-    },
-    AniListCatalog("manga-top-rated", Res.string.anilist_row_upcoming, "manga") { _, adult ->
-        "media(type: MANGA, sort: SCORE_DESC, averageScore_greater: 60${aniListAdultFilter(adult)}) { $ANILIST_MEDIA_FIELDS }"
-    },
-    AniListCatalog("manga-newest", Res.string.anilist_row_recently_released, "manga") { _, adult ->
-        "media(type: MANGA, sort: START_DATE_DESC${aniListAdultFilter(adult)}) { $ANILIST_MEDIA_FIELDS }"
-    },
-)

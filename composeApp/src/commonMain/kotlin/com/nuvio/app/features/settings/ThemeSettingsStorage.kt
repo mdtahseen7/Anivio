@@ -11,17 +11,17 @@ internal expect object ThemeSettingsStorage {
     fun saveAmoledEnabled(enabled: Boolean)
     fun loadLiquidGlassNativeTabBarEnabled(): Boolean?
     fun saveLiquidGlassNativeTabBarEnabled(enabled: Boolean)
+    fun loadDesktopNavigationLayout(): String?
+    fun saveDesktopNavigationLayout(layoutName: String)
     fun loadSelectedAppLanguage(): String?
     fun saveSelectedAppLanguage(languageCode: String)
     fun applySelectedAppLanguage(languageCode: String)
+    fun loadIncognitoModeEnabled(): Boolean?
+    fun saveIncognitoModeEnabled(enabled: Boolean)
     fun loadNavBarStyle(): String?
     fun saveNavBarStyle(styleKey: String)
     fun loadNavBarGlowEnabled(): Boolean?
     fun saveNavBarGlowEnabled(enabled: Boolean)
-    fun loadIncognitoModeEnabled(): Boolean?
-    fun saveIncognitoModeEnabled(enabled: Boolean)
-    fun loadHomeTopBarEnabled(): Boolean?
-    fun saveHomeTopBarEnabled(enabled: Boolean)
     fun exportToSyncPayload(): JsonObject
     fun replaceFromSyncPayload(payload: JsonObject)
 }

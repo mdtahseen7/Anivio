@@ -3,41 +3,62 @@ package com.nuvio.app.features.watched
 import co.touchlab.kermit.Logger
 import com.nuvio.app.core.sync.AppVisibilityState
 import com.nuvio.app.features.details.MetaDetailsRepository
+import com.nuvio.app.features.tracking.TrackingSettingsRepository
+import com.nuvio.app.features.tracking.effectiveWatchProgressSource
+import com.nuvio.app.features.tracking.providerId
 import com.nuvio.app.features.watchprogress.CurrentDateProvider
 import com.nuvio.app.features.watchprogress.WatchProgressEntry
+import com.nuvio.app.features.watching.domain.isSeriesLikeWatchingContentType
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.yield
 
 private const val BADGE_RESOLUTION_CONCURRENCY = 2
+private const val AMBIGUOUS_MARKER = "__ambiguous__"
 
 private val log = Logger.withTag("WatchedBadgeBulk")
 
 suspend fun resolveWatchedBadgesBulk(
     watchedItems: List<WatchedItem>,
     progressEntries: List<WatchProgressEntry>,
-) {
+    todayIsoDate: String = CurrentDateProvider.todayIsoDate(),
+): Boolean = withContext(Dispatchers.Default) {
+    val completedProgressVideoIds = progressEntries
+        .asSequence()
+        .filter { entry -> entry.isEffectivelyCompleted }
+        .mapTo(mutableSetOf()) { entry -> entry.videoId }
     val touchedSeriesIds = buildSet {
         watchedItems.forEach { item ->
-            if (item.type.isSeriesLikeWatchedType() && item.season != null && item.episode != null) {
+            if (
+                item.type.isSeriesLikeWatchingContentType(includeAnime = true) &&
+                item.season != null &&
+                item.episode != null
+            ) {
                 add(item.id)
             }
         }
         progressEntries.forEach { entry ->
-            if (entry.parentMetaType.isSeriesLikeWatchedType() && entry.isEpisode && entry.isEffectivelyCompleted) {
+            if (
+                entry.parentMetaType.isSeriesLikeWatchingContentType(includeAnime = true) &&
+                entry.isEpisode &&
+                entry.isEffectivelyCompleted
+            ) {
                 add(entry.parentMetaId)
             }
         }
         WatchedRepository.baseFullyWatchedSeriesKeys().mapNotNullTo(this, ::extractContentIdFromWatchedKey)
     }
-    if (touchedSeriesIds.isEmpty()) return
+    if (touchedSeriesIds.isEmpty()) return@withContext true
 
-    val todayIsoDate = CurrentDateProvider.todayIsoDate()
-    // Use the full watchedKeys from UI state, which already folds in the extra keys the active
-    // tracking provider reports on top of its watched items.
+    // Use the full watchedKeys from UI state which includes extra keys from
+    // provider alternate IDs, which the active tracking provider folds in on top of its watched items.
     val watchedKeys = WatchedRepository.uiState.value.watchedKeys
 
     // A badge is a visual affordance. Resolving the whole watch history for one while the app is not
@@ -45,35 +66,33 @@ suspend fun resolveWatchedBadgesBulk(
     // torn down, so every fetch in the walk fails in turn. Recomputed on the next foreground change.
     if (!AppVisibilityState.isForeground) {
         log.d { "Skipping bulk badge resolution while backgrounded" }
-        return
+        return@withContext true
     }
 
     log.i { "Bulk badge resolution starting: ${touchedSeriesIds.size} series candidates" }
 
-    withContext(Dispatchers.Default) {
-        val semaphore = Semaphore(BADGE_RESOLUTION_CONCURRENCY)
-        val resolvedIds = mutableSetOf<String>()
-        val resolvedStates = linkedMapOf<String, Boolean>()
-
-        var completedWalk = true
-
-        for (contentId in touchedSeriesIds) {
-            // Checked per item, not once: the walk is long enough that the app can be backgrounded
-            // partway through, which is exactly when the requests start failing.
-            if (!AppVisibilityState.isForeground) {
-                log.d { "Stopping bulk badge resolution at ${resolvedIds.size}; app backgrounded" }
-                completedWalk = false
-                break
-            }
-            semaphore.withPermit {
-                val meta = try {
-                    MetaDetailsRepository.fetch(type = "series", id = contentId, cacheResult = false)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (_: Throwable) {
-                    null
-                }
-                if (meta != null) {
+    val semaphore = Semaphore(BADGE_RESOLUTION_CONCURRENCY)
+    val resolutions = coroutineScope {
+        touchedSeriesIds.map { contentId ->
+            async {
+                semaphore.withPermit {
+                    // A badge is decorative: it must never block Home. The metadata
+                    // fetch can hang (a stalled enrichment call with no timeout),
+                    // which left the app stuck on the splash screen forever.
+                    // Cap each fetch at 20s (same as the details-page first-phase
+                    // cap); on timeout the badge stays unresolved and Home loads.
+                    val meta = try {
+                        withTimeout(20_000) {
+                            MetaDetailsRepository.fetch(type = "series", id = contentId, cacheResult = false)
+                        }
+                    } catch (_: TimeoutCancellationException) {
+                        null
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Throwable) {
+                        null
+                    }
+                    if (meta == null || !meta.type.isSeriesLikeWatchingContentType(includeAnime = true) || meta.videos.isEmpty()) return@withPermit null
                     val isFullyWatched = WatchedRepository.calculateFullyWatchedSeriesState(
                         meta = meta,
                         todayIsoDate = todayIsoDate,
@@ -82,30 +101,68 @@ suspend fun resolveWatchedBadgesBulk(
                                 .any(watchedKeys::contains)
                         },
                         isEpisodeCompleted = { episode ->
-                            val playbackId = meta.episodePlaybackId(episode)
-                            progressEntries.any { entry ->
-                                entry.videoId == playbackId && entry.isEffectivelyCompleted
-                            }
+                            meta.episodePlaybackId(episode) in completedProgressVideoIds
                         },
                     )
-                    resolvedStates[watchedItemKey(meta.type, meta.id)] = isFullyWatched
-                    resolvedIds.add(contentId)
+                    watchedItemKey(meta.type, meta.id) to isFullyWatched
                 }
             }
-            yield()
         }
+    }.awaitAll()
+    val resolvedStates = resolutions.filterNotNull().toMap(linkedMapOf())
 
-        WatchedRepository.updateFullyWatchedSeriesStates(resolvedStates)
-        log.i { "Bulk badge resolution complete: resolved ${resolvedIds.size}/${touchedSeriesIds.size}" }
+    WatchedRepository.updateFullyWatchedSeriesStates(resolvedStates)
+    log.i { "Bulk badge resolution complete: resolved ${resolutions.count { it != null }}/${touchedSeriesIds.size}" }
 
-        // No connected source aliases a title under more than one content id — local keys and
-        // AniList media ids are both one per title — so any expansion still on disk is stale.
-        // Only safe to conclude that from a walk that actually finished; after an early exit the
-        // unvisited ids are indistinguishable from resolved-and-absent ones.
-        if (completedWalk) {
-            WatchedRepository.setExpandedFullyWatchedSeriesKeys(emptySet())
+    expandFullyWatchedWithSiblings()
+    resolutions.count { it != null } == touchedSeriesIds.size
+}
+
+fun expandFullyWatchedWithSiblings() {
+    val siblingMap = getActiveProviderSiblingMap()
+    if (siblingMap.isEmpty()) {
+        WatchedRepository.setExpandedFullyWatchedSeriesKeys(emptySet())
+        return
+    }
+
+    // Use base keys (without previous sibling expansion) to avoid feedback loops
+    val baseKeys = WatchedRepository.baseFullyWatchedSeriesKeys()
+    if (baseKeys.isEmpty()) {
+        WatchedRepository.setExpandedFullyWatchedSeriesKeys(emptySet())
+        return
+    }
+
+    // Compute only the sibling-derived keys (not including base keys themselves)
+    val siblingKeys = buildSet {
+        for (key in baseKeys) {
+            val contentId = extractContentIdFromWatchedKey(key) ?: continue
+            val siblings = siblingMap[contentId] ?: continue
+            siblings.forEach { siblingId ->
+                if (siblingId != contentId && !siblingId.startsWith(AMBIGUOUS_MARKER)) {
+                    val siblingKey = rebuildWatchedKeyWithSiblingId(key, siblingId)
+                    if (siblingKey != null) add(siblingKey)
+                }
+            }
         }
     }
+
+    if (siblingKeys != WatchedRepository.currentExpandedSiblingKeys()) {
+        log.i { "Sibling expansion: ${baseKeys.size} base keys -> +${siblingKeys.size} sibling keys" }
+        WatchedRepository.setExpandedFullyWatchedSeriesKeys(siblingKeys)
+    }
+}
+
+private fun getActiveProviderSiblingMap(): Map<String, Set<String>> {
+    val source = TrackingSettingsRepository.uiState.value.watchProgressSource
+    val effectiveSource = effectiveWatchProgressSource(
+        requestedSource = source,
+        isProviderAuthenticated = { providerId ->
+            com.nuvio.app.features.tracking.TrackingProviderRegistry.isAuthenticated(providerId)
+        },
+    )
+    return effectiveSource.providerId?.let {
+        com.nuvio.app.features.tracking.TrackingProviderRegistry.progressProvider(it)?.showIdSiblings()
+    }.orEmpty()
 }
 
 private fun extractContentIdFromWatchedKey(key: String): String? {
@@ -123,5 +180,9 @@ private fun extractContentIdFromWatchedKey(key: String): String? {
     return contentId.takeIf { it.isNotBlank() }
 }
 
-private fun String.isSeriesLikeWatchedType(): Boolean =
-    trim().lowercase() in setOf("series", "show", "tv", "tvshow", "anime")
+private fun rebuildWatchedKeyWithSiblingId(originalKey: String, siblingId: String): String? {
+    val parts = originalKey.split(':')
+    if (parts.size < 4) return null
+    val type = parts.first()
+    return watchedItemKey(type = type, id = siblingId)
+}

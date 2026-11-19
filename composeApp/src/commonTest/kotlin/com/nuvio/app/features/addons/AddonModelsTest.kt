@@ -38,35 +38,51 @@ class AddonModelsTest {
     }
 
     @Test
-    fun `content type helpers expose manifest types`() {
-        val movieAddon = ManagedAddon(
-            manifestUrl = "https://movie.example/manifest.json",
-            manifest = manifest(id = "movie"),
+    fun `pending manifest helpers only consider enabled unresolved addons`() {
+        val pending = ManagedAddon(
+            manifestUrl = "https://pending.example/manifest.json",
+            isRefreshing = true,
         )
-        val mangaAddon = ManagedAddon(
-            manifestUrl = "https://manga.example/manifest.json",
-            manifest = manifest(id = "manga").copy(
-                types = listOf("manga"),
-                resources = listOf(AddonResource(name = "stream", types = listOf("manga"))),
-            ),
+        val disabledPending = ManagedAddon(
+            manifestUrl = "https://disabled.example/manifest.json",
+            enabled = false,
+            isRefreshing = true,
         )
 
-        assertTrue(movieAddon.supportsContentType("MOVIE"))
-        assertTrue(mangaAddon.supportsContentType("manga"))
-        assertEquals(listOf("manga", "movie"), listOf(movieAddon, mangaAddon).contentTypes())
+        assertTrue(listOf(pending, disabledPending).hasPendingEnabledManifests())
+        assertTrue(listOf(pending, disabledPending).isWaitingForFirstEnabledManifest())
+        assertFalse(
+            listOf(
+                pending,
+                ManagedAddon(
+                    manifestUrl = "https://loaded.example/manifest.json",
+                    manifest = manifest(id = "loaded"),
+                ),
+            ).isWaitingForFirstEnabledManifest(),
+        )
     }
 
     @Test
-    fun `failed addon keeps a failed health status and reason`() {
-        val addon = ManagedAddon(
-            manifestUrl = "https://broken.example/manifest.json",
-            manifest = manifest(),
-            errorMessage = "timeout",
-            lastFailureReason = "timeout",
+    fun `manifest error helper ignores disabled and resolved addons`() {
+        val disabledFailure = ManagedAddon(
+            manifestUrl = "https://disabled.example/manifest.json",
+            enabled = false,
+            errorMessage = "Disabled failure",
+        )
+        val resolvedFailure = ManagedAddon(
+            manifestUrl = "https://resolved.example/manifest.json",
+            manifest = manifest(id = "resolved"),
+            errorMessage = "Stale refresh failure",
+        )
+        val unresolvedFailure = ManagedAddon(
+            manifestUrl = "https://failed.example/manifest.json",
+            errorMessage = "Manifest failure",
         )
 
-        assertEquals(AddonHealthStatus.Failed, addon.healthStatus)
-        assertEquals("timeout", addon.lastFailureReason)
+        assertEquals(
+            "Manifest failure",
+            listOf(disabledFailure, resolvedFailure, unresolvedFailure).firstEnabledManifestError(),
+        )
     }
 }
 

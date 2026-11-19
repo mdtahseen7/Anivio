@@ -29,8 +29,6 @@ data class PluginManifestScraper(
     val filename: String,
     @SerialName("supportedTypes") val supportedTypes: List<String> = listOf("movie", "tv"),
     val enabled: Boolean = true,
-    /** Opt-in reader contract: getChapters(mangaId, title), getChapterImages(chapterId). */
-    val manga: Boolean = false,
     val hasSettings: Boolean = false,
     val logo: String? = null,
     @SerialName("contentLanguage") val contentLanguage: List<String>? = null,
@@ -40,10 +38,6 @@ data class PluginManifestScraper(
     @SerialName("supportedFormats") val supportedFormats: List<String>? = null,
     @SerialName("supportsExternalPlayer") val supportsExternalPlayer: Boolean? = null,
     val limited: Boolean? = null,
-    /** When true, this provider's site is behind a Cloudflare challenge the user must pre-solve. */
-    @SerialName("needsCaptcha") val needsCaptcha: Boolean? = null,
-    /** Host(s) to open in the challenge solver for this provider (e.g. ["animepahe.pw"]). */
-    @SerialName("domains") val domains: List<String>? = null,
 )
 
 data class PluginRepositoryItem(
@@ -67,25 +61,17 @@ data class PluginScraper(
     val supportedTypes: List<String>,
     val enabled: Boolean,
     val manifestEnabled: Boolean,
-    val manga: Boolean = false,
     val hasSettings: Boolean = false,
     val logo: String? = null,
     val contentLanguage: List<String> = emptyList(),
     val formats: List<String>? = null,
-    val needsCaptcha: Boolean = false,
-    val domains: List<String> = emptyList(),
     val code: String,
-    val isInstalling: Boolean = false,
-    val downloadErrorMessage: String? = null,
 ) {
     fun supportsType(type: String): Boolean {
         val normalizedType = normalizePluginType(type)
         return supportedTypes.map { normalizePluginType(it) }.contains(normalizedType)
     }
 }
-
-data class MangaPluginChapter(val id: String, val number: String, val title: String? = null)
-data class MangaPluginPage(val url: String, val headers: Map<String, String> = emptyMap())
 
 data class PluginRuntimeResult(
     val title: String,
@@ -116,30 +102,6 @@ data class PluginsUiState(
     val groupStreamsByRepository: Boolean = false,
     val repositories: List<PluginRepositoryItem> = emptyList(),
     val scrapers: List<PluginScraper> = emptyList(),
-)
-
-@Serializable
-data class PluginSetupBackup(
-    val version: Int = 1,
-    val pluginsEnabled: Boolean = true,
-    val groupStreamsByRepository: Boolean = false,
-    val repositories: List<PluginRepositoryBackup> = emptyList(),
-    val scrapers: List<PluginScraperBackup> = emptyList(),
-)
-
-@Serializable
-data class PluginRepositoryBackup(
-    val manifestUrl: String,
-    val name: String = "",
-    val version: String? = null,
-)
-
-@Serializable
-data class PluginScraperBackup(
-    val id: String,
-    val repositoryUrl: String,
-    val enabled: Boolean,
-    val order: Int,
 )
 
 sealed interface AddPluginRepositoryResult {
@@ -176,13 +138,10 @@ internal data class StoredPluginScraper(
     val supportedTypes: List<String>,
     val enabled: Boolean,
     val manifestEnabled: Boolean,
-    val manga: Boolean = false,
     val hasSettings: Boolean = false,
     val logo: String? = null,
     val contentLanguage: List<String> = emptyList(),
     val formats: List<String>? = null,
-    val needsCaptcha: Boolean = false,
-    val domains: List<String> = emptyList(),
     val code: String? = null,
 )
 
@@ -219,13 +178,10 @@ internal fun PluginScraper.toStoredPluginScraper(): StoredPluginScraper =
         supportedTypes = supportedTypes,
         enabled = enabled,
         manifestEnabled = manifestEnabled,
-        manga = manga,
         hasSettings = hasSettings,
         logo = logo,
         contentLanguage = contentLanguage,
         formats = formats,
-        needsCaptcha = needsCaptcha,
-        domains = domains,
         code = null,
     )
 
@@ -245,13 +201,10 @@ internal fun StoredPluginScraper.restorePluginScraper(
             supportedTypes = supportedTypes,
             enabled = enabled,
             manifestEnabled = manifestEnabled,
-            manga = manga,
             hasSettings = hasSettings,
             logo = logo,
             contentLanguage = contentLanguage,
             formats = formats,
-            needsCaptcha = needsCaptcha,
-            domains = domains,
             code = resolvedCode,
         ),
         requiresMigration = code != null,

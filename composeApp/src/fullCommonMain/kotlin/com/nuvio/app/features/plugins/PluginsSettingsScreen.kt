@@ -1,42 +1,31 @@
 package com.nuvio.app.features.plugins
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.rounded.Link
-import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.key
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,9 +34,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -57,9 +44,8 @@ import com.nuvio.app.core.ui.NuvioInputField
 import com.nuvio.app.core.ui.NuvioPrimaryButton
 import com.nuvio.app.core.ui.NuvioSectionLabel
 import com.nuvio.app.core.ui.NuvioSurfaceCard
-import com.nuvio.app.core.ui.nuvio
-import com.nuvio.app.features.tmdb.TmdbSettingsRepository
 import com.nuvio.app.features.plugins.runtime.PluginRuntime
+import com.nuvio.app.features.tmdb.TmdbSettingsRepository
 import kotlinx.coroutines.launch
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.plugins_badge_disabled
@@ -67,8 +53,6 @@ import nuvio.composeapp.generated.resources.plugins_badge_enabled
 import nuvio.composeapp.generated.resources.plugins_badge_providers
 import nuvio.composeapp.generated.resources.plugins_badge_refreshing
 import nuvio.composeapp.generated.resources.plugins_badge_repos
-import nuvio.composeapp.generated.resources.plugins_badge_tmdb_key_missing
-import nuvio.composeapp.generated.resources.plugins_badge_tmdb_key_set
 import nuvio.composeapp.generated.resources.plugins_button_install_repo
 import nuvio.composeapp.generated.resources.plugins_button_installing
 import nuvio.composeapp.generated.resources.plugins_button_test_provider
@@ -86,11 +70,7 @@ import nuvio.composeapp.generated.resources.plugins_group_by_repo_title
 import nuvio.composeapp.generated.resources.plugins_input_manifest_placeholder
 import nuvio.composeapp.generated.resources.plugins_message_installed
 import nuvio.composeapp.generated.resources.plugins_provider_disabled_by_repo
-import nuvio.composeapp.generated.resources.plugins_provider_downloading
-import nuvio.composeapp.generated.resources.plugins_provider_download_failed
-import nuvio.composeapp.generated.resources.plugins_provider_installed
 import nuvio.composeapp.generated.resources.plugins_provider_no_description
-import nuvio.composeapp.generated.resources.plugins_provider_not_installed
 import nuvio.composeapp.generated.resources.plugins_provider_version
 import nuvio.composeapp.generated.resources.plugins_repo_fallback_label
 import nuvio.composeapp.generated.resources.plugins_repo_version
@@ -101,28 +81,22 @@ import nuvio.composeapp.generated.resources.plugins_section_providers
 import nuvio.composeapp.generated.resources.plugins_test_error_title
 import nuvio.composeapp.generated.resources.plugins_test_failed
 import nuvio.composeapp.generated.resources.plugins_test_results_count
-import nuvio.composeapp.generated.resources.plugins_tmdb_required_message
 import org.jetbrains.compose.resources.stringResource
 import sh.calvin.reorderable.ReorderableColumn
 
-private enum class PluginContentFilter { ALL, ANIME, MANGA }
-
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PluginsSettingsPageContent(
     modifier: Modifier = Modifier,
 ) {
     LaunchedEffect(Unit) {
         PluginRepository.initialize()
+        TmdbSettingsRepository.ensureLoaded()
     }
 
     val uiState by PluginRepository.uiState.collectAsStateWithLifecycle()
-    val tmdbSettings by remember {
-        TmdbSettingsRepository.ensureLoaded()
-        TmdbSettingsRepository.uiState
-    }.collectAsStateWithLifecycle()
+    val tmdbSettings by TmdbSettingsRepository.uiState.collectAsStateWithLifecycle()
+    val hasTmdbApiKey = tmdbSettings.apiKey.isNotBlank()
     val coroutineScope = rememberCoroutineScope()
-    val hapticFeedback = LocalHapticFeedback.current
 
     var repositoryUrl by rememberSaveable { mutableStateOf("") }
     var message by rememberSaveable { mutableStateOf<String?>(null) }
@@ -133,38 +107,21 @@ fun PluginsSettingsPageContent(
 
     var configuringScraper by remember { mutableStateOf<PluginScraper?>(null) }
     var configuringLayout by remember { mutableStateOf<String?>(null) }
-    var expandedScraperId by rememberSaveable { mutableStateOf<String?>(null) }
-    var providerFilter by rememberSaveable { mutableStateOf(PluginContentFilter.ALL) }
-    var showPluginSettings by rememberSaveable { mutableStateOf(false) }
-    var showManifestUrl by rememberSaveable { mutableStateOf(false) }
-    var showInstalledRepositories by rememberSaveable { mutableStateOf(false) }
 
     val sortedRepos = remember(uiState.repositories) {
         uiState.repositories.sortedBy { it.name.lowercase() }
     }
-    val hasTmdbApiKey = tmdbSettings.hasApiKey
     val repositoryNameByUrl = remember(sortedRepos) {
         sortedRepos.associate { it.manifestUrl to it.name }
     }
-    val sortedScrapers = remember(uiState.scrapers, repositoryNameByUrl, providerFilter) {
-        // Repositories sort by name, but providers inside a repo keep the user's own
-        // order — that order is what the manga server dropdown and stream
-        // resolution follow.
-        val orderById = uiState.scrapers.mapIndexed { index, scraper -> scraper.id to index }.toMap()
+    val sortedScrapers = remember(uiState.scrapers, repositoryNameByUrl) {
         uiState.scrapers.sortedWith(
             compareBy<PluginScraper>(
                 { repositoryNameByUrl[it.repositoryUrl]?.lowercase() ?: it.repositoryUrl.lowercase() },
-                { orderById[it.id] ?: Int.MAX_VALUE },
             ),
-        ).filter { scraper ->
-            when (providerFilter) {
-                PluginContentFilter.ALL -> true
-                PluginContentFilter.ANIME -> !scraper.manga
-                PluginContentFilter.MANGA -> scraper.manga
-            }
-        }
+        )
     }
-    // One group per repository, keeping the saved provider order regardless of enabled state.
+    // One group per repository, preserving the repo-then-name sort order above.
     val scrapersByRepo = remember(sortedScrapers) {
         sortedScrapers.groupBy { it.repositoryUrl }
     }
@@ -179,122 +136,130 @@ fun PluginsSettingsPageContent(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        NuvioSectionLabel(stringResource(Res.string.plugins_section_overview))
         NuvioSurfaceCard {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                NuvioInfoBadge(text = stringResource(Res.string.plugins_badge_repos, sortedRepos.size))
+                NuvioInfoBadge(text = stringResource(Res.string.plugins_badge_providers, sortedScrapers.size))
+                NuvioInfoBadge(
+                    text = if (uiState.pluginsEnabled) {
+                        stringResource(Res.string.plugins_badge_enabled)
+                    } else {
+                        stringResource(Res.string.plugins_badge_disabled)
+                    },
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Providers", style = MaterialTheme.typography.titleLarge)
                     Text(
-                        "${sortedScrapers.size} providers · ${sortedRepos.size} repositories",
-                        style = MaterialTheme.typography.bodySmall,
+                        text = stringResource(Res.string.plugins_enable_globally_title),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = stringResource(Res.string.plugins_enable_globally_desc),
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    NuvioIconActionButton(
-                        icon = Icons.Rounded.Settings,
-                        contentDescription = "Plugin settings",
-                        tint = MaterialTheme.colorScheme.primary,
-                        onClick = { showPluginSettings = !showPluginSettings },
+                Spacer(modifier = Modifier.width(12.dp))
+                Switch(
+                    checked = uiState.pluginsEnabled,
+                    onCheckedChange = { PluginRepository.setPluginsEnabled(it) },
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(Res.string.plugins_group_by_repo_title),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
-                    NuvioIconActionButton(
-                        icon = Icons.Rounded.Link,
-                        contentDescription = "Plugin manifest URL",
-                        tint = MaterialTheme.colorScheme.primary,
-                        onClick = { showManifestUrl = !showManifestUrl },
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = stringResource(Res.string.plugins_group_by_repo_desc),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-            }
-            if (showPluginSettings) {
-                Spacer(modifier = Modifier.height(14.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Spacer(modifier = Modifier.height(12.dp))
-                PluginToggleRow(
-                    title = stringResource(Res.string.plugins_enable_globally_title),
-                    description = stringResource(Res.string.plugins_enable_globally_desc),
-                    checked = uiState.pluginsEnabled,
-                    onCheckedChange = PluginRepository::setPluginsEnabled,
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                PluginToggleRow(
-                    title = stringResource(Res.string.plugins_group_by_repo_title),
-                    description = stringResource(Res.string.plugins_group_by_repo_desc),
+                Spacer(modifier = Modifier.width(12.dp))
+                Switch(
                     checked = uiState.groupStreamsByRepository,
-                    onCheckedChange = PluginRepository::setGroupStreamsByRepository,
+                    onCheckedChange = { PluginRepository.setGroupStreamsByRepository(it) },
                 )
-            }
-            if (showManifestUrl) {
-                Spacer(modifier = Modifier.height(14.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Spacer(modifier = Modifier.height(12.dp))
-                NuvioInputField(
-                    value = repositoryUrl,
-                    onValueChange = { repositoryUrl = it; message = null },
-                    placeholder = stringResource(Res.string.plugins_input_manifest_placeholder),
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                NuvioPrimaryButton(
-                    text = if (isAdding) stringResource(Res.string.plugins_button_installing)
-                    else stringResource(Res.string.plugins_button_install_repo),
-                    enabled = repositoryUrl.isNotBlank() && !isAdding,
-                    onClick = {
-                        val requested = repositoryUrl.trim()
-                        if (requested.isBlank()) {
-                            message = enterRepoUrlError
-                            return@NuvioPrimaryButton
-                        }
-                        isAdding = true
-                        message = null
-                        coroutineScope.launch {
-                            when (val result = PluginRepository.addRepository(requested)) {
-                                is AddPluginRepositoryResult.Success -> {
-                                    repositoryUrl = ""
-                                    message = installedTemplate.replace("%1\$s", result.repository.name)
-                                }
-                                is AddPluginRepositoryResult.Error -> message = result.message
-                            }
-                            isAdding = false
-                        }
-                    },
-                )
-                message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             }
         }
 
+        NuvioSectionLabel(stringResource(Res.string.plugins_section_add_repo))
         NuvioSurfaceCard {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Installed Repositories", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "Refresh or remove plugin repositories.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Row {
-                    NuvioIconActionButton(
-                        icon = Icons.Rounded.Refresh,
-                        contentDescription = "Update all plugins",
-                        tint = MaterialTheme.colorScheme.primary,
-                        onClick = { PluginRepository.refreshAll() },
-                    )
-                    NuvioIconActionButton(
-                        icon = Icons.Rounded.KeyboardArrowDown,
-                        contentDescription = "Show installed repositories",
-                        tint = MaterialTheme.colorScheme.primary,
-                        onClick = { showInstalledRepositories = !showInstalledRepositories },
-                    )
-                }
+            NuvioInputField(
+                value = repositoryUrl,
+                onValueChange = {
+                    repositoryUrl = it
+                    message = null
+                },
+                placeholder = stringResource(Res.string.plugins_input_manifest_placeholder),
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            NuvioPrimaryButton(
+                text = if (isAdding) {
+                    stringResource(Res.string.plugins_button_installing)
+                } else {
+                    stringResource(Res.string.plugins_button_install_repo)
+                },
+                enabled = repositoryUrl.isNotBlank() && !isAdding,
+                onClick = {
+                    val requested = repositoryUrl.trim()
+                    if (requested.isBlank()) {
+                        message = enterRepoUrlError
+                        return@NuvioPrimaryButton
+                    }
+                    isAdding = true
+                    message = null
+                    coroutineScope.launch {
+                        when (val result = PluginRepository.addRepository(requested)) {
+                            is AddPluginRepositoryResult.Success -> {
+                                repositoryUrl = ""
+                                message = installedTemplate.replace("%1\$s", result.repository.name)
+                            }
+                            is AddPluginRepositoryResult.Error -> {
+                                message = result.message
+                            }
+                        }
+                        isAdding = false
+                    }
+                },
+            )
+            message?.let { text ->
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
-        if (showInstalledRepositories && sortedRepos.isEmpty()) {
+
+        NuvioSectionLabel(stringResource(Res.string.plugins_section_installed_repos))
+        if (sortedRepos.isEmpty()) {
             NuvioSurfaceCard {
                 Text(
                     text = stringResource(Res.string.plugins_empty_repos_title),
@@ -308,7 +273,7 @@ fun PluginsSettingsPageContent(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-        } else if (showInstalledRepositories) {
+        } else {
             sortedRepos.forEach { repo ->
                 NuvioSurfaceCard {
                     Row(
@@ -319,18 +284,27 @@ fun PluginsSettingsPageContent(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = repo.name,
-                                style = MaterialTheme.typography.titleLarge,
+                                style = MaterialTheme.typography.headlineLarge,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                             )
                             repo.version?.let { version ->
+                                Spacer(modifier = Modifier.height(6.dp))
                                 Text(
                                     text = stringResource(Res.string.plugins_repo_version, version),
-                                    style = MaterialTheme.typography.bodySmall,
+                                    style = MaterialTheme.typography.bodyLarge,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = repo.manifestUrl,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             NuvioIconActionButton(
@@ -348,10 +322,9 @@ fun PluginsSettingsPageContent(
                         }
                     }
                     Spacer(modifier = Modifier.height(14.dp))
-                    FlowRow(
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         NuvioInfoBadge(text = stringResource(Res.string.plugins_badge_providers, repo.scraperCount))
                         if (repo.isRefreshing) {
@@ -370,18 +343,7 @@ fun PluginsSettingsPageContent(
             }
         }
 
-        NuvioSectionLabel("Providers")
-        NuvioSurfaceCard {
-            Text(
-                text = "Choose the providers Anivio can use to find streams and chapters.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        ProviderFilterChips(
-            selected = providerFilter,
-            onSelected = { providerFilter = it },
-        )
+        NuvioSectionLabel(stringResource(Res.string.plugins_section_providers))
         if (sortedScrapers.isEmpty()) {
             NuvioSurfaceCard {
                 Text(
@@ -406,37 +368,28 @@ fun PluginsSettingsPageContent(
                     ReorderableColumn(
                         list = scrapers,
                         onSettle = { from, to ->
-                            if (from != to) {
-                                PluginRepository.moveScraperTo(scrapers[from].id, scrapers[to].id)
+                            val moved = scrapers.getOrNull(from)
+                            val destination = scrapers.getOrNull(to)
+                            if (moved != null && destination != null) {
+                                PluginRepository.moveScraperTo(moved.id, destination.id)
                             }
                         },
-                        onMove = {
-                            hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        },
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) { _, scraper, isDragging ->
                         key(scraper.id) {
                             ReorderableItem {
                                 val elevation by animateDpAsState(if (isDragging) 6.dp else 0.dp)
                                 Surface(
-                                    color = MaterialTheme.nuvio.colors.surface,
+                                    color = MaterialTheme.colorScheme.surfaceContainer,
                                     shadowElevation = elevation,
-                                    shape = RoundedCornerShape(12.dp),
+                                    shape = MaterialTheme.shapes.medium,
                                 ) {
                                     ProviderRow(
-                                        modifier = Modifier.longPressDraggableHandle(
-                                            onDragStarted = {
-                                                hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            },
-                                        ),
+                                        modifier = Modifier.longPressDraggableHandle(),
                                         scraper = scraper,
                                         results = testResults[scraper.id],
-                                        detailsExpanded = expandedScraperId == scraper.id,
-                                        onToggleDetails = {
-                                            expandedScraperId = if (expandedScraperId == scraper.id) null else scraper.id
-                                        },
                                         isTesting = testingScraperId == scraper.id,
-                                        testEnabled = hasTmdbApiKey && scraper.enabled && scraper.code.isNotBlank(),
+                                        testEnabled = hasTmdbApiKey,
                                         onTest = {
                                             testingScraperId = scraper.id
                                             coroutineScope.launch {
@@ -455,7 +408,7 @@ fun PluginsSettingsPageContent(
                                             }
                                         },
                                         onToggle = { PluginRepository.toggleScraper(scraper.id, it) },
-                                        onConfigure = if (scraper.hasSettings && scraper.enabled && scraper.code.isNotBlank()) {
+                                        onConfigure = if (scraper.hasSettings) {
                                             {
                                                 coroutineScope.launch {
                                                     val layout = PluginRuntime.getPluginSettingsLayout(scraper.code, scraper.id)
@@ -487,190 +440,106 @@ fun PluginsSettingsPageContent(
             }
         )
     }
-
-}
-
-@Composable
-private fun ProviderFilterChips(
-    selected: PluginContentFilter,
-    onSelected: (PluginContentFilter) -> Unit,
-) {
-    FlowRow(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        PluginContentFilter.entries.forEach { filter ->
-            androidx.compose.material3.Surface(
-                modifier = Modifier.clickable { onSelected(filter) },
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(50),
-                color = if (selected == filter) MaterialTheme.colorScheme.primaryContainer
-                else MaterialTheme.colorScheme.surfaceVariant,
-            ) {
-                Text(
-                    text = filter.name.lowercase().replaceFirstChar(Char::uppercase),
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
-                    style = MaterialTheme.typography.labelLarge,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun PluginToggleRow(
-    title: String,
-    description: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Spacer(modifier = Modifier.width(12.dp))
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
-    }
 }
 
 @Composable
 private fun ProviderRow(
-    modifier: Modifier = Modifier,
     scraper: PluginScraper,
     results: List<PluginRuntimeResult>?,
-    detailsExpanded: Boolean,
-    onToggleDetails: () -> Unit,
     isTesting: Boolean,
     testEnabled: Boolean,
     onTest: () -> Unit,
     onToggle: (Boolean) -> Unit,
     onConfigure: (() -> Unit)?,
+    modifier: Modifier = Modifier,
 ) {
-    val visibleResults = results.orEmpty()
-    var actionsExpanded by remember { mutableStateOf(false) }
-
-    Column(modifier = modifier.fillMaxWidth()) {
+    Column(modifier = modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onToggleDetails),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = scraper.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Extension,
+                    contentDescription = null,
+                    tint = if (scraper.enabled) Color(0xFF68B76A) else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Text(
-                    text = scraper.description.ifBlank {
-                        stringResource(Res.string.plugins_provider_no_description)
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = scraper.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = scraper.description.ifBlank {
+                            stringResource(Res.string.plugins_provider_no_description)
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
-            Spacer(modifier = Modifier.width(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box {
-                    IconButton(onClick = { actionsExpanded = true }) {
-                        Icon(Icons.Rounded.MoreVert, contentDescription = "Provider actions")
-                    }
-                    DropdownMenu(
-                        expanded = actionsExpanded,
-                        onDismissRequest = { actionsExpanded = false },
-                    ) {
-                        DropdownMenuItem(
-                            text = {
-                                Text(if (detailsExpanded) "Hide details" else "Show details")
-                            },
-                            onClick = {
-                                actionsExpanded = false
-                                onToggleDetails()
-                            },
+                if (onConfigure != null) {
+                    IconButton(onClick = onConfigure) {
+                        Icon(
+                            imageVector = Icons.Rounded.Settings,
+                            contentDescription = "Provider settings",
+                            tint = MaterialTheme.colorScheme.primary,
                         )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(Res.string.plugins_button_test_provider)) },
-                            onClick = { actionsExpanded = false; onTest() },
-                            enabled = testEnabled && !isTesting,
-                        )
-                        onConfigure?.let { configure ->
-                            DropdownMenuItem(
-                                text = { Text("Configure") },
-                                onClick = { actionsExpanded = false; configure() },
-                            )
-                        }
                     }
+                }
+                IconButton(
+                    onClick = onTest,
+                    enabled = testEnabled && !isTesting,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Bolt,
+                        contentDescription = stringResource(Res.string.plugins_button_test_provider),
+                        tint = if (testEnabled && !isTesting) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
                 }
                 Switch(
                     checked = scraper.enabled,
                     onCheckedChange = onToggle,
-                    enabled = scraper.manifestEnabled && !scraper.isInstalling,
+                    enabled = scraper.manifestEnabled,
                 )
             }
         }
         Spacer(modifier = Modifier.height(10.dp))
-        FlowRow(
+        Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            NuvioInfoBadge(
-                text = when {
-                    scraper.isInstalling -> stringResource(Res.string.plugins_provider_downloading)
-                    scraper.code.isBlank() -> stringResource(Res.string.plugins_provider_not_installed)
-                    else -> stringResource(Res.string.plugins_provider_installed)
-                },
-            )
-        }
-        scraper.downloadErrorMessage?.let { errorMessage ->
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = stringResource(Res.string.plugins_provider_download_failed, errorMessage),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-            )
-        }
-        AnimatedVisibility(visible = detailsExpanded) {
-            Column {
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    NuvioInfoBadge(text = scraper.supportedTypes.joinToString(" | "))
-                    NuvioInfoBadge(text = stringResource(Res.string.plugins_provider_version, scraper.version))
-                    if (!scraper.manifestEnabled) {
-                        NuvioInfoBadge(text = stringResource(Res.string.plugins_provider_disabled_by_repo))
-                    }
-                }
+            NuvioInfoBadge(text = scraper.supportedTypes.joinToString(" | "))
+            NuvioInfoBadge(text = stringResource(Res.string.plugins_provider_version, scraper.version))
+            if (!scraper.manifestEnabled) {
+                NuvioInfoBadge(text = stringResource(Res.string.plugins_provider_disabled_by_repo))
             }
         }
 
-        AnimatedVisibility(visible = detailsExpanded && visibleResults.isNotEmpty()) {
+        if (!results.isNullOrEmpty()) {
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = stringResource(Res.string.plugins_test_results_count, visibleResults.size),
+                text = stringResource(Res.string.plugins_test_results_count, results.size),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(modifier = Modifier.height(8.dp))
-            visibleResults.take(8).forEach { result ->
+            results.take(8).forEach { result ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.Top,

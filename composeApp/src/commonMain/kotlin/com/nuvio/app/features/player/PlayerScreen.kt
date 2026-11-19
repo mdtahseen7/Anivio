@@ -2,10 +2,9 @@ package com.nuvio.app.features.player
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import com.nuvio.app.features.party.PartyMedia
 
 @Composable
-fun PlayerScreen(
+internal fun PlayerScreen(
     profileId: Int,
     title: String,
     sourceUrl: String,
@@ -19,10 +18,10 @@ fun PlayerScreen(
     streamSubtitle: String?,
     initialBingeGroup: String? = null,
     pauseDescription: String? = null,
-    onBack: () -> Unit,
+    onBack: PlayerBackRequest,
+    onSystemBackHandlerChanged: (handler: (() -> Unit)?) -> Unit = {},
     onOpenInExternalPlayer: ((ExternalPlayerPlaybackRequest) -> Unit)? = null,
     onOpenExternalUrl: ((String) -> Unit)? = null,
-    onOpenPartyMedia: (PartyMedia) -> Unit = {},
     modifier: Modifier = Modifier,
     logo: String? = null,
     poster: String? = null,
@@ -43,6 +42,8 @@ fun PlayerScreen(
     initialPositionMs: Long = 0L,
     initialProgressFraction: Float? = null,
     contentLanguage: String? = null,
+    launchId: Long? = null,
+    onOpenPartyMedia: (com.nuvio.app.features.party.PartyMedia, PlayerReleaseBeforeBack) -> Unit = { _, _ -> },
 ) {
     PlayerScreenContent(
         PlayerScreenArgs(
@@ -60,9 +61,9 @@ fun PlayerScreen(
             initialBingeGroup = initialBingeGroup,
             pauseDescription = pauseDescription,
             onBack = onBack,
+            onSystemBackHandlerChanged = onSystemBackHandlerChanged,
             onOpenInExternalPlayer = onOpenInExternalPlayer,
             onOpenExternalUrl = onOpenExternalUrl,
-            onOpenPartyMedia = onOpenPartyMedia,
             modifier = modifier,
             logo = logo,
             poster = poster,
@@ -83,6 +84,8 @@ fun PlayerScreen(
             initialPositionMs = initialPositionMs,
             initialProgressFraction = initialProgressFraction,
             contentLanguage = contentLanguage,
+            launchId = launchId,
+            onOpenPartyMedia = onOpenPartyMedia,
         )
     )
 }

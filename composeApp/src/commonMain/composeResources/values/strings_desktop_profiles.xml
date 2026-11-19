@@ -1,0 +1,36 @@
+<resources>
+    <string name="profile_banner_edit_hint">Choose a quick banner or search for an anime.</string>
+    <string name="profile_banner_browse">Browse anime banners</string>
+    <string name="profile_banner_browser">Anime banners</string>
+    <string name="profile_banner_search">Search anime by title</string>
+    <string name="profile_banner_clear_search">Clear search</string>
+    <string name="profile_banner_popular">Popular anime</string>
+    <string name="profile_banner_results">Search results</string>
+    <string name="profile_banner_more">Load more anime</string>
+    <string name="profile_banner_no_titles">No anime found. Try another title.</string>
+    <string name="profile_banner_no_images">No wide artwork found for this anime yet.</string>
+    <string name="profile_banner_load_failed">Couldn’t load artwork. Try again.</string>
+    <string name="profile_banner_retry">Try again</string>
+    <string name="profile_banner_use">Use this banner</string>
+    <string name="profile_banner_preview">Profile preview</string>
+    <string name="profile_banner_image_failed">This image couldn’t load.</string>
+    <string name="profile_banner_anilist">AniList banner</string>
+    <string name="profile_banner_tmdb">TMDB backdrop</string>
+    <string name="profile_banner_mapped">Series artwork</string>
+    <string name="profile_banner_episode">Episode %1$d still</string>
+    <string name="profile_banner_selected">Selected banner</string>
+    <string name="profile_use_discord_avatar">Use Discord profile picture</string>
+    <string name="profile_background_brightness">Background brightness</string>
+    <string name="profile_background_brightness_description">Controls how strongly the selected anime background appears behind your profile name and level.</string>
+    <string name="profile_share_anilist_background">AniList background</string>
+    <string name="profile_share_anilist_avatar">AniList avatar</string>
+    <string name="profile_share_anilist_username">Show AniList username</string>
+    <string name="profile_share_mal_username">Show MAL username</string>
+    <string name="profile_share_avatar">Avatar</string>
+    <string name="profile_share_avatar_anivio">Anivio</string>
+    <string name="profile_share_avatar_hidden">Hide</string>
+    <string name="profile_share_background_opacity">Background opacity</string>
+    <string name="profile_share_show_rank">Show rank</string>
+    <string name="profile_share_show_stats">Show stats</string>
+    <string name="settings_account_share_profile">Share profile card</string>
+</resources>

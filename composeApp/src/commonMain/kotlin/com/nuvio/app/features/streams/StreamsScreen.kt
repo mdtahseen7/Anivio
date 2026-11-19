@@ -1,15 +1,12 @@
 package com.nuvio.app.features.streams
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -19,41 +16,32 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.border
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Download
-import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.SearchOff
-import androidx.compose.material.icons.rounded.Shield
-import com.nuvio.app.core.ui.NuvioLoadingIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.IconButtonDefaults
-import com.nuvio.app.features.cloudflare.CfCaptchaPickerSheet
-import com.nuvio.app.features.cloudflare.CfClearanceRepository
-import com.nuvio.app.features.cloudflare.buildCfCaptchaProviders
-import com.nuvio.app.features.plugins.PluginRepository
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,7 +52,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -73,36 +62,51 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.nuvio.app.features.anime.animeEpisodeSeasonForDisplay
-import com.nuvio.app.features.details.MetaDetailsRepository
-import com.nuvio.app.features.details.seasonForDisplay
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import com.nuvio.app.core.build.AppFeaturePolicy
 import com.nuvio.app.core.ui.NuvioBackButton
+import com.nuvio.app.core.ui.desktopPageHorizontalPaddingForWidth
 import com.nuvio.app.core.ui.NuvioBottomSheetActionRow
 import com.nuvio.app.core.ui.NuvioBottomSheetDivider
+import com.nuvio.app.core.ui.NuvioDesktopVerticalScrollbar
 import com.nuvio.app.core.ui.NuvioModalBottomSheet
 import com.nuvio.app.core.ui.NuvioToastController
 import com.nuvio.app.core.ui.dismissNuvioBottomSheet
+import com.nuvio.app.core.ui.withDuplicateSafeLazyKeys
+import com.nuvio.app.features.anime.animeEpisodeSeasonForDisplay
+import com.nuvio.app.features.details.MetaDetailsRepository
+import com.nuvio.app.features.details.seasonForDisplay
 import com.nuvio.app.features.downloads.DownloadsRepository
 import com.nuvio.app.features.details.MetaScreenSettingsRepository
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberModalBottomSheetState
-import coil3.compose.AsyncImage
+import com.nuvio.app.core.ui.NuvioAsyncImage as AsyncImage
 import com.nuvio.app.core.ui.nuvioSafeBottomPadding
+import com.nuvio.app.core.ui.shimmer
 import com.nuvio.app.features.debrid.DebridSettingsRepository
 import com.nuvio.app.features.debrid.DirectDebridPlayableResult
 import com.nuvio.app.features.debrid.DirectDebridPlaybackResolver
 import com.nuvio.app.features.debrid.toastMessage
+import com.nuvio.app.features.details.MetaScreenBackgroundMode
 import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.watchprogress.WatchProgressRepository
+import com.nuvio.app.features.watchprogress.WatchProgressEntry
 import com.nuvio.app.features.watched.WatchedRepository
 import com.nuvio.app.features.watched.watchedItemKeys
+import com.nuvio.app.isDesktop
 import com.nuvio.app.navigation.LocalUseNativeNavigation
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -131,6 +135,7 @@ fun StreamsScreen(
     resumeProgressFraction: Float? = null,
     manualSelection: Boolean = false,
     startFromBeginning: Boolean = false,
+    showLoadingScreen: Boolean = false,
     onStreamSelected: (stream: StreamItem, resumePositionMs: Long?, resumeProgressFraction: Float?) -> Unit = { _, _, _ -> },
     onStreamActionOpen: (
         stream: StreamItem,
@@ -141,8 +146,11 @@ fun StreamsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val useNativeNavigation = LocalUseNativeNavigation.current
     val uiState by StreamsRepository.uiState.collectAsStateWithLifecycle()
+    val streamDisplaySettings by remember {
+        StreamBadgeSettingsRepository.ensureLoaded()
+        StreamBadgeSettingsRepository.uiState
+    }.collectAsStateWithLifecycle()
     val playerSettings by remember {
         PlayerSettingsRepository.ensureLoaded()
         PlayerSettingsRepository.uiState
@@ -163,8 +171,12 @@ fun StreamsScreen(
         WatchedRepository.ensureLoaded()
         WatchedRepository.uiState
     }.collectAsStateWithLifecycle()
+    val dominantColorEnabled = isDesktop &&
+        metaScreenSettings.backgroundMode == MetaScreenBackgroundMode.DominantColor
     remember {
-        DownloadsRepository.ensureLoaded()
+        if (AppFeaturePolicy.downloadsEnabled) {
+            DownloadsRepository.ensureLoaded()
+        }
     }
     val isEpisode = seasonNumber != null && episodeNumber != null
     val displaySeason = remember(parentMetaType, parentMetaId, title, seasonNumber) {
@@ -174,7 +186,7 @@ fun StreamsScreen(
     val clipboardManager = LocalClipboardManager.current
     val streamLinkCopiedText = stringResource(Res.string.streams_link_copied)
     val noDirectStreamLinkText = stringResource(Res.string.streams_no_direct_link)
-    var streamActionsTarget by remember(videoId) { mutableStateOf<StreamItem?>(null) }
+    var streamActionsTarget by remember(videoId) { mutableStateOf<StreamActionsTarget?>(null) }
     val downloadScope = rememberCoroutineScope()
     val downloadsUiState by remember {
         DownloadsRepository.ensureLoaded()
@@ -186,28 +198,7 @@ fun StreamsScreen(
         }
     }
 
-    val cfState by remember {
-        CfClearanceRepository.ensureLoaded()
-        CfClearanceRepository.uiState
-    }.collectAsStateWithLifecycle()
-    val pluginsUiState by PluginRepository.uiState.collectAsStateWithLifecycle()
-    var showCaptchaPicker by remember { mutableStateOf(false) }
-    val captchaProviders = remember(pluginsUiState.scrapers, cfState.challengeHosts) {
-        buildCfCaptchaProviders(
-            scrapers = pluginsUiState.scrapers,
-            challengeHosts = cfState.challengeHosts,
-        )
-    }
-    val showCaptchaButton = cfState.enabled && captchaProviders.isNotEmpty()
-
-    fun subtitleBaseFileName(): String = buildString {
-        append(parentMetaId.filter { it.isLetterOrDigit() }.take(40))
-        seasonNumber?.let { append("_s").append(it) }
-        episodeNumber?.let { append("_e").append(it) }
-    }
-
     fun handleDownloadStream(stream: StreamItem) {
-        val baseFileName = subtitleBaseFileName()
         if (DirectDebridPlaybackResolver.shouldResolveToPlayableStream(stream)) {
             downloadScope.launch {
                 val resolved = DirectDebridPlaybackResolver.resolveToPlayableStream(
@@ -217,9 +208,7 @@ fun StreamsScreen(
                 )
                 when (resolved) {
                     is DirectDebridPlayableResult.Success -> {
-                        // Hand off to the repository's long-lived scope so subtitle saving + enqueue
-                        // survive this screen leaving composition.
-                        DownloadsRepository.enqueueFromStreamWithSubtitles(
+                        val result = DownloadsRepository.enqueueFromStream(
                             contentType = type,
                             videoId = videoId,
                             parentMetaId = parentMetaId,
@@ -233,10 +222,8 @@ fun StreamsScreen(
                             episodeTitle = episodeTitle,
                             episodeThumbnail = episodeThumbnail,
                             stream = resolved.stream,
-                            streamCarriedSubtitles = resolved.stream.externalSubtitles,
-                            subtitleBaseFileName = baseFileName,
-                            onResult = { NuvioToastController.show(it.toastMessage()) },
                         )
+                        NuvioToastController.show(result.toastMessage())
                     }
                     else -> {
                         val message = resolved.toastMessage()
@@ -247,30 +234,28 @@ fun StreamsScreen(
                 }
             }
         } else {
-            DownloadsRepository.enqueueFromStreamWithSubtitles(
-                contentType = type,
-                videoId = videoId,
-                parentMetaId = parentMetaId,
-                parentMetaType = parentMetaType,
-                title = title,
-                logo = logo,
-                poster = poster,
-                background = background,
-                seasonNumber = seasonNumber,
-                episodeNumber = episodeNumber,
-                episodeTitle = episodeTitle,
-                episodeThumbnail = episodeThumbnail,
-                stream = stream,
-                streamCarriedSubtitles = stream.externalSubtitles,
-                subtitleBaseFileName = baseFileName,
-                onResult = { NuvioToastController.show(it.toastMessage()) },
-            )
+            downloadScope.launch {
+                val result = DownloadsRepository.enqueueFromStream(
+                    contentType = type,
+                    videoId = videoId,
+                    parentMetaId = parentMetaId,
+                    parentMetaType = parentMetaType,
+                    title = title,
+                    logo = logo,
+                    poster = poster,
+                    background = background,
+                    seasonNumber = seasonNumber,
+                    episodeNumber = episodeNumber,
+                    episodeTitle = episodeTitle,
+                    episodeThumbnail = episodeThumbnail,
+                    stream = stream,
+                )
+                NuvioToastController.show(result.toastMessage())
+            }
         }
     }
 
     var preferredFilterApplied by remember(videoId) { mutableStateOf(false) }
-    var autoPlayOverlayLogoLoadError by remember(logo) { mutableStateOf(false) }
-    val autoPlayOverlayLogoUrl = logo?.takeIf { it.isNotBlank() }
     val episodeProgress = watchProgressUiState.progressForVideo(
         videoId = videoId,
         parentMetaId = parentMetaId,
@@ -282,28 +267,14 @@ fun StreamsScreen(
     } else {
         episodeProgress
     }
-    val storedProgressFraction = storedProgress
-        ?.takeIf { it.isResumable }
-        ?.progressPercent
-        ?.takeIf { it > 0f }
-        ?.let { explicitPercent -> (explicitPercent / 100f).coerceIn(0f, 1f) }
-    val effectiveResumeProgressFraction = if (startFromBeginning) {
-        null
-    } else {
-        resumeProgressFraction
-        ?.takeIf { it > 0f }
-        ?.coerceIn(0f, 1f)
-        ?: storedProgressFraction
-    }
-    val effectiveResumePositionMs = if (effectiveResumeProgressFraction != null) {
-        null
-    } else {
-        if (startFromBeginning) {
-            null
-        } else {
-            (resumePositionMs ?: storedProgress?.takeIf { it.isResumable }?.lastPositionMs)?.takeIf { it > 0L }
-        }
-    }
+    val resumeState = resolveStreamResumeState(
+        progress = episodeProgress,
+        initialPositionMs = resumePositionMs,
+        initialProgressFraction = resumeProgressFraction,
+        startFromBeginning = startFromBeginning,
+    )
+    val effectiveResumePositionMs = resumeState.positionMs
+    val effectiveResumeProgressFraction = resumeState.progressFraction
 
     LaunchedEffect(type, videoId, seasonNumber, episodeNumber, manualSelection) {
         StreamsRepository.load(
@@ -351,6 +322,8 @@ fun StreamsScreen(
         )
     }
 
+    if (showLoadingScreen) return
+
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
@@ -374,17 +347,22 @@ fun StreamsScreen(
                 appendInstantServiceToDefaultName = debridSettings.canResolvePlayableLinks && !debridSettings.hasCustomStreamFormatting,
                 resumePositionMs = effectiveResumePositionMs,
                 resumeProgressFraction = effectiveResumeProgressFraction,
+                dominantColorEnabled = dominantColorEnabled,
                 onStreamSelected = { stream, positionMs, progressFraction ->
                     onStreamSelected(stream, positionMs, progressFraction)
                 },
-                onStreamLongPress = { stream -> streamActionsTarget = stream },
-                onDownloadStream = ::handleDownloadStream,
-                downloadedVideoIds = downloadedVideoIds,
+                onStreamLongPress = { stream ->
+                    streamActionsTarget = StreamActionsTarget(stream = stream)
+                },
+                onStreamSecondaryClick = { stream, position ->
+                    streamActionsTarget = StreamActionsTarget(stream = stream, anchorInRoot = position)
+                },
                 onRefresh = reloadStreams,
             )
         } else {
             MobileStreamsLayout(
                 isEpisode = isEpisode,
+                backgroundMode = streamDisplaySettings.backgroundMode,
                 title = title,
                 logo = logo,
                 heroArtwork = heroArtwork,
@@ -400,9 +378,12 @@ fun StreamsScreen(
                 onStreamSelected = { stream, positionMs, progressFraction ->
                     onStreamSelected(stream, positionMs, progressFraction)
                 },
-                onStreamLongPress = { stream -> streamActionsTarget = stream },
-                onDownloadStream = ::handleDownloadStream,
-                downloadedVideoIds = downloadedVideoIds,
+                onStreamLongPress = { stream ->
+                    streamActionsTarget = StreamActionsTarget(stream = stream)
+                },
+                onStreamSecondaryClick = { stream, position ->
+                    streamActionsTarget = StreamActionsTarget(stream = stream, anchorInRoot = position)
+                },
                 onRefresh = reloadStreams,
             )
         }
@@ -411,54 +392,35 @@ fun StreamsScreen(
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
-                .padding(start = 12.dp, top = if (useNativeNavigation) 52.dp else 8.dp),
+                .padding(
+                    start = if (isDesktop) desktopPageHorizontalPaddingForWidth(maxWidth.value) else 12.dp,
+                    top = if (isDesktop) 32.dp else 8.dp,
+                ),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             NuvioBackButton(
                 onClick = onBack,
-                modifier = Modifier
-                    .size(40.dp),
-                containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.45f),
+                modifier = if (isDesktop) Modifier else Modifier.size(40.dp),
+                containerColor = if (isDesktop) {
+                    Color.Black.copy(alpha = 0.34f)
+                } else {
+                    MaterialTheme.colorScheme.background.copy(alpha = 0.45f)
+                },
+                showContainerOnDesktop = true,
                 contentColor = MaterialTheme.colorScheme.onBackground,
+                buttonSize = if (isDesktop) 48.dp else 40.dp,
+                iconSize = if (isDesktop) 24.dp else 20.dp,
             )
-            if (showCaptchaButton) {
-                FilledIconButton(
-                    onClick = { showCaptchaPicker = true },
-                    modifier = Modifier.size(40.dp),
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.45f),
-                        contentColor = MaterialTheme.colorScheme.onBackground,
-                    ),
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Shield,
-                        contentDescription = stringResource(Res.string.streams_solve_captcha),
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-            }
+
         }
 
-        AnimatedVisibility(
-            visible = uiState.showDirectAutoPlayOverlay,
-            enter = fadeIn(animationSpec = tween(250)),
-            exit = fadeOut(animationSpec = tween(200)),
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            com.nuvio.app.features.player.OpeningOverlay(
-                artwork = background ?: poster,
-                logo = logo,
-                title = title,
-                onBack = onBack,
-                horizontalSafePadding = 0.dp,
-                message = uiState.overlayMessage ?: stringResource(Res.string.streams_finding_source),
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
 
-        StreamActionsSheet(
-            stream = streamActionsTarget,
-            externalPlayerEnabled = playerSettings.externalPlayerEnabled,
+        StreamActionsHost(
+            target = streamActionsTarget,
+            useDesktopContextMenu = isDesktop,
+            externalPlayerSupported = AppFeaturePolicy.externalPlayerSupported,
+            externalPlayerEnabled = AppFeaturePolicy.externalPlayerSupported && playerSettings.externalPlayerEnabled,
+            showDownloadAction = AppFeaturePolicy.downloadsEnabled,
             onDismiss = { streamActionsTarget = null },
             onCopyLink = { stream ->
                 val directUrl = stream.playableDirectUrl ?: stream.externalOpenUrl
@@ -504,19 +466,13 @@ fun StreamsScreen(
                 )
             },
         )
-
-        if (showCaptchaPicker) {
-            CfCaptchaPickerSheet(
-                providers = captchaProviders,
-                onDismiss = { showCaptchaPicker = false },
-            )
-        }
     }
 }
 
 @Composable
 private fun MobileStreamsLayout(
     isEpisode: Boolean,
+    backgroundMode: StreamBackgroundMode,
     title: String,
     logo: String?,
     heroArtwork: String?,
@@ -531,13 +487,12 @@ private fun MobileStreamsLayout(
     resumeProgressFraction: Float?,
     onStreamSelected: (stream: StreamItem, resumePositionMs: Long?, resumeProgressFraction: Float?) -> Unit,
     onStreamLongPress: (StreamItem) -> Unit,
-    onDownloadStream: (StreamItem) -> Unit,
-    downloadedVideoIds: Set<String>,
+    onStreamSecondaryClick: (StreamItem, Offset) -> Unit,
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier.fillMaxSize()) {
-        if (heroArtwork != null) {
+        if (backgroundMode == StreamBackgroundMode.Cinematic && heroArtwork != null) {
             AsyncImage(
                 model = heroArtwork,
                 contentDescription = null,
@@ -577,7 +532,7 @@ private fun MobileStreamsLayout(
                     .fillMaxWidth()
                     .weight(1f),
             ) {
-                if (isEpisode) {
+                if (isEpisode && backgroundMode == StreamBackgroundMode.Cinematic) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -616,8 +571,7 @@ private fun MobileStreamsLayout(
                         appendInstantServiceToDefaultName = appendInstantServiceToDefaultName,
                         onStreamSelected = onStreamSelected,
                         onStreamLongPress = onStreamLongPress,
-                        onDownloadStream = onDownloadStream,
-                        downloadedVideoIds = downloadedVideoIds,
+                        onStreamSecondaryClick = onStreamSecondaryClick,
                         resumePositionMs = resumePositionMs,
                         resumeProgressFraction = resumeProgressFraction,
                         modifier = Modifier.weight(1f),
@@ -626,6 +580,25 @@ private fun MobileStreamsLayout(
             }
         }
     }
+}
+
+internal data class StreamResumeState(
+    val positionMs: Long? = null,
+    val progressFraction: Float? = null,
+)
+
+internal fun resolveStreamResumeState(
+    progress: WatchProgressEntry?,
+    initialPositionMs: Long?,
+    initialProgressFraction: Float?,
+    startFromBeginning: Boolean,
+): StreamResumeState {
+    if (startFromBeginning || progress?.isResumable == false) return StreamResumeState()
+    val fraction = (if (progress != null) progress.progressPercent?.div(100f) else initialProgressFraction)
+        ?.takeIf { it > 0f }?.coerceIn(0f, 1f)
+    val position = if (fraction != null) null
+        else (progress?.lastPositionMs ?: initialPositionMs)?.takeIf { it > 0L }
+    return StreamResumeState(positionMs = position, progressFraction = fraction)
 }
 
 @Composable
@@ -742,6 +715,12 @@ private fun EpisodeHeroBlock(
             )
         }
 
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.1f)),
+        )
+
         // Gradient overlay bottom-up
         Box(
             modifier = Modifier
@@ -753,18 +732,12 @@ private fun EpisodeHeroBlock(
                             0.58f to Color.Transparent,
                             0.8f to Color.Black.copy(alpha = 0.42f),
                             0.93f to heroBlendColor.copy(alpha = 0.84f),
-                            1.0f to heroBlendColor.copy(alpha = 0.97f),
+                            1.0f to heroBlendColor,
                         ),
                         startY = 0f,
                         endY = Float.POSITIVE_INFINITY,
                     ),
                 ),
-        )
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.1f)),
         )
 
         // Safe-area push-down for status bar, then content pinned to bottom
@@ -814,129 +787,34 @@ private fun EpisodeHeroBlock(
 }
 
 // ---------------------------------------------------------------------------
-// Provider Filter Row
-// ---------------------------------------------------------------------------
-
-@Composable
-internal fun ProviderFilterRow(
-    groups: List<AddonStreamGroup>,
-    selectedFilter: String?,
-    onFilterSelected: (String?) -> Unit,
-    onRefresh: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val addonGroups = groups.filter { it.streams.isNotEmpty() || it.isLoading }
-
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        FilterChip(
-            icon = Icons.Rounded.Refresh,
-            contentDescription = stringResource(Res.string.streams_refresh),
-            isSelected = false,
-            onClick = onRefresh,
-        )
-        // "All" chip
-        FilterChip(
-            label = stringResource(Res.string.collections_tab_all),
-            isSelected = selectedFilter == null,
-            onClick = { onFilterSelected(null) },
-        )
-        addonGroups.forEach { group ->
-            FilterChip(
-                label = group.addonName,
-                isSelected = selectedFilter == group.addonId,
-                onClick = { onFilterSelected(group.addonId) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun FilterChip(
-    label: String? = null,
-    icon: ImageVector? = null,
-    contentDescription: String? = null,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.96f else 1f,
-        animationSpec = tween(durationMillis = 140),
-        label = "filter_chip_scale",
-    )
-    val containerColor by animateColorAsState(
-        targetValue = if (isSelected) {
-            MaterialTheme.colorScheme.primary
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-        },
-        animationSpec = tween(durationMillis = 180),
-        label = "filter_chip_container",
-    )
-    val contentColor by animateColorAsState(
-        targetValue = if (isSelected) {
-            MaterialTheme.colorScheme.onPrimary
-        } else {
-            MaterialTheme.colorScheme.onSurface
-        },
-        animationSpec = tween(durationMillis = 180),
-        label = "filter_chip_content",
-    )
-    Box(
-        modifier = Modifier
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
-            .height(36.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(containerColor)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick,
-            )
-            .padding(horizontal = 14.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            if (icon != null) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = contentDescription,
-                    tint = contentColor,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-            if (label != null) {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        fontSize = 14.sp,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
-                        letterSpacing = 0.1.sp,
-                    ),
-                    color = contentColor,
-                    maxLines = 1,
-                )
-            }
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Stream List
 // ---------------------------------------------------------------------------
+
+private const val STREAM_CONTENT_TYPE_LOADING = "streams_loading"
+private const val STREAM_CONTENT_TYPE_EMPTY = "streams_empty"
+private const val STREAM_CONTENT_TYPE_SECTION_HEADER = "streams_section_header"
+private const val STREAM_CONTENT_TYPE_SOURCE_HEADER = "streams_source_header"
+private const val STREAM_CONTENT_TYPE_STREAM = "streams_stream"
+private const val STREAM_CONTENT_TYPE_FOOTER_LOADING = "streams_footer_loading"
+private const val STREAM_CONTENT_TYPE_BOTTOM_SPACER = "streams_bottom_spacer"
+
+private data class StreamSectionRenderModel(
+    val sectionKey: String,
+    val group: AddonStreamGroup,
+    val sources: List<StreamSourceRenderModel>,
+    val showSourceHeaders: Boolean,
+)
+
+private data class StreamSourceRenderModel(
+    val sourceKey: String,
+    val sourceName: String,
+    val streams: List<StreamCardRenderModel>,
+)
+
+private data class StreamCardRenderModel(
+    val lazyKey: String,
+    val stream: StreamItem,
+)
 
 @Composable
 internal fun StreamList(
@@ -945,8 +823,7 @@ internal fun StreamList(
     appendInstantServiceToDefaultName: Boolean,
     onStreamSelected: (stream: StreamItem, resumePositionMs: Long?, resumeProgressFraction: Float?) -> Unit,
     onStreamLongPress: (StreamItem) -> Unit,
-    onDownloadStream: (StreamItem) -> Unit,
-    downloadedVideoIds: Set<String>,
+    onStreamSecondaryClick: (StreamItem, Offset) -> Unit,
     resumePositionMs: Long?,
     resumeProgressFraction: Float?,
     modifier: Modifier = Modifier,
@@ -955,93 +832,136 @@ internal fun StreamList(
     val hasGroups = filteredGroups.isNotEmpty()
     val hasAnyStreams = filteredGroups.any { it.streams.isNotEmpty() }
     val anyLoading = filteredGroups.any { it.isLoading }
+    val streamSections = remember(filteredGroups) {
+        buildStreamSectionRenderModels(filteredGroups)
+    }
     val torrentNotSupportedText = stringResource(Res.string.streams_torrent_not_supported)
-    val noDirectStreamLinkText = stringResource(Res.string.streams_no_direct_link)
+    val listState = rememberLazyListState()
+    val fetchingText = stringResource(Res.string.streams_fetching)
+    val findingStreamsText = stringResource(Res.string.streams_finding_streams)
+    val checkingMoreAddonsText = stringResource(Res.string.streams_checking_more_addons)
+    val formatStreamSize = rememberStreamSizeLabelFormat()
     val streamBadgeSettings by remember {
         StreamBadgeSettingsRepository.ensureLoaded()
         StreamBadgeSettingsRepository.uiState
     }.collectAsStateWithLifecycle()
-    val sharedStream = LocalSharedStream.current
 
-    LazyColumn(
-        modifier = modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(
-            horizontal = 12.dp,
-            vertical = 12.dp,
-        ),
-        verticalArrangement = Arrangement.spacedBy(0.dp),
-    ) {
-        sharedStream?.let { shared ->
-            item(key = "shared_stream") {
-                Column {
-                    StreamSectionHeader(
-                        addonName = shared.label,
-                        isLoading = false,
-                    )
-                    StreamCard(
-                        stream = shared.stream,
-                        enabled = true,
-                        appendInstantServiceToDefaultName = false,
-                        showFileSizeBadges = streamBadgeSettings.showFileSizeBadges,
-                        showAddonLogo = streamBadgeSettings.showAddonLogo,
-                        badgePlacement = streamBadgeSettings.badgePlacement,
-                        onClick = { onStreamSelected(shared.stream, resumePositionMs, resumeProgressFraction) },
-                        outlined = true,
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                }
-            }
-        }
-        when {
-            hasGroups && anyLoading && !hasAnyStreams -> {
-                item {
-                    LoadingStateBlock()
-                }
-            }
-
-            !hasAnyStreams && !uiState.isAnyLoading -> {
-                item {
-                    EmptyStateBlock(reason = uiState.emptyStateReason)
-                }
-            }
-
-            else -> {
-                filteredGroups.forEachIndexed { groupIndex, group ->
-                    streamSection(
-                        sectionKey = streamSectionRenderKey(groupIndex = groupIndex, group = group),
-                        group = group,
-                        showHeader = uiState.selectedFilter == null,
-                        debridEnabled = debridEnabled,
-                        appendInstantServiceToDefaultName = appendInstantServiceToDefaultName,
-                        showFileSizeBadges = streamBadgeSettings.showFileSizeBadges,
-                        showAddonLogo = streamBadgeSettings.showAddonLogo,
-                        badgePlacement = streamBadgeSettings.badgePlacement,
-                        torrentNotSupportedText = torrentNotSupportedText,
-                        noDirectLinkText = noDirectStreamLinkText,
-                        onStreamSelected = onStreamSelected,
-                        onStreamLongPress = onStreamLongPress,
-                        onDownloadStream = onDownloadStream,
-                        downloadedVideoIds = downloadedVideoIds,
-                        resumePositionMs = resumePositionMs,
-                        resumeProgressFraction = resumeProgressFraction,
-                    )
-                }
-                if (anyLoading) {
-                    item {
-                        FooterLoadingBlock()
+    CompositionLocalProvider(LocalStreamSizeLabelFormat provides formatStreamSize) {
+    Box(modifier = modifier.fillMaxWidth()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                horizontal = 12.dp,
+                vertical = 12.dp,
+            ),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
+        ) {
+            when {
+                hasGroups && anyLoading && !hasAnyStreams -> {
+                    item(
+                        key = "streams_loading",
+                        contentType = STREAM_CONTENT_TYPE_LOADING,
+                    ) {
+                        LoadingStateBlock(findingStreamsText = findingStreamsText)
                     }
                 }
-                item {
-                    Spacer(modifier = Modifier.height(nuvioSafeBottomPadding(80.dp)))
+
+                !hasAnyStreams && !uiState.isAnyLoading -> {
+                    item(
+                        key = "streams_empty",
+                        contentType = STREAM_CONTENT_TYPE_EMPTY,
+                    ) {
+                        EmptyStateBlock(reason = uiState.emptyStateReason)
+                    }
+                }
+
+                else -> {
+                    streamSections.forEach { section ->
+                        streamSection(
+                            section = section,
+                            showHeader = uiState.selectedFilter == null,
+                            debridEnabled = debridEnabled,
+                            appendInstantServiceToDefaultName = appendInstantServiceToDefaultName,
+                            showFileSizeBadges = streamBadgeSettings.showFileSizeBadges,
+                            showAddonLogo = streamBadgeSettings.showAddonLogo,
+                            badgePlacement = streamBadgeSettings.badgePlacement,
+                            torrentNotSupportedText = torrentNotSupportedText,
+                            fetchingText = fetchingText,
+                            onStreamSelected = onStreamSelected,
+                            onStreamLongPress = onStreamLongPress,
+                            onStreamSecondaryClick = onStreamSecondaryClick,
+                            resumePositionMs = resumePositionMs,
+                            resumeProgressFraction = resumeProgressFraction,
+                        )
+                    }
+                    if (anyLoading) {
+                        item(
+                            key = "streams_footer_loading",
+                            contentType = STREAM_CONTENT_TYPE_FOOTER_LOADING,
+                        ) {
+                            FooterLoadingBlock(checkingMoreAddonsText = checkingMoreAddonsText)
+                        }
+                    }
+                    item(
+                        key = "streams_bottom_spacer",
+                        contentType = STREAM_CONTENT_TYPE_BOTTOM_SPACER,
+                    ) {
+                        Spacer(modifier = Modifier.height(nuvioSafeBottomPadding(80.dp)))
+                    }
                 }
             }
         }
+        NuvioDesktopVerticalScrollbar(
+            state = listState,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight()
+                .padding(vertical = 8.dp, horizontal = 4.dp),
+        )
+    }
     }
 }
 
+private fun buildStreamSectionRenderModels(groups: List<AddonStreamGroup>): List<StreamSectionRenderModel> =
+    groups
+        .withDuplicateSafeLazyKeys { group -> streamSectionRenderKey(group) }
+        .map { keyedGroup ->
+            val group = keyedGroup.value
+            val sectionKey = keyedGroup.lazyKey.toString()
+            val streamsBySource = group.streams.groupBy(::streamSourceName)
+            val sortedSources = streamsBySource.keys.sortedBy { it.lowercase() }
+
+            StreamSectionRenderModel(
+                sectionKey = sectionKey,
+                group = group,
+                sources = sortedSources.map { sourceName ->
+                    StreamSourceRenderModel(
+                        sourceKey = streamSourceRenderKey(sectionKey = sectionKey, sourceName = sourceName),
+                        sourceName = sourceName,
+                        streams = streamsBySource[sourceName]
+                            .orEmpty()
+                            .withDuplicateSafeLazyKeys { stream ->
+                                streamCardRenderKey(
+                                    sectionKey = sectionKey,
+                                    sourceName = sourceName,
+                                    stream = stream,
+                                )
+                            }
+                            .map { keyedStream ->
+                                StreamCardRenderModel(
+                                    lazyKey = keyedStream.lazyKey.toString(),
+                                    stream = keyedStream.value,
+                                )
+                            },
+                    )
+                },
+                showSourceHeaders = sortedSources.size > 1,
+            )
+        }
+
 private fun LazyListScope.streamSection(
-    sectionKey: String,
-    group: AddonStreamGroup,
+    section: StreamSectionRenderModel,
     showHeader: Boolean,
     debridEnabled: Boolean,
     appendInstantServiceToDefaultName: Boolean,
@@ -1049,50 +969,45 @@ private fun LazyListScope.streamSection(
     showAddonLogo: Boolean,
     badgePlacement: StreamBadgePlacement,
     torrentNotSupportedText: String,
-    noDirectLinkText: String,
+    fetchingText: String,
     onStreamSelected: (stream: StreamItem, resumePositionMs: Long?, resumeProgressFraction: Float?) -> Unit,
     onStreamLongPress: (StreamItem) -> Unit,
-    onDownloadStream: (StreamItem) -> Unit,
-    downloadedVideoIds: Set<String>,
+    onStreamSecondaryClick: (StreamItem, Offset) -> Unit,
     resumePositionMs: Long?,
     resumeProgressFraction: Float?,
 ) {
+    val group = section.group
     if (group.streams.isEmpty() && !group.isLoading) return
 
     if (showHeader) {
-        item(key = "header_$sectionKey") {
+        item(
+            key = "stream_section_header_${section.sectionKey}",
+            contentType = STREAM_CONTENT_TYPE_SECTION_HEADER,
+        ) {
             StreamSectionHeader(
                 addonName = group.addonName,
                 isLoading = group.isLoading,
+                fetchingText = fetchingText,
             )
         }
     }
 
-    val streamsBySource = group.streams.groupBy { stream ->
-        stream.sourceName?.takeIf { it.isNotBlank() } ?: stream.addonName
-    }
-    val sortedSources = streamsBySource.keys.sortedBy { it.lowercase() }
-    val showSourceHeaders = sortedSources.size > 1
-
-    sortedSources.forEachIndexed { sourceIndex, sourceName ->
-        val sourceStreams = streamsBySource[sourceName].orEmpty()
-        if (showSourceHeaders) {
-            item(key = "source_${sectionKey}_$sourceIndex") {
-                StreamSourceHeader(sourceName = sourceName)
+    section.sources.forEach { source ->
+        if (section.showSourceHeaders) {
+            item(
+                key = source.sourceKey,
+                contentType = STREAM_CONTENT_TYPE_SOURCE_HEADER,
+            ) {
+                StreamSourceHeader(sourceName = source.sourceName)
             }
         }
 
-        itemsIndexed(
-            items = sourceStreams,
-            key = { index, stream ->
-                streamCardRenderKey(
-                    sectionKey = sectionKey,
-                    sourceIndex = sourceIndex,
-                    itemIndex = index,
-                    stream = stream,
-                )
-            },
-        ) { _, stream ->
+        items(
+            items = source.streams,
+            key = { renderItem -> renderItem.lazyKey },
+            contentType = { STREAM_CONTENT_TYPE_STREAM },
+        ) { renderItem ->
+            val stream = renderItem.stream
             val isSelectable = stream.isSelectableForPlayback(debridEnabled)
             val isUnsupportedTorrentStream =
                 stream.needsLocalDebridResolve &&
@@ -1117,42 +1032,53 @@ private fun LazyListScope.streamSection(
                         onStreamLongPress(stream)
                     }
                 },
-                onDownloadClick = {
-                    if (stream.playableDirectUrl != null || stream.isAddonDebridCandidate) {
-                        onDownloadStream(stream)
-                    } else {
-                        NuvioToastController.show(noDirectLinkText)
+                onSecondaryClick = { position ->
+                    if (stream.playableDirectUrl != null || stream.shouldOpenExternally || stream.isAddonDebridCandidate) {
+                        onStreamSecondaryClick(stream, position)
                     }
                 },
-                isDownloaded = stream.url in downloadedVideoIds || stream.playableDirectUrl in downloadedVideoIds,
             )
             Spacer(modifier = Modifier.height(10.dp))
         }
     }
 }
 
-internal fun streamSectionRenderKey(
-    groupIndex: Int,
-    group: AddonStreamGroup,
-): String = "$groupIndex:${group.addonId}"
+internal fun streamSectionRenderKey(group: AddonStreamGroup): String = buildString {
+    append("stream_section")
+    appendLazyKeyPart(group.addonId.takeIf { it.isNotBlank() } ?: group.addonName)
+}
+
+private fun streamSourceName(stream: StreamItem): String =
+    stream.sourceName?.takeIf { it.isNotBlank() } ?: stream.addonName
+
+private fun streamSourceRenderKey(
+    sectionKey: String,
+    sourceName: String,
+): String = buildString {
+    append("stream_source")
+    appendLazyKeyPart(sectionKey)
+    appendLazyKeyPart(sourceName)
+}
 
 internal fun streamCardRenderKey(
     sectionKey: String,
-    sourceIndex: Int,
-    itemIndex: Int,
+    sourceName: String,
     stream: StreamItem,
 ): String = buildString {
-    append(sectionKey)
+    append("stream_card")
+    appendLazyKeyPart(sectionKey)
+    appendLazyKeyPart(sourceName)
+    appendLazyKeyPart(stream.url ?: stream.infoHash ?: stream.clientResolve?.infoHash ?: stream.streamLabel)
+    appendLazyKeyPart(stream.fileIdx)
+    appendLazyKeyPart(stream.externalUrl)
+}
+
+private fun StringBuilder.appendLazyKeyPart(value: Any?) {
+    val text = value?.toString()?.trim().orEmpty()
     append(':')
-    append(sourceIndex)
+    append(text.length)
     append(':')
-    append(itemIndex)
-    append(':')
-    append(stream.url ?: stream.infoHash ?: stream.clientResolve?.infoHash ?: stream.streamLabel)
-    stream.externalUrl?.let {
-        append(':')
-        append(it)
-    }
+    append(text)
 }
 
 // ---------------------------------------------------------------------------
@@ -1163,6 +1089,7 @@ internal fun streamCardRenderKey(
 private fun StreamSectionHeader(
     addonName: String,
     isLoading: Boolean,
+    fetchingText: String,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -1181,18 +1108,12 @@ private fun StreamSectionHeader(
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.9f),
         )
         AnimatedVisibility(visible = isLoading, enter = fadeIn(), exit = fadeOut()) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                NuvioLoadingIndicator(
-                    modifier = Modifier.size(12.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = stringResource(Res.string.streams_fetching),
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
+            Text(
+                text = fetchingText,
+                modifier = Modifier.shimmer(),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
+                color = MaterialTheme.colorScheme.primary,
+            )
         }
     }
 }
@@ -1214,11 +1135,241 @@ private fun StreamSourceHeader(
     )
 }
 
+private data class StreamActionsTarget(
+    val stream: StreamItem,
+    val anchorInRoot: Offset? = null,
+)
+
+@Composable
+private fun StreamActionsHost(
+    target: StreamActionsTarget?,
+    useDesktopContextMenu: Boolean,
+    externalPlayerSupported: Boolean,
+    externalPlayerEnabled: Boolean,
+    showDownloadAction: Boolean,
+    onDismiss: () -> Unit,
+    onCopyLink: (StreamItem) -> Unit,
+    onDownload: (StreamItem) -> Unit,
+    onOpen: (StreamItem, openExternally: Boolean) -> Unit,
+) {
+    if (target == null) return
+
+    if (useDesktopContextMenu) {
+        val anchor = target.anchorInRoot ?: return
+        DesktopStreamActionsMenu(
+            stream = target.stream,
+            anchorInRoot = anchor,
+            externalPlayerSupported = externalPlayerSupported,
+            externalPlayerEnabled = externalPlayerEnabled,
+            showDownloadAction = showDownloadAction,
+            onDismiss = onDismiss,
+            onCopyLink = onCopyLink,
+            onDownload = onDownload,
+            onOpen = onOpen,
+        )
+    } else {
+        StreamActionsSheet(
+            stream = target.stream,
+            externalPlayerSupported = externalPlayerSupported,
+            externalPlayerEnabled = externalPlayerEnabled,
+            showDownloadAction = showDownloadAction,
+            onDismiss = onDismiss,
+            onCopyLink = onCopyLink,
+            onDownload = onDownload,
+            onOpen = onOpen,
+        )
+    }
+}
+
+private data class DesktopStreamAction(
+    val icon: ImageVector,
+    val title: String,
+    val onClick: () -> Unit,
+)
+
+@Composable
+private fun DesktopStreamActionsMenu(
+    stream: StreamItem,
+    anchorInRoot: Offset,
+    externalPlayerSupported: Boolean,
+    externalPlayerEnabled: Boolean,
+    showDownloadAction: Boolean,
+    onDismiss: () -> Unit,
+    onCopyLink: (StreamItem) -> Unit,
+    onDownload: (StreamItem) -> Unit,
+    onOpen: (StreamItem, openExternally: Boolean) -> Unit,
+) {
+    val density = LocalDensity.current
+    val edgeMarginPx = with(density) { 8.dp.roundToPx() }
+    val menuShape = RoundedCornerShape(8.dp)
+    val actions = buildList {
+        add(
+            DesktopStreamAction(
+                icon = Icons.Rounded.ContentCopy,
+                title = stringResource(Res.string.streams_copy_link),
+                onClick = { onCopyLink(stream) },
+            ),
+        )
+        if (externalPlayerSupported) {
+            add(
+                DesktopStreamAction(
+                    icon = Icons.AutoMirrored.Rounded.OpenInNew,
+                    title = stringResource(
+                        if (externalPlayerEnabled) {
+                            Res.string.streams_open_internal_player
+                        } else {
+                            Res.string.streams_open_external_player
+                        },
+                    ),
+                    onClick = { onOpen(stream, !externalPlayerEnabled) },
+                ),
+            )
+        }
+        if (showDownloadAction) {
+            add(
+                DesktopStreamAction(
+                    icon = Icons.Rounded.Download,
+                    title = stringResource(Res.string.streams_download_file),
+                    onClick = { onDownload(stream) },
+                ),
+            )
+        }
+    }
+
+    Popup(
+        popupPositionProvider = remember(anchorInRoot, edgeMarginPx) {
+            StreamActionsPopupPositionProvider(
+                pointerPosition = IntOffset(
+                    x = anchorInRoot.x.roundToInt(),
+                    y = anchorInRoot.y.roundToInt(),
+                ),
+                edgeMarginPx = edgeMarginPx,
+            )
+        },
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true),
+    ) {
+        Column(
+            modifier = Modifier
+                .width(244.dp)
+                .shadow(elevation = 14.dp, shape = menuShape)
+                .clip(menuShape)
+                .background(MaterialTheme.colorScheme.surface)
+                .border(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
+                    shape = menuShape,
+                )
+                .padding(4.dp),
+        ) {
+            actions.forEach { action ->
+                DesktopStreamActionRow(
+                    action = action,
+                    onSelected = {
+                        onDismiss()
+                        action.onClick()
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DesktopStreamActionRow(
+    action: DesktopStreamAction,
+    onSelected: () -> Unit,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isHovered by interactionSource.collectIsHoveredAsState()
+    val rowShape = RoundedCornerShape(5.dp)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(38.dp)
+            .clip(rowShape)
+            .background(
+                if (isHovered) {
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.09f)
+                } else {
+                    Color.Transparent
+                },
+            )
+            .hoverable(interactionSource)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onSelected,
+            )
+            .padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Icon(
+            imageVector = action.icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(17.dp),
+        )
+        Text(
+            text = action.title,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+internal class StreamActionsPopupPositionProvider(
+    private val pointerPosition: IntOffset,
+    private val edgeMarginPx: Int,
+) : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize,
+    ): IntOffset = IntOffset(
+        x = positionContextMenuAxis(
+            pointer = pointerPosition.x,
+            popupExtent = popupContentSize.width,
+            windowExtent = windowSize.width,
+            edgeMargin = edgeMarginPx,
+        ),
+        y = positionContextMenuAxis(
+            pointer = pointerPosition.y,
+            popupExtent = popupContentSize.height,
+            windowExtent = windowSize.height,
+            edgeMargin = edgeMarginPx,
+        ),
+    )
+}
+
+internal fun positionContextMenuAxis(
+    pointer: Int,
+    popupExtent: Int,
+    windowExtent: Int,
+    edgeMargin: Int,
+): Int {
+    val minimum = edgeMargin
+    val maximum = (windowExtent - popupExtent - edgeMargin).coerceAtLeast(minimum)
+    val preferred = if (pointer + popupExtent <= windowExtent - edgeMargin) {
+        pointer
+    } else {
+        pointer - popupExtent
+    }
+    return preferred.coerceIn(minimum, maximum)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun StreamActionsSheet(
     stream: StreamItem?,
+    externalPlayerSupported: Boolean,
     externalPlayerEnabled: Boolean,
+    showDownloadAction: Boolean,
     onDismiss: () -> Unit,
     onCopyLink: (StreamItem) -> Unit,
     onDownload: (StreamItem) -> Unit,
@@ -1280,34 +1431,36 @@ private fun StreamActionsSheet(
                     }
                 },
             )
-            NuvioBottomSheetDivider()
-            NuvioBottomSheetActionRow(
-                icon = Icons.AutoMirrored.Rounded.OpenInNew,
-                title = stringResource(
-                    if (externalPlayerEnabled) {
-                        Res.string.streams_open_internal_player
-                    } else {
-                        Res.string.streams_open_external_player
+            if (externalPlayerSupported) {
+                NuvioBottomSheetActionRow(
+                    icon = Icons.AutoMirrored.Rounded.OpenInNew,
+                    title = stringResource(
+                        if (externalPlayerEnabled) {
+                            Res.string.streams_open_internal_player
+                        } else {
+                            Res.string.streams_open_external_player
+                        },
+                    ),
+                    onClick = {
+                        onOpen(stream, !externalPlayerEnabled)
+                        coroutineScope.launch {
+                            dismissNuvioBottomSheet(sheetState = sheetState, onDismiss = onDismiss)
+                        }
                     },
-                ),
-                onClick = {
-                    onOpen(stream, !externalPlayerEnabled)
-                    coroutineScope.launch {
-                        dismissNuvioBottomSheet(sheetState = sheetState, onDismiss = onDismiss)
-                    }
-                },
-            )
-            NuvioBottomSheetDivider()
-            NuvioBottomSheetActionRow(
-                icon = Icons.Rounded.Download,
-                title = stringResource(Res.string.streams_download_file),
-                onClick = {
-                    onDownload(stream)
-                    coroutineScope.launch {
-                        dismissNuvioBottomSheet(sheetState = sheetState, onDismiss = onDismiss)
-                    }
-                },
-            )
+                )
+            }
+            if (showDownloadAction) {
+                NuvioBottomSheetActionRow(
+                    icon = Icons.Rounded.Download,
+                    title = stringResource(Res.string.streams_download_file),
+                    onClick = {
+                        onDownload(stream)
+                        coroutineScope.launch {
+                            dismissNuvioBottomSheet(sheetState = sheetState, onDismiss = onDismiss)
+                        }
+                    },
+                )
+            }
         }
     }
 }
@@ -1339,26 +1492,25 @@ private fun Long.toPlaybackClock(): String {
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun LoadingStateBlock(modifier: Modifier = Modifier) {
+private fun LoadingStateBlock(
+    findingStreamsText: String,
+    modifier: Modifier = Modifier,
+) {
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 48.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        NuvioLoadingIndicator(
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(32.dp),
-        )
         Text(
-            text = stringResource(Res.string.streams_finding_streams),
-            style = MaterialTheme.typography.bodySmall.copy(
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-            ),
+            text = findingStreamsText,
+            modifier = Modifier
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .shimmer(),
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
             color = MaterialTheme.colorScheme.primary,
         )
+        repeat(4) {
+            StreamCardSkeleton()
+        }
     }
 }
 
@@ -1371,14 +1523,10 @@ private fun EmptyStateBlock(
     val message: String
 
     when (reason) {
-        StreamsEmptyStateReason.NoAddonsInstalled -> {
-            title = stringResource(Res.string.compose_search_empty_no_active_addons_title)
-            message = stringResource(Res.string.streams_empty_no_addons_message)
-        }
-
+        StreamsEmptyStateReason.NoAddonsInstalled,
         StreamsEmptyStateReason.NoCompatibleAddons -> {
-            title = stringResource(Res.string.streams_empty_no_stream_addon_title)
-            message = stringResource(Res.string.streams_empty_no_stream_addon_message)
+            title = stringResource(Res.string.playback_unavailable)
+            message = stringResource(Res.string.playback_unavailable_message)
         }
 
         StreamsEmptyStateReason.StreamFetchFailed -> {
@@ -1424,7 +1572,10 @@ private fun EmptyStateBlock(
 }
 
 @Composable
-private fun FooterLoadingBlock(modifier: Modifier = Modifier) {
+private fun FooterLoadingBlock(
+    checkingMoreAddonsText: String,
+    modifier: Modifier = Modifier,
+) {
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -1432,13 +1583,9 @@ private fun FooterLoadingBlock(modifier: Modifier = Modifier) {
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        NuvioLoadingIndicator(
-            modifier = Modifier.size(14.dp),
-            color = MaterialTheme.colorScheme.primary,
-        )
-        Spacer(modifier = Modifier.width(8.dp))
         Text(
-            text = stringResource(Res.string.streams_checking_more_addons),
+            text = checkingMoreAddonsText,
+            modifier = Modifier.shimmer(),
             style = MaterialTheme.typography.bodySmall.copy(
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,

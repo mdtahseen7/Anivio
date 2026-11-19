@@ -8,6 +8,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.nuvio.app.features.addons.AddonsUiState
+import com.nuvio.app.features.details.MetaDetails
 import com.nuvio.app.features.details.MetaDetailsUiState
 import com.nuvio.app.features.details.MetaScreenSettingsUiState
 import com.nuvio.app.features.details.MetaVideo
@@ -15,14 +16,52 @@ import com.nuvio.app.features.p2p.P2pSettingsUiState
 import com.nuvio.app.features.p2p.P2pStreamingState
 import com.nuvio.app.features.player.skip.NextEpisodeInfo
 import com.nuvio.app.features.player.skip.SkipInterval
-import com.nuvio.app.features.party.PartyMedia
 import com.nuvio.app.features.streams.StreamsUiState
 import com.nuvio.app.features.tracking.TrackingMediaReference
 import com.nuvio.app.features.watched.WatchedUiState
 import com.nuvio.app.features.watchprogress.WatchProgressUiState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlin.time.TimeMark
+
+internal data class PlayerSurfaceSource(
+    val sourceUrl: String,
+    val sourceAudioUrl: String?,
+    val sourceHeaders: Map<String, String>,
+    val sourceResponseHeaders: Map<String, String>,
+    val externalSubtitles: List<com.nuvio.app.features.streams.StreamSubtitle>,
+    val streamType: String?,
+    val initialPositionMs: Long?,
+    val initialPositionRequestKey: String?,
+)
+
+internal fun shouldRenderPlayerSurface(
+    hasCurrentSource: Boolean,
+    hasLifecycleController: Boolean,
+    releaseInFlight: Boolean,
+    desktop: Boolean,
+): Boolean = hasCurrentSource || (desktop && hasLifecycleController && releaseInFlight)
+
+internal class PlayerReleaseSurfaceRetention {
+    private var nextAttemptId = 0L
+    private var activeAttemptId: Long? = null
+
+    var inFlight by mutableStateOf(false)
+        private set
+
+    fun begin(): Long {
+        val attemptId = ++nextAttemptId
+        activeAttemptId = attemptId
+        inFlight = true
+        return attemptId
+    }
+
+    fun finish(attemptId: Long): Boolean {
+        if (activeAttemptId != attemptId) return false
+        activeAttemptId = null
+        inFlight = false
+        return true
+    }
+}
 
 internal class PlayerScreenRuntime(
     args: PlayerScreenArgs,
@@ -59,7 +98,6 @@ internal class PlayerScreenRuntime(
     val torrentTrackers: List<String> get() = args.torrentTrackers
     val initialPositionMs: Long get() = args.initialPositionMs
     val initialProgressFraction: Float? get() = args.initialProgressFraction
-    val onOpenPartyMedia: (PartyMedia) -> Unit get() = args.onOpenPartyMedia
     var activeExternalSubtitles by mutableStateOf(args.externalSubtitles)
     @Deprecated("Use activeExternalSubtitles", ReplaceWith("activeExternalSubtitles"))
     val externalSubtitles: List<com.nuvio.app.features.streams.StreamSubtitle> get() = activeExternalSubtitles
@@ -68,7 +106,7 @@ internal class PlayerScreenRuntime(
     lateinit var scope: CoroutineScope
     lateinit var hapticFeedback: HapticFeedback
 
-    var playerSettingsUiState: PlayerSettingsUiState = PlayerSettingsUiState()
+    var playerSettingsUiState by mutableStateOf(PlayerSettingsUiState())
     var p2pSettingsUiState by mutableStateOf(P2pSettingsUiState())
     var p2pStreamingState by mutableStateOf<P2pStreamingState>(P2pStreamingState.Idle)
     var metaScreenSettingsUiState: MetaScreenSettingsUiState = MetaScreenSettingsUiState()
@@ -89,6 +127,7 @@ internal class PlayerScreenRuntime(
     var resizeModeFitLabel: String = ""
     var resizeModeFillLabel: String = ""
     var resizeModeZoomLabel: String = ""
+    var resizeModeStretchLabel: String = ""
     var downloadedLabel: String = ""
     var airsPrefix: String = ""
     var tbaLabel: String = ""
@@ -98,11 +137,11 @@ internal class PlayerScreenRuntime(
     var gestureController: PlayerGestureController? = null
 
     var controlsVisible by mutableStateOf(false)
-    var playerControlsLocked by mutableStateOf(false)
-    /** New player layout: show remaining time (−mm:ss) instead of elapsed/duration on the runtime clock. */
-    var showRemainingTime by mutableStateOf(false)
     /** Bumped on any control interaction so the auto-hide timer can reset for the new scrollable control row. */
     var controlsActivityTick by mutableStateOf(0)
+    /** New player layout: show remaining time (−mm:ss) instead of elapsed/duration on the runtime clock. */
+    var showRemainingTime by mutableStateOf(false)
+    var playerControlsLocked by mutableStateOf(false)
     var activeSourceUrl by mutableStateOf(sourceUrl)
     var activeSourceAudioUrl by mutableStateOf(sourceAudioUrl)
     var activeSourceHeaders by mutableStateOf(sanitizePlaybackHeaders(sourceHeaders))
@@ -118,6 +157,8 @@ internal class PlayerScreenRuntime(
             "torrent:$hash:${torrentFileIdx ?: -1}"
         } ?: sourceUrl.trim().takeIf { it.isNotBlank() }?.let { url -> "url:$url" },
     )
+    var chapters by mutableStateOf(emptyList<PlayerChapter>())
+    var videoEnhancementResult by mutableStateOf(EnhancementResult.Off)
     var activeStreamTitle by mutableStateOf(streamTitle)
     var activeStreamSubtitle by mutableStateOf(streamSubtitle)
     var activeProviderName by mutableStateOf(providerName)
@@ -132,24 +173,15 @@ internal class PlayerScreenRuntime(
     var activeInitialPositionMs by mutableStateOf(initialPositionMs)
     var activeInitialProgressFraction by mutableStateOf(initialProgressFraction)
     var shouldPlay by mutableStateOf(true)
-    var resizeMode by mutableStateOf(playerSettingsUiState.resizeMode)
+    var resizeMode by mutableStateOf(playerSettingsUiState.resizeMode.supportedOnCurrentPlatform())
     var layoutSize by mutableStateOf(IntSize.Zero)
     var playbackSnapshot by mutableStateOf(PlayerPlaybackSnapshot())
-    var playbackSnapshotMark: TimeMark? = null
+    var playbackSnapshotKey by mutableStateOf<PlaybackKey?>(null)
     var playerController by mutableStateOf<PlayerEngineController?>(null)
+    var playerLifecycleController by mutableStateOf<PlayerEngineController?>(null)
+    val playerReleaseSurfaceRetention = PlayerReleaseSurfaceRetention()
     var playerControllerSourceUrl by mutableStateOf<String?>(null)
     var errorMessage by mutableStateOf<String?>(null)
-    var automaticallySwitchedSource: String? = null
-    var showSwitchEngineConfirm by mutableStateOf(false)
-    var playbackEngineOverride by mutableStateOf<AndroidPlaybackEngine?>(null)
-    var playbackSnapshotKey by mutableStateOf<PlaybackKey?>(null)
-    var showPartyPanel by mutableStateOf(false)
-    var showPartyChat by mutableStateOf(false)
-    var partyBehind by mutableStateOf(false)
-    var partyBehindMs by mutableStateOf<Long?>(null)
-    var partyRateNudge: Float? = null
-    var partyPreviousKey: String? = null
-    var partyAppInBackground = false
     var isScrubbingTimeline by mutableStateOf(false)
     var scrubbingPositionMs by mutableStateOf<Long?>(null)
     var pausedOverlayVisible by mutableStateOf(false)
@@ -181,30 +213,50 @@ internal class PlayerScreenRuntime(
     var submitIntroSegmentType by mutableStateOf("intro")
     var submitIntroStartTimeStr by mutableStateOf("00:00")
     var submitIntroEndTimeStr by mutableStateOf("00:00")
+    var submitIntroStartTimeSec by mutableStateOf<Double?>(0.0)
+    var submitIntroEndTimeSec by mutableStateOf<Double?>(0.0)
+    var isSubmitIntroSubmitting by mutableStateOf(false)
+    var submitIntroStatusMessage by mutableStateOf<String?>(null)
+    var playerControlsPendingP2pSwitch by mutableStateOf<PendingPlayerP2pSwitch?>(null)
+    var playerControlsCloseModalsToken by mutableStateOf(0L)
+    var playerControlsSubmitIntroSuccessToken by mutableStateOf(0L)
+    var playerNotificationMessage by mutableStateOf("")
+    var playerNotificationToken by mutableStateOf(0L)
     var episodeStreamsPanelState by mutableStateOf(EpisodeStreamsPanelState())
     var playerMetaVideos by mutableStateOf<List<MetaVideo>>(emptyList())
+    var playerMeta by mutableStateOf<MetaDetails?>(null)
     var skipIntervals by mutableStateOf<List<SkipInterval>>(emptyList())
+    val autoSkippedIntervals = mutableSetOf<SkipInterval>()
+    var lastManualSkipSeekPositions by mutableStateOf<Pair<Long, Long>?>(null)
     var activeSkipInterval by mutableStateOf<SkipInterval?>(null)
     var skipIntervalDismissed by mutableStateOf(false)
+    val autoSkippedIntervalKeys = mutableSetOf<String>()
     var parentalWarnings by mutableStateOf<List<ParentalWarning>>(emptyList())
     var showParentalGuide by mutableStateOf(false)
     var parentalGuideHasShown by mutableStateOf(false)
     var playbackStartedForParentalGuide by mutableStateOf(false)
     var nextEpisodeInfo by mutableStateOf<NextEpisodeInfo?>(null)
     var showNextEpisodeCard by mutableStateOf(false)
+    var nextEpisodeCardDismissed by mutableStateOf(false)
     var nextEpisodeAutoPlaySearching by mutableStateOf(false)
     var nextEpisodeAutoPlaySourceName by mutableStateOf<String?>(null)
     var nextEpisodeAutoPlayCountdown by mutableStateOf<Int?>(null)
     var nextEpisodeAutoPlayJob by mutableStateOf<Job?>(null)
+    var nextEpisodeAutoPlayAutomatic by mutableStateOf(false)
     var pendingP2pSwitch by mutableStateOf<PendingPlayerP2pSwitch?>(null)
     var credentialRefreshJob by mutableStateOf<Job?>(null)
     var credentialRefreshAttemptedSourceUrl by mutableStateOf<String?>(null)
 
+    var showPartyPanel by mutableStateOf(false)
+    var showPartyChat by mutableStateOf(false)
+    var partyBehind by mutableStateOf(false)
+    var partyBehindMs by mutableStateOf<Long?>(null)
+    var partyRateNudge by mutableStateOf<Float?>(null)
+    var partyAppInBackground by mutableStateOf(false)
+
     var showAudioModal by mutableStateOf(false)
     var showSubtitleModal by mutableStateOf(false)
     var showVideoSettingsModal by mutableStateOf(false)
-    var showStreamInfo by mutableStateOf(false)
-    var streamMediaInfo by mutableStateOf(PlayerMediaInfo())
     var audioTracks by mutableStateOf<List<AudioTrack>>(emptyList())
     var subtitleTracks by mutableStateOf<List<SubtitleTrack>>(emptyList())
     var selectedAudioIndex by mutableStateOf(-1)
@@ -212,7 +264,10 @@ internal class PlayerScreenRuntime(
     var selectedAddonSubtitleId by mutableStateOf<String?>(null)
     var useCustomSubtitles by mutableStateOf(false)
     var preferredAudioSelectionApplied by mutableStateOf(false)
+    var appliedAudioPreferences: AppliedAudioPreferences? = null
     var preferredSubtitleSelectionApplied by mutableStateOf(false)
+    var activeSubtitleTab by mutableStateOf(SubtitleTab.BuiltIn)
+    var isUserExplicitAudioSelection by mutableStateOf(false)
     var isUserExplicitSubtitleSelection by mutableStateOf(false)
     var hasScannedTextTracksOnce by mutableStateOf(false)
     var autoFetchedAddonSubtitlesForKey by mutableStateOf<String?>(null)
@@ -221,6 +276,6 @@ internal class PlayerScreenRuntime(
     var subtitleAutoSyncState by mutableStateOf(SubtitleAutoSyncUiState())
 
     var lastSyncedSettingsResizeMode: PlayerResizeMode? = null
-    var lastResetPlaybackIdentity: String? = null
+    var lastResetPlaybackIdentity: PlaybackKey? = null
     var lastResetVideoIdentity: String? = null
 }

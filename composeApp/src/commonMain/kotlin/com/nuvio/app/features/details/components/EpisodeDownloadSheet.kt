@@ -57,14 +57,12 @@ import com.nuvio.app.features.details.MetaDetails
 import com.nuvio.app.features.details.MetaVideo
 import com.nuvio.app.features.details.metaVideoSeasonEpisodeComparator
 import com.nuvio.app.features.details.normalizeSeasonNumber
-import com.nuvio.app.features.details.seasonSortKey
 import com.nuvio.app.features.details.seasonForDisplay
+import com.nuvio.app.features.details.seasonSortKey
 import com.nuvio.app.features.downloads.DownloadSettingsRepository
-import com.nuvio.app.features.downloads.DownloadedSubtitle
 import com.nuvio.app.features.downloads.DownloadsPlatformDownloader
 import com.nuvio.app.features.downloads.DownloadsRepository
 import com.nuvio.app.features.downloads.httpDownloadBytes
-import com.nuvio.app.features.downloads.saveStreamSubtitles
 import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.player.PlayerStreamsRepository
 import com.nuvio.app.features.plugins.PluginRepository
@@ -420,21 +418,6 @@ private suspend fun downloadEpisodes(
 
         if (resolvedStream == null) continue
 
-        // Save subtitle tracks for offline playback: those the stream carries inline, plus any the
-        // installed subtitle addons return (anime streams rarely carry subtitles inline).
-        val downloadedSubtitles = saveStreamSubtitles(
-            subtitles = resolvedStream.externalSubtitles,
-            baseFileName = buildString {
-                append(meta.id.filter { it.isLetterOrDigit() }.take(40))
-                season?.let { append("_s").append(it) }
-                episode?.let { append("_e").append(it) }
-            },
-            type = meta.type,
-            videoId = videoId,
-            hlsPlaylistUrl = resolvedStream.playableDirectUrl,
-            hlsHeaders = resolvedStream.behaviorHints.proxyHeaders?.request.orEmpty(),
-        )
-
         val result = DownloadsRepository.enqueueFromStream(
             contentType = meta.type,
             videoId = videoId,
@@ -449,7 +432,6 @@ private suspend fun downloadEpisodes(
             episodeTitle = video.title,
             episodeThumbnail = video.thumbnail,
             stream = resolvedStream,
-            subtitles = downloadedSubtitles,
         )
         NuvioToastController.show(result.toastMessage())
     }

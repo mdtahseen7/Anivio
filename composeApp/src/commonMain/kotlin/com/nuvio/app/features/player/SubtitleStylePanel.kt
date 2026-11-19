@@ -17,18 +17,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import nuvio.composeapp.generated.resources.settings_playback_subtitle_font
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -79,17 +73,6 @@ fun SubtitleStylePanel(
     onAutoSyncCueSelected: (SubtitleSyncCue) -> Unit,
     onAutoSyncReload: () -> Unit,
 ) {
-    var showFontPicker by remember { mutableStateOf(false) }
-    if (showFontPicker) {
-        SubtitleFontFamilyDialog(
-            selectedFamily = style.fontFamily,
-            onFamilySelected = { family ->
-                onStyleChanged(style.copy(fontFamily = family))
-                showFontPicker = false
-            },
-            onDismiss = { showFontPicker = false },
-        )
-    }
     val sectionGap = if (isCompact) 12.dp else 16.dp
 
     Column(
@@ -122,28 +105,6 @@ fun SubtitleStylePanel(
                 label = stringResource(Res.string.compose_player_reset),
                 onClick = onSubtitleDelayReset,
             )
-        }
-
-        SubtitleStyleSection(title = stringResource(Res.string.settings_playback_subtitle_font)) {
-            Row(
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                    .clickable { showFontPicker = true }.padding(vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = subtitleFontFamilyLabel(style.fontFamily),
-                    modifier = Modifier.weight(1f),
-                    color = Color.White,
-                    style = MaterialTheme.typography.bodyLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Icon(
-                    imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                    contentDescription = null,
-                    tint = Color.White.copy(alpha = 0.7f),
-                )
-            }
         }
 
         SubtitleStyleSection(title = stringResource(Res.string.compose_player_font_size)) {
@@ -529,7 +490,7 @@ private fun formatCueTimestamp(timeMs: Long): String {
     return "$minutes:${seconds.toString().padStart(2, '0')}"
 }
 
-private val SubtitleOutlineColorSwatches = listOf(
+internal val SubtitleOutlineColorSwatches = listOf(
     Color.Black,
     Color.White,
     Color(0xFF00E5FF),

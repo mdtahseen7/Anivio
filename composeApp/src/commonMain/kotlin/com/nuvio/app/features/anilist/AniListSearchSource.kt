@@ -6,7 +6,6 @@ import com.nuvio.app.core.anilist.AniListPage
 import com.nuvio.app.core.anilist.toMetaPreview
 import com.nuvio.app.features.catalog.CatalogPage
 import com.nuvio.app.features.catalog.dedupeCatalogItems
-import com.nuvio.app.features.anivio.enrichPreviewPostersWithAnivio
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
@@ -17,7 +16,6 @@ import kotlinx.serialization.json.put
 internal const val ANILIST_SEARCH_MOVIE_TYPE = "movie"
 
 internal const val ANILIST_SEARCH_SERIES_TYPE = "series"
-internal const val ANILIST_SEARCH_MANGA_TYPE = "manga"
 
 /**
  * Title search against AniList.
@@ -34,10 +32,7 @@ internal object AniListSearchSource {
         perPage: Int,
         forceRefresh: Boolean,
     ): CatalogPage = withContext(Dispatchers.Default) {
-        val mediaType = if (contentType.equals(ANILIST_SEARCH_MANGA_TYPE, ignoreCase = true)) "MANGA" else "ANIME"
-        val formatFilter = if (contentType.equals(ANILIST_SEARCH_MANGA_TYPE, ignoreCase = true)) {
-            ""
-        } else if (contentType.equals(ANILIST_SEARCH_MOVIE_TYPE, ignoreCase = true)) {
+        val formatFilter = if (contentType.equals(ANILIST_SEARCH_MOVIE_TYPE, ignoreCase = true)) {
             ", format_in: [MOVIE]"
         } else {
             ", format_not_in: [MOVIE]"
@@ -50,7 +45,7 @@ internal object AniListSearchSource {
                 Page(page: $page, perPage: $boundedPerPage) {
                     pageInfo { currentPage hasNextPage }
                     media(
-                        type: $mediaType,
+                        type: ANIME,
                         search: ${'$'}search,
                         sort: SEARCH_MATCH$formatFilter$adultFilter
                     ) {
@@ -69,9 +64,7 @@ internal object AniListSearchSource {
         val pageObject = data["Page"] as? JsonObject
             ?: return@withContext CatalogPage(items = emptyList(), rawItemCount = 0, nextSkip = null)
         val parsed = AniListClient.json.decodeFromJsonElement(AniListPage.serializer(), pageObject)
-        val items = enrichPreviewPostersWithAnivio(
-            dedupeCatalogItems(parsed.media.mapNotNull { it.toMetaPreview() }),
-        )
+        val items = dedupeCatalogItems(parsed.media.mapNotNull { it.toMetaPreview() })
 
         CatalogPage(
             items = items,

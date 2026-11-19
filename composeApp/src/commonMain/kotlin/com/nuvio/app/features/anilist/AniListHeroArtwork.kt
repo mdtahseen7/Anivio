@@ -1,80 +1,51 @@
 package com.nuvio.app.features.anilist
 
 import com.nuvio.app.core.anilist.AniZipClient
-import com.nuvio.app.core.anilist.FanartArtwork
-import com.nuvio.app.core.anilist.FanartClient
+import com.nuvio.app.core.anilist.AniZipResponse
+import com.nuvio.app.core.anilist.anilistId
 import com.nuvio.app.core.anilist.TvdbArtwork
 import com.nuvio.app.core.anilist.TvdbClient
-import com.nuvio.app.core.anilist.fanartUrl
-import com.nuvio.app.core.anilist.hasArtwork
 import com.nuvio.app.core.anilist.mappedSeasonNumber
-import com.nuvio.app.core.anilist.logoUrl
+import com.nuvio.app.core.anilist.FanartArtwork
+import com.nuvio.app.core.anilist.FanartClient
+import com.nuvio.app.core.anilist.clearLogoUrl
+import com.nuvio.app.core.anilist.fanartUrl
 import com.nuvio.app.core.anilist.tmdbId
 import com.nuvio.app.core.anilist.tvdbId
-import com.nuvio.app.core.anivio.AnivioClient
-import com.nuvio.app.core.anivio.backgroundUrl
-import com.nuvio.app.core.anivio.logoUrl
-import com.nuvio.app.core.anivio.posterUrl
-import com.nuvio.app.core.time.EpisodeReleaseDatePlatform
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.home.stableKey
 import com.nuvio.app.features.tmdb.TmdbArtwork
 import com.nuvio.app.features.tmdb.TmdbArtworkSource
-import com.nuvio.app.features.tracking.TrackingSettingsRepository
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.update
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 /**
  * Upgrades hero artwork for AniList items.
  *
- * AniList only offers a portrait cover plus an often-missing `bannerImage`, so the mobile hero
- * needs a sharper portrait poster and a transparent title logo:
+ * AniList only offers a portrait cover plus an often-missing `bannerImage`, and a portrait poster
+ * cropped to a full-bleed hero looks stretched. So for the handful of titles the hero actually
+ * shows we resolve a real wide backdrop and a transparent title logo:
  *
- * - **poster**: TVDB's 680x1000 key art (series or movie) -> Anivio -> TMDB -> AniList.
- * - **logo**: TVDB clear logo -> fanart.tv -> ani.zip -> TMDB -> AniList -> Anivio.
- * - **backdrop**: TVDB background -> TMDB -> fanart.tv -> ani.zip -> AniList -> Anivio.
+ * - **backdrop**: TMDB `/images` (textless, needs the user's key) -> fanart.tv background ->
+ *   ani.zip's TVDB fanart -> whatever AniList gave us.
+ * - **logo**: fanart.tv (`hdtvlogo`/`hdmovielogo`, language-aware) -> ani.zip's TVDB Clearlogo ->
+ *   TMDB logo. `HomeHeroSection` already renders `MetaPreview.logo` in place of the title text and
+ *   falls back to text when it is absent or fails to load, so nothing in the UI changes.
  *
- * TVDB is tried first even when `api.ani.zip` has no mapping: the id comes from ani.zip when it
- * does, otherwise from a TVDB title search. `HomeHeroSection` already renders `MetaPreview.logo`
- * in place of the title text and falls back to text when it is absent, so nothing in the UI changes.
+ * All three ids come from the single `api.ani.zip` call, so there is no title-search step.
  */
 object AniListHeroArtwork {
-    private const val RETRY_AFTER_MS = 30L * 60 * 1000
-    private const val MAX_ATTEMPT_ENTRIES = 320
-
     /**
      * Enriched copies keyed by [MetaPreview.stableKey]. Held in an atomic reference rather than
      * behind a mutex so the home publish path — which is not suspending — can read it directly.
      */
     private val cacheRef = atomic<Map<String, MetaPreview>>(emptyMap())
 
-    /**
-     * When each unresolved title was last attempted. Keeping misses out of [cacheRef] stops them
-     * being written to disk, while this timestamp stops a failed lookup re-firing on every publish.
-     */
-    private val attemptsRef = atomic<Map<String, Long>>(emptyMap())
-    private val resolveMutex = Mutex()
-
     fun snapshot(): Map<String, MetaPreview> = cacheRef.value
-
-    /** Last attempt timestamps for titles whose artwork never resolved, for persisting across launches. */
-    fun attemptsSnapshot(): Map<String, Long> = attemptsRef.value
-
-    /**
-     * Seeds [attemptsRef] with misses recorded in an earlier session, so a title with no
-     * artwork anywhere does not re-fire the whole ani.zip / TVDB / TMDB / fanart chain on
-     * every cold start. Anything attempted in this process wins, so hydrating can only fill gaps.
-     */
-    fun hydrateAttempts(attempts: Map<String, Long>) {
-        if (attempts.isEmpty()) return
-        attemptsRef.update { current -> attempts + current }
-    }
 
     /**
      * Seeds the cache with artwork resolved in an earlier session, from `HomeCatalogCache`.
@@ -83,157 +54,105 @@ object AniListHeroArtwork {
     fun hydrate(entries: Map<String, MetaPreview>) {
         if (entries.isEmpty()) return
         cacheRef.update { current -> entries + current }
-        attemptsRef.update { current -> current - entries.keys }
     }
 
     fun hasUnresolved(items: List<MetaPreview>): Boolean {
         val cache = cacheRef.value
-        val attempts = attemptsRef.value
-        val now = EpisodeReleaseDatePlatform.nowEpochMs()
-        return items.any { item ->
-            val key = item.stableKey()
-            !item.type.equals("manga", ignoreCase = true) && isAniListId(item.id) &&
-                (cache[key] == null || needsArtworkRefresh(cache.getValue(key))) &&
-                now - (attempts[key] ?: 0L) > RETRY_AFTER_MS
-        }
+        return items.any { isAniListId(it.id) && it.stableKey() !in cache }
     }
 
     /**
-     * Resolves artwork for every AniList item not already cached. A result that changed is cached;
-     * one that did not is only timestamped, so the next app launch (or the retry window) tries
-     * again instead of keeping the low-resolution AniList cover for a week.
+     * Resolves artwork for every AniList item not already cached. Items with nothing resolvable are
+     * cached unchanged, so a miss is not retried on every publish. Non-AniList items are ignored.
      */
     suspend fun resolve(items: List<MetaPreview>) {
-        resolveMutex.withLock {
-            val cache = cacheRef.value
-            val attempts = attemptsRef.value
-            val now = EpisodeReleaseDatePlatform.nowEpochMs()
-            val pending = items.distinctBy { it.stableKey() }.filter { item ->
-                val key = item.stableKey()
-                !item.type.equals("manga", ignoreCase = true) && isAniListId(item.id) &&
-                    (cache[key] == null || needsArtworkRefresh(cache.getValue(key))) &&
-                    now - (attempts[key] ?: 0L) > RETRY_AFTER_MS
-            }
-            if (pending.isEmpty()) return
+        val cache = cacheRef.value
+        val pending = items.filter { isAniListId(it.id) && it.stableKey() !in cache }
+        if (pending.isEmpty()) return
 
-            val results = coroutineScope {
-                pending.map { item -> async { item to enrich(item) } }.awaitAll()
-            }
-            val resolved = results.filter { (item, enriched) -> enriched != item }
-            if (resolved.isNotEmpty()) {
-                cacheRef.update { current ->
-                    current + resolved.associate { (item, enriched) -> item.stableKey() to enriched }
-                }
-            }
-            // A partial success still needs a retry delay when no logo/backdrop exists.
-            attemptsRef.update { current ->
-                val next = current + pending.associate { item -> item.stableKey() to now }
-                if (next.size <= MAX_ATTEMPT_ENTRIES) next else next.entries.toList()
-                    .takeLast(MAX_ATTEMPT_ENTRIES).associate { it.key to it.value }
-            }
+        val resolved = coroutineScope {
+            pending.map { item -> async { item.stableKey() to enrich(item) } }.awaitAll()
         }
-    }
-
-    /** Drops resolved and attempted entries, e.g. after artwork settings change. */
-    fun invalidate() {
-        cacheRef.value = emptyMap()
-        attemptsRef.value = emptyMap()
+        cacheRef.value = cacheRef.value + resolved.toMap()
     }
 
     private suspend fun enrich(item: MetaPreview): MetaPreview {
         val mediaId = parseAniListMediaId(item.id) ?: return item
 
         return try {
-            TrackingSettingsRepository.ensureLoaded()
-            val aniZip = AniZipClient.mappings(mediaId)
-            val anivioMedia = if (TrackingSettingsRepository.uiState.value.anivioAssetsEnabled) {
-                AnivioClient.mediaByAniListIdOrNull(mediaId)
-            } else {
-                null
-            }
+            val aniZip = AniZipClient.mappings(mediaId)?.takeIf { it.anilistId()?.toIntOrNull() == mediaId }
             val isMovie = item.type.equals("movie", ignoreCase = true)
             val tmdbId = aniZip?.tmdbId()
+            val tvdbId = aniZip?.tvdbId()
             val mappedSeason = aniZip?.mappedSeasonNumber()
-
-            // TVDB first: use ani.zip's id when it has one, otherwise search TVDB by title. Movies
-            // try the movie index before the series index because anime films are split across both.
-            val tvdbId = aniZip?.tvdbId() ?: if (isMovie) {
-                TvdbClient.searchMovieId(item.name) ?: TvdbClient.searchSeriesId(item.name)
-            } else {
-                TvdbClient.searchSeriesId(item.name)
-            }
 
             val (tmdbArtwork, fanartArtwork, tvdbArtwork) = coroutineScope {
                 val tmdb = async {
                     if (tmdbId == null) TmdbArtwork() else TmdbArtworkSource.artwork(tmdbId, item.type)
                 }
-                val fanart = async {
-                    if (isMovie) {
-                        tmdbId?.let { FanartClient.movieArtwork(it) } ?: FanartArtwork()
-                    } else {
-                        tvdbId?.let { FanartClient.tvArtwork(it) } ?: FanartArtwork()
-                    }
-                }
-                val tvdb = async {
-                    when {
-                        tvdbId == null -> TvdbArtwork()
-                        isMovie -> TvdbClient.movieArtwork(tvdbId)
-                            .takeIf { it.hasArtwork() }
-                            ?: TvdbClient.seriesArtwork(tvdbId)
-                        else -> TvdbClient.seriesArtwork(tvdbId)
-                    }
-                }
+                val fanart = async { fanartFor(item, aniZip, tmdbId) }
+                val tvdb = async { if (tvdbId == null) TvdbArtwork() else TvdbClient.seriesArtwork(tvdbId) }
                 Triple(tmdb.await(), fanart.await(), tvdb.await())
             }
 
             // A sequel's season poster is season-specific; TVDB's series poster is the show's, so it
             // only applies to a first season or a film.
-            val seasonPoster = if (!isMovie && mappedSeason != null && mappedSeason > 1) {
-                tvdbId?.let { TvdbClient.seasonPosterUrl(seriesId = it, seasonNumber = mappedSeason) }
-                    ?: tmdbId?.let { TmdbArtworkSource.seasonPosterUrl(tmdbId = it, seasonNumber = mappedSeason) }
+            val seasonPoster = if (tvdbId != null && mappedSeason != null && mappedSeason > 1) {
+                TvdbClient.seasonPosterUrl(seriesId = tvdbId, seasonNumber = mappedSeason)
             } else {
                 null
             }
+
+            val allowSeriesArtwork = isMovie || mappedSeason == 1
             item.copy(
-                // TVDB's 680x1000 portrait is the point of this path; AniList's ~460px cover is the
-                // last resort. A sequel's season poster is more specific, so it wins for later seasons.
-                poster = seasonAwareHomePoster(item.poster, isMovie, mappedSeason, seasonPoster,
-                    tvdbArtwork.posterUrl, anivioMedia?.posterUrl, tmdbArtwork.posterUrl),
-                banner = tvdbArtwork.backgroundUrl
-                    ?: tmdbArtwork.backdropUrl
-                    ?: fanartArtwork.backgroundUrl
-                    ?: aniZip?.fanartUrl()
-                    ?: item.banner
-                    ?: anivioMedia?.backgroundUrl,
-                logo = tvdbArtwork.clearLogoUrl
-                    ?: fanartArtwork.logoUrl
-                    ?: aniZip?.logoUrl()
-                    ?: tmdbArtwork.logoUrl
-                    ?: item.logo
-                    ?: anivioMedia?.logoUrl,
+                poster = seasonAwareHomePoster(
+                    original = item.poster,
+                    isMovie = isMovie,
+                    seasonNumber = mappedSeason,
+                    seasonPoster = seasonPoster,
+                    tvdbPoster = tvdbArtwork.posterUrl,
+                    tmdbPoster = tmdbArtwork.posterUrl,
+                ),
+                banner = if (allowSeriesArtwork) {
+                    tmdbArtwork.backdropUrl ?: tvdbArtwork.backgroundUrl ?: fanartArtwork.backgroundUrl
+                        ?: aniZip?.fanartUrl() ?: item.banner
+                } else item.banner,
+                logo = if (allowSeriesArtwork) {
+                    fanartArtwork.logoUrl ?: tvdbArtwork.clearLogoUrl ?: aniZip?.clearLogoUrl()
+                        ?: tmdbArtwork.logoUrl ?: item.logo
+                } else item.logo,
             )
         } catch (error: CancellationException) {
             throw error
         } catch (_: Throwable) {
-            // Leave the item untouched; resolve() records the attempt so it retries later.
+            // Cache the untouched item so a transient failure does not re-fire on every publish.
             item
         }
     }
 
-    /** Cached hero entries created before an artwork source was available must be retried. */
-    private fun needsArtworkRefresh(item: MetaPreview): Boolean =
-        item.banner.isNullOrBlank() || item.logo.isNullOrBlank()
+    private suspend fun fanartFor(
+        item: MetaPreview,
+        aniZip: AniZipResponse?,
+        tmdbId: String?,
+    ): FanartArtwork {
+        val isMovie = item.type.equals("movie", ignoreCase = true)
+        // Anime films usually have no TVDB id at all, which is exactly where fanart's movie
+        // endpoint earns its place — ani.zip has no Clearlogo for them either.
+        if (isMovie) return tmdbId?.let { FanartClient.movieArtwork(it) } ?: FanartArtwork()
+        return aniZip?.tvdbId()?.let { FanartClient.tvArtwork(it) } ?: FanartArtwork()
+    }
 }
 
-/** Keep exact-title artwork when a later or unmapped season has no matching season poster. */
 internal fun seasonAwareHomePoster(
-    original: String?, isMovie: Boolean, mappedSeason: Int?, seasonPoster: String?,
-    tvdbPoster: String?, titleSpecificPoster: String?, tmdbPoster: String?,
-): String? {
-    val genericPosterApplies = isMovie || mappedSeason == 1
-    return seasonPoster
-        ?: tvdbPoster?.takeIf { genericPosterApplies }
-        ?: titleSpecificPoster
-        ?: tmdbPoster?.takeIf { genericPosterApplies }
-        ?: original
+    original: String?,
+    isMovie: Boolean,
+    seasonNumber: Int?,
+    seasonPoster: String?,
+    tvdbPoster: String?,
+    exactTitlePoster: String? = null,
+    tmdbPoster: String?,
+): String? = if (isMovie || seasonNumber == 1) {
+    tvdbPoster ?: exactTitlePoster ?: tmdbPoster ?: original
+} else {
+    seasonPoster ?: exactTitlePoster ?: original
 }

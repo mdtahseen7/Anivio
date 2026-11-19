@@ -8,7 +8,6 @@ data class TmdbSettings(
     val useArtwork: Boolean = true,
     val useBasicInfo: Boolean = true,
     val useDetails: Boolean = true,
-    val useReleaseDates: Boolean = false,
     val useCredits: Boolean = true,
     val useProductions: Boolean = true,
     val useNetworks: Boolean = true,
@@ -17,6 +16,7 @@ data class TmdbSettings(
     val useMoreLikeThis: Boolean = true,
     val useCollections: Boolean = true,
 ) {
+    /** True when metadata lookups have a usable key — the user's own, or the bundled fallback. */
     val hasApiKey: Boolean
-        get() = apiKey.isNotBlank()
+        get() = apiKey.isNotBlank() || TmdbConfig.API_KEY.isNotBlank()
 }

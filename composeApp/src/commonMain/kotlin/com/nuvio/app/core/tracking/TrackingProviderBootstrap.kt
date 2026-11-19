@@ -8,8 +8,10 @@ import com.nuvio.app.features.anilist.AniListTrackingLibraryProvider
 import com.nuvio.app.features.anilist.AniListTrackingProgressProvider
 import com.nuvio.app.features.anilist.AniListWatchedSyncAdapter
 import com.nuvio.app.features.tracking.TrackingProviderRegistry
+import com.nuvio.app.features.mdblist.MdbListTracker
 
 fun ensureTrackingProvidersRegistered() {
+    MdbListTracker.register()
     AniListAuthRepository.descriptor
     TrackingProviderRegistry.registerLibraryProvider(AniListTrackingLibraryProvider)
     TrackingProviderRegistry.registerWatchedProvider(AniListWatchedSyncAdapter)

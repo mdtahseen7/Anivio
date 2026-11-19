@@ -2,18 +2,22 @@ package com.nuvio.app.features.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Palette
-import androidx.compose.material.icons.rounded.People
-import nuvio.composeapp.generated.resources.settings_profile_customization
-import nuvio.composeapp.generated.resources.settings_profile_customization_description
-import nuvio.composeapp.generated.resources.settings_profile_sharing
-import nuvio.composeapp.generated.resources.settings_profile_sharing_description
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +51,12 @@ import com.nuvio.app.features.debrid.DebridSettingsRepository
 import com.nuvio.app.features.mal.MalAuthSettings
 import com.nuvio.app.features.mal.MalConnectionMode
 import com.nuvio.app.features.profiles.ProfileRepository
+import com.nuvio.app.features.profiles.ProfileEditScreen
+import com.nuvio.app.features.profiles.AvatarRepository
+import com.nuvio.app.features.anilist.AniListStatisticsRepository
+import com.nuvio.app.features.profile.ProfileShareSettingsRepository
+import com.nuvio.app.features.profile.ProfileShareSheet
+import com.nuvio.app.features.profile.ProfileStatsRepository
 import kotlinx.coroutines.launch
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.action_cancel
@@ -66,25 +76,15 @@ import nuvio.composeapp.generated.resources.settings_account_sign_out_confirm_ti
 import nuvio.composeapp.generated.resources.settings_account_status
 import nuvio.composeapp.generated.resources.settings_account_status_anonymous
 import nuvio.composeapp.generated.resources.settings_account_status_signed_in
+import nuvio.composeapp.generated.resources.profile_edit_edit_title
+import nuvio.composeapp.generated.resources.settings_account_share_profile
 import org.jetbrains.compose.resources.stringResource
 
 internal fun LazyListScope.accountSettingsContent(
     isTablet: Boolean,
-    onPageClick: (SettingsPage) -> Unit,
 ) {
     item {
         AccountSettingsBody(isTablet = isTablet)
-    }
-    item {
-        SettingsGroup(isTablet) {
-            SettingsNavigationRow(title = stringResource(Res.string.settings_profile_customization),
-                description = stringResource(Res.string.settings_profile_customization_description),
-                icon = Icons.Rounded.Palette, isTablet = isTablet, onClick = { onPageClick(SettingsPage.ProfileCustomization) })
-            SettingsGroupDivider(isTablet)
-            SettingsNavigationRow(title = stringResource(Res.string.settings_profile_sharing),
-                description = stringResource(Res.string.settings_profile_sharing_description),
-                icon = Icons.Rounded.People, isTablet = isTablet, onClick = { onPageClick(SettingsPage.ProfileSharing) })
-        }
     }
 }
 
@@ -106,6 +106,8 @@ private fun AccountSettingsBody(
         DebridSettingsRepository.ensureLoaded()
         DebridSettingsRepository.uiState
     }.collectAsStateWithLifecycle()
+    var editProfile by remember { mutableStateOf(false) }
+    var shareProfile by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     var showSignOutConfirm by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -175,6 +177,25 @@ private fun AccountSettingsBody(
             }
         }
 
+        if (profileState.activeProfile != null) {
+            NuvioSurfaceCard {
+                SettingsNavigationRow(
+                    title = stringResource(Res.string.profile_edit_edit_title),
+                    description = null,
+                    icon = Icons.Rounded.Edit,
+                    onClick = { editProfile = true },
+                    isTablet = isTablet,
+                )
+                SettingsNavigationRow(
+                    title = stringResource(Res.string.settings_account_share_profile),
+                    description = null,
+                    icon = Icons.Rounded.Share,
+                    onClick = { shareProfile = true },
+                    isTablet = isTablet,
+                )
+            }
+        }
+
         NuvioPrimaryButton(
             text = stringResource(Res.string.settings_account_sign_out),
             onClick = { showSignOutConfirm = true },
@@ -188,6 +209,57 @@ private fun AccountSettingsBody(
                     showDeleteConfirm = true
                 },
             )
+        }
+    }
+
+    val currentProfile = profileState.activeProfile
+    if (editProfile && currentProfile != null) {
+        Dialog(
+            onDismissRequest = { editProfile = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Surface(
+                modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth(0.95f).fillMaxHeight(0.9f),
+                shape = MaterialTheme.nuvio.shapes.card,
+            ) {
+                ProfileEditScreen(
+                    profile = currentProfile,
+                    onBack = { editProfile = false },
+                    onSaved = { editProfile = false },
+                )
+            }
+        }
+    }
+    if (shareProfile && currentProfile != null) {
+        val avatars by AvatarRepository.avatars.collectAsStateWithLifecycle()
+        val shareSettings by ProfileShareSettingsRepository.settings.collectAsStateWithLifecycle()
+        val stats by ProfileStatsRepository.uiState.collectAsStateWithLifecycle()
+        LaunchedEffect(currentProfile.profileIndex) {
+            AvatarRepository.refreshAvatars()
+            ProfileShareSettingsRepository.ensureLoaded()
+            ProfileStatsRepository.start()
+            AniListStatisticsRepository.refresh()
+        }
+        Dialog(
+            onDismissRequest = { shareProfile = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Surface(
+                modifier = Modifier.widthIn(max = 568.dp).fillMaxWidth(0.95f),
+                shape = MaterialTheme.nuvio.shapes.card,
+            ) {
+                Column(Modifier.fillMaxHeight(0.9f).verticalScroll(rememberScrollState())) {
+                    ProfileShareSheet(
+                        stats = stats.stats,
+                        profile = currentProfile,
+                        avatars = avatars,
+                        aniListAuth = aniListAuth,
+                        malAuth = malAuth,
+                        settings = shareSettings,
+                        onDismiss = { shareProfile = false },
+                    )
+                }
+            }
         }
     }
 
@@ -209,6 +281,7 @@ private fun AccountSettingsBody(
         message = stringResource(Res.string.settings_account_delete_confirm_message),
         isVisible = showDeleteConfirm,
         isBusy = isDeletingAccount,
+        destructive = true,
         confirmText = stringResource(Res.string.settings_account_delete_account),
         dismissText = stringResource(Res.string.action_cancel),
         onConfirm = {

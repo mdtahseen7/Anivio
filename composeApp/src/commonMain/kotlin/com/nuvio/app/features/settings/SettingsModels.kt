@@ -18,6 +18,7 @@ import nuvio.composeapp.generated.resources.compose_settings_page_content_discov
 import nuvio.composeapp.generated.resources.compose_settings_page_debrid
 import nuvio.composeapp.generated.resources.compose_settings_page_continue_watching
 import nuvio.composeapp.generated.resources.compose_settings_page_homescreen
+import nuvio.composeapp.generated.resources.compose_settings_page_hover_preview
 import nuvio.composeapp.generated.resources.compose_settings_page_integrations
 import nuvio.composeapp.generated.resources.compose_settings_page_licenses_attributions
 import nuvio.composeapp.generated.resources.compose_settings_page_mdblist_ratings
@@ -26,7 +27,6 @@ import nuvio.composeapp.generated.resources.compose_settings_page_notifications
 import nuvio.composeapp.generated.resources.compose_settings_page_playback
 import nuvio.composeapp.generated.resources.compose_settings_page_plugins
 import nuvio.composeapp.generated.resources.compose_settings_page_poster_customization
-import nuvio.composeapp.generated.resources.compose_settings_page_reader
 import nuvio.composeapp.generated.resources.compose_settings_page_root
 import nuvio.composeapp.generated.resources.compose_settings_page_streams
 import nuvio.composeapp.generated.resources.compose_settings_page_about
@@ -35,7 +35,17 @@ import nuvio.composeapp.generated.resources.compose_settings_page_tmdb_enrichmen
 import nuvio.composeapp.generated.resources.compose_settings_page_trakt
 import nuvio.composeapp.generated.resources.compose_settings_page_tracking
 import nuvio.composeapp.generated.resources.settings_account
-import nuvio.composeapp.generated.resources.*
+import nuvio.composeapp.generated.resources.settings_page_layout
+import nuvio.composeapp.generated.resources.settings_page_community
+import nuvio.composeapp.generated.resources.settings_playback_section_player
+import nuvio.composeapp.generated.resources.settings_playback_section_subtitle_audio
+import nuvio.composeapp.generated.resources.settings_playback_section_subtitle_rendering
+import nuvio.composeapp.generated.resources.settings_playback_section_stream_selection
+import nuvio.composeapp.generated.resources.settings_playback_section_stream_auto_play
+import nuvio.composeapp.generated.resources.settings_page_video
+import nuvio.composeapp.generated.resources.settings_playback_section_skip_segments
+import nuvio.composeapp.generated.resources.settings_playback_section_next_episode
+import nuvio.composeapp.generated.resources.settings_playback_section_p2p
 import org.jetbrains.compose.resources.StringResource
 
 internal enum class SettingsCategory(
@@ -44,8 +54,8 @@ internal enum class SettingsCategory(
 ) {
     Account(Res.string.settings_account, Icons.Rounded.AccountCircle),
     General(Res.string.compose_settings_category_general, Icons.Rounded.Settings),
-    About(Res.string.compose_settings_category_about, Icons.Rounded.Info),
     Advanced(Res.string.compose_settings_page_advanced, Icons.Rounded.Tune),
+    About(Res.string.compose_settings_category_about, Icons.Rounded.Info),
 }
 
 internal enum class SettingsPage(
@@ -58,51 +68,59 @@ internal enum class SettingsPage(
         category = SettingsCategory.General,
         parentPage = null,
     ),
-    YourSpace(Res.string.settings_section_you, SettingsCategory.Account, Root),
-    WatchSettings(Res.string.settings_section_watch, SettingsCategory.General, Root),
-    Personalize(Res.string.settings_section_personalize, SettingsCategory.General, Root),
-    Services(Res.string.settings_section_services, SettingsCategory.General, Root),
-    SystemSettings(Res.string.settings_section_system, SettingsCategory.Advanced, Root),
-    Anivio(Res.string.settings_section_anivio, SettingsCategory.General, Root),
-    AboutSettings(Res.string.compose_settings_root_about_section, SettingsCategory.About, Root),
-    Layout(Res.string.settings_layout_title, SettingsCategory.General, Personalize),
     Account(
         titleRes = Res.string.compose_settings_page_account,
         category = SettingsCategory.Account,
-        parentPage = YourSpace,
+        parentPage = Root,
     ),
-    ProfileCustomization(Res.string.settings_profile_customization, SettingsCategory.Account, Account),
-    ProfileSharing(Res.string.settings_profile_sharing, SettingsCategory.Account, Account),
     About(
         titleRes = Res.string.compose_settings_page_about,
         category = SettingsCategory.About,
-        parentPage = AboutSettings,
+        parentPage = Root,
     ),
-    SupportersContributors(Res.string.settings_community_title, SettingsCategory.About, AboutSettings),
+    Community(
+        titleRes = Res.string.settings_page_community,
+        category = SettingsCategory.About,
+        parentPage = About,
+    ),
     PrivacyPolicy(
         titleRes = Res.string.compose_settings_page_privacy_policy,
         category = SettingsCategory.About,
-        parentPage = AboutSettings,
+        parentPage = Root,
     ),
     LicensesAttributions(
         titleRes = Res.string.compose_settings_page_licenses_attributions,
         category = SettingsCategory.About,
-        parentPage = AboutSettings,
+        parentPage = Root,
     ),
     Playback(
         titleRes = Res.string.compose_settings_page_playback,
         category = SettingsCategory.General,
-        parentPage = WatchSettings,
+        parentPage = Root,
     ),
-    Reader(
-        titleRes = Res.string.compose_settings_page_reader,
-        category = SettingsCategory.General,
-        parentPage = Playback,
-    ),
+    PlaybackPlayer(Res.string.settings_playback_section_player, SettingsCategory.General, Playback),
+    PlaybackLanguages(Res.string.settings_playback_section_subtitle_audio, SettingsCategory.General, Playback),
+    PlaybackSubtitles(Res.string.settings_playback_section_subtitle_rendering, SettingsCategory.General, Playback),
+    PlaybackStreams(Res.string.settings_playback_section_stream_selection, SettingsCategory.General, Playback),
+    PlaybackAutoPlay(Res.string.settings_playback_section_stream_auto_play, SettingsCategory.General, Playback),
+    PlaybackVideo(Res.string.settings_page_video, SettingsCategory.General, Playback),
+    PlaybackSkip(Res.string.settings_playback_section_skip_segments, SettingsCategory.General, Playback),
+    PlaybackUpNext(Res.string.settings_playback_section_next_episode, SettingsCategory.General, Playback),
+    PlaybackP2p(Res.string.settings_playback_section_p2p, SettingsCategory.General, Playback),
     Appearance(
         titleRes = Res.string.compose_settings_page_appearance,
         category = SettingsCategory.General,
-        parentPage = Personalize,
+        parentPage = Root,
+    ),
+    Layout(
+        titleRes = Res.string.settings_page_layout,
+        category = SettingsCategory.General,
+        parentPage = Root,
+    ),
+    HoverPreview(
+        titleRes = Res.string.compose_settings_page_hover_preview,
+        category = SettingsCategory.General,
+        parentPage = Layout,
     ),
     Streams(
         titleRes = Res.string.compose_settings_page_streams,
@@ -112,12 +130,12 @@ internal enum class SettingsPage(
     Advanced(
         titleRes = Res.string.compose_settings_page_advanced,
         category = SettingsCategory.Advanced,
-        parentPage = SystemSettings,
+        parentPage = Root,
     ),
     Notifications(
         titleRes = Res.string.compose_settings_page_notifications,
-        category = SettingsCategory.General,
-        parentPage = SystemSettings,
+        category = SettingsCategory.Advanced,
+        parentPage = Root,
     ),
     ContinueWatching(
         titleRes = Res.string.compose_settings_page_continue_watching,
@@ -132,7 +150,7 @@ internal enum class SettingsPage(
     ContentDiscovery(
         titleRes = Res.string.compose_settings_page_content_discovery,
         category = SettingsCategory.General,
-        parentPage = WatchSettings,
+        parentPage = Root,
     ),
     Addons(
         titleRes = Res.string.compose_settings_page_addons,
@@ -157,7 +175,7 @@ internal enum class SettingsPage(
     Integrations(
         titleRes = Res.string.compose_settings_page_integrations,
         category = SettingsCategory.General,
-        parentPage = Services,
+        parentPage = Root,
     ),
     TmdbEnrichment(
         titleRes = Res.string.compose_settings_page_tmdb_enrichment,
@@ -177,26 +195,12 @@ internal enum class SettingsPage(
     TraktAuthentication(
         // Keep the enum name for saved navigation-state compatibility.
         titleRes = Res.string.compose_settings_page_tracking,
-        category = SettingsCategory.Account,
-        parentPage = Services,
+        category = SettingsCategory.General,
+        parentPage = Root,
     ),
-    PlaybackPlayer(Res.string.settings_playback_section_player, SettingsCategory.General, Playback),
-    PlaybackLanguages(Res.string.settings_playback_section_subtitle_audio, SettingsCategory.General, Playback),
-    PlaybackSubtitles(Res.string.settings_playback_section_subtitle_rendering, SettingsCategory.General, Playback),
-    PlaybackStreams(Res.string.settings_playback_section_stream_selection, SettingsCategory.General, Playback),
-    PlaybackAutoPlay(Res.string.settings_playback_section_stream_auto_play, SettingsCategory.General, Playback),
-    PlaybackVideo(Res.string.settings_playback_section_decoder, SettingsCategory.General, Playback),
-    PlaybackSkip(Res.string.settings_playback_section_skip_segments, SettingsCategory.General, Playback),
-    PlaybackUpNext(Res.string.settings_playback_section_next_episode, SettingsCategory.General, Playback),
-    PlaybackP2p(Res.string.settings_playback_section_p2p, SettingsCategory.General, Playback),
 }
 
 internal val SettingsPage.opensInlineOnTablet: Boolean
     get() = parentPage != null
 
-internal fun SettingsPage.previousPage(): SettingsPage? = when (parentPage) {
-    SettingsPage.YourSpace, SettingsPage.Personalize, SettingsPage.WatchSettings,
-    SettingsPage.Services, SettingsPage.SystemSettings, SettingsPage.Anivio -> SettingsPage.Root
-    else -> parentPage
-}
-
+internal fun SettingsPage.previousPage(): SettingsPage? = parentPage

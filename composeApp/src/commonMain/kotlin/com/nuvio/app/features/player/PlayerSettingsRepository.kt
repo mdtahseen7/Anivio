@@ -1,6 +1,7 @@
 package com.nuvio.app.features.player
 
 import com.nuvio.app.core.build.AppFeaturePolicy
+import com.nuvio.app.features.player.skip.AutoSkipSegmentType
 import com.nuvio.app.features.player.skip.NextEpisodeThresholdMode
 import com.nuvio.app.features.streams.StreamAutoPlayMode
 import com.nuvio.app.features.streams.StreamAutoPlaySource
@@ -32,25 +33,10 @@ fun snapToAllowedTimeout(value: Int): Int {
 }
 
 data class PlayerSettingsUiState(
-    val autoSwitchPlaybackEngineOnError: Boolean = false,
-    val showDetailedLoadingStatus: Boolean = false,
-    val showPauseOverlay: Boolean = true,
-    val exoChaptersEnabled: Boolean = true,
-    val videoEnhancement: VideoEnhancement = VideoEnhancement.Off,
-    val enhancementResolution: EnhancementResolution = EnhancementResolution.Native2k,
-    val preloadNextEpisode: Boolean = true,
-    val preferSameServer: Boolean = true,
-    val defaultServerKey: String = "",
-    val rememberAudioDelay: Boolean = false,
-    val audioDelayMs: Int = 0,
-    val persistAudioAmplification: Boolean = false,
-    val audioAmplificationDb: Float = 0f,
-    val audioDownmix: Boolean = false,
-    val audioChannels: String = "auto",
-    val audioMaintainVolume: Boolean = true,
-    val audioCenterMixLevel: Float = 0.707f,
-    val showLoadingOverlay: Boolean = true,
     val useLegacyPlayerLayout: Boolean = false,
+    val showLoadingOverlay: Boolean = true,
+    val showPlayerLoadingStatus: Boolean = true,
+    val pauseOverlayEnabled: Boolean = true,
     val playerTitleAtTop: Boolean = false,
     val showParentalGuide: Boolean = true,
     val resizeMode: PlayerResizeMode = PlayerResizeMode.Fit,
@@ -82,16 +68,23 @@ data class PlayerSettingsUiState(
     val streamAutoPlayRegex: String = "",
     val streamAutoPlayTimeoutSeconds: Int = 3,
     val skipIntroEnabled: Boolean = true,
+    val autoSkipSegmentTypes: Set<AutoSkipSegmentType> = emptySet(),
     val animeSkipEnabled: Boolean = false,
     val animeSkipClientId: String = "",
     val introDbApiKey: String = "",
     val theIntroDbApiKey: String = "",
     val introSubmitEnabled: Boolean = false,
     val seekForwardSeconds: Int = 10,
+    val audioDelayMs: Int = 0,
+    val audioAmplificationDb: Float = 0f,
+    val videoEnhancement: VideoEnhancement = VideoEnhancement.Off,
+    val enhancementResolution: EnhancementResolution = EnhancementResolution.Native2k,
+    val preloadNextEpisode: Boolean = true,
+    val preferSameServer: Boolean = true,
     val streamAutoPlayNextEpisodeEnabled: Boolean = false,
     val streamAutoPlayNextEpisodeFallbackEnabled: Boolean = true,
     val streamAutoPlayPreferBingeGroup: Boolean = true,
-    val streamAutoPlayReuseBingeGroup: Boolean = true,
+    val streamAutoPlayReuseBingeGroup: Boolean = false,
     val nextEpisodeThresholdMode: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
     val nextEpisodeThresholdPercent: Float = 99f,
     val nextEpisodeThresholdMinutesBeforeEnd: Float = 2f,
@@ -112,39 +105,18 @@ data class PlayerSettingsUiState(
     val iosContrast: Int = 0,
     val iosSaturation: Int = 0,
     val iosGamma: Int = 0,
+    val nvidiaRtxSuperResolutionEnabled: Boolean = false,
 )
 
 object PlayerSettingsRepository {
-    private var activeAudioDevice: String? = null
-    fun setActiveAudioDevice(key: String?) {
-        ensureLoaded()
-        activeAudioDevice = key
-        audioDelayMs = if (rememberAudioDelay && key != null) PlayerSettingsStorage.loadAudioDelayForDevice(key) ?: 0 else 0
-        publish()
-    }
     private val _uiState = MutableStateFlow(PlayerSettingsUiState())
     val uiState: StateFlow<PlayerSettingsUiState> = _uiState.asStateFlow()
 
     private var hasLoaded = false
-    private var autoSwitchPlaybackEngineOnError: Boolean = false
-    private var showDetailedLoadingStatus: Boolean = false
-    private var showPauseOverlay: Boolean = true
-    private var exoChaptersEnabled: Boolean = true
-    private var videoEnhancement = VideoEnhancement.Off
-    private var enhancementResolution = EnhancementResolution.Native2k
-    private var preloadNextEpisode: Boolean = true
-    private var preferSameServer: Boolean = true
-    private var defaultServerKey: String = ""
-    private var rememberAudioDelay: Boolean = false
-    private var audioDelayMs: Int = 0
-    private var persistAudioAmplification: Boolean = false
-    private var audioAmplificationDb: Float = 0f
-    private var audioDownmix: Boolean = false
-    private var audioChannels: String = "auto"
-    private var audioMaintainVolume: Boolean = true
-    private var audioCenterMixLevel: Float = 0.707f
-    private var showLoadingOverlay = true
     private var useLegacyPlayerLayout = false
+    private var showLoadingOverlay = true
+    private var showPlayerLoadingStatus = true
+    private var pauseOverlayEnabled = true
     private var playerTitleAtTop = false
     private var showParentalGuide = true
     private var resizeMode = PlayerResizeMode.Fit
@@ -176,16 +148,23 @@ object PlayerSettingsRepository {
     private var streamAutoPlayRegex = ""
     private var streamAutoPlayTimeoutSeconds = 3
     private var skipIntroEnabled = true
+    private var autoSkipSegmentTypes: Set<AutoSkipSegmentType> = emptySet()
     private var animeSkipEnabled = false
     private var animeSkipClientId = ""
     private var introDbApiKey = ""
     private var theIntroDbApiKey = ""
     private var introSubmitEnabled = false
     private var seekForwardSeconds = 10
+    private var audioDelayMs = 0
+    private var audioAmplificationDb = 0f
+    private var videoEnhancement = VideoEnhancement.Off
+    private var enhancementResolution = EnhancementResolution.Native2k
+    private var preloadNextEpisode = true
+    private var preferSameServer = true
     private var streamAutoPlayNextEpisodeEnabled = false
     private var streamAutoPlayNextEpisodeFallbackEnabled = true
     private var streamAutoPlayPreferBingeGroup = true
-    private var streamAutoPlayReuseBingeGroup = true
+    private var streamAutoPlayReuseBingeGroup = false
     private var nextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE
     private var nextEpisodeThresholdPercent = 99f
     private var nextEpisodeThresholdMinutesBeforeEnd = 2f
@@ -206,6 +185,7 @@ object PlayerSettingsRepository {
     private var iosContrast = 0
     private var iosSaturation = 0
     private var iosGamma = 0
+    private var nvidiaRtxSuperResolutionEnabled = false
 
     fun ensureLoaded() {
         if (hasLoaded) return
@@ -218,25 +198,10 @@ object PlayerSettingsRepository {
 
     fun clearLocalState() {
         hasLoaded = false
-        autoSwitchPlaybackEngineOnError = false
-        showDetailedLoadingStatus = false
-        showPauseOverlay = true
-        exoChaptersEnabled = true
-        videoEnhancement = VideoEnhancement.Off
-        enhancementResolution = EnhancementResolution.Native2k
-        preloadNextEpisode = true
-        preferSameServer = true
-        defaultServerKey = ""
-        rememberAudioDelay = false
-        audioDelayMs = 0
-        persistAudioAmplification = false
-        audioAmplificationDb = 0f
-        audioDownmix = false
-        audioChannels = "auto"
-        audioMaintainVolume = true
-        audioCenterMixLevel = 0.707f
-        showLoadingOverlay = true
         useLegacyPlayerLayout = false
+        showLoadingOverlay = true
+        showPlayerLoadingStatus = true
+        pauseOverlayEnabled = true
         playerTitleAtTop = false
         showParentalGuide = true
         resizeMode = PlayerResizeMode.Fit
@@ -268,16 +233,23 @@ object PlayerSettingsRepository {
         streamAutoPlayRegex = ""
         streamAutoPlayTimeoutSeconds = 3
         skipIntroEnabled = true
+        autoSkipSegmentTypes = emptySet()
         animeSkipEnabled = false
         animeSkipClientId = ""
         introDbApiKey = ""
         theIntroDbApiKey = ""
         introSubmitEnabled = false
         seekForwardSeconds = 10
+        audioDelayMs = 0
+        audioAmplificationDb = 0f
+        videoEnhancement = VideoEnhancement.Off
+        enhancementResolution = EnhancementResolution.Native2k
+        preloadNextEpisode = true
+        preferSameServer = true
         streamAutoPlayNextEpisodeEnabled = false
         streamAutoPlayNextEpisodeFallbackEnabled = true
         streamAutoPlayPreferBingeGroup = true
-        streamAutoPlayReuseBingeGroup = true
+        streamAutoPlayReuseBingeGroup = false
         nextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE
         nextEpisodeThresholdPercent = 99f
         nextEpisodeThresholdMinutesBeforeEnd = 2f
@@ -298,31 +270,16 @@ object PlayerSettingsRepository {
         iosContrast = 0
         iosSaturation = 0
         iosGamma = 0
+        nvidiaRtxSuperResolutionEnabled = false
         publish()
     }
 
     private fun loadFromDisk() {
         hasLoaded = true
-        autoSwitchPlaybackEngineOnError = PlayerSettingsStorage.loadAutoSwitchPlaybackEngineOnError() ?: false
-        showDetailedLoadingStatus = PlayerSettingsStorage.loadShowDetailedLoadingStatus() ?: false
-        showPauseOverlay = PlayerSettingsStorage.loadShowPauseOverlay() ?: true
-        exoChaptersEnabled = PlayerSettingsStorage.loadExoChaptersEnabled() ?: true
-        videoEnhancement = VideoEnhancement.fromStorage(PlayerSettingsStorage.loadVideoEnhancement())
-        enhancementResolution = EnhancementResolution.fromStorage(PlayerSettingsStorage.loadEnhancementResolution())
-        preloadNextEpisode = PlayerSettingsStorage.loadPreloadNextEpisode() ?: true
-        preferSameServer = PlayerSettingsStorage.loadPreferSameServer() ?: true
-        defaultServerKey = PlayerSettingsStorage.loadDefaultServerKey() ?: ""
-        rememberAudioDelay = PlayerSettingsStorage.loadRememberAudioDelay() ?: false
-        activeAudioDevice = null
-        audioDelayMs = 0
-        persistAudioAmplification = PlayerSettingsStorage.loadPersistAudioAmplification() ?: false
-        audioAmplificationDb = if (persistAudioAmplification) (PlayerSettingsStorage.loadAudioAmplificationDb() ?: 0f).let { if (it.isFinite()) it.coerceIn(0f, 20f) else 0f } else 0f
-        audioDownmix = PlayerSettingsStorage.loadAudioDownmix() ?: false
-        audioChannels = PlayerSettingsStorage.loadAudioChannels() ?: "auto"
-        audioMaintainVolume = PlayerSettingsStorage.loadAudioMaintainVolume() ?: true
-        audioCenterMixLevel = (PlayerSettingsStorage.loadAudioCenterMixLevel() ?: 0.707f).let { if (it.isFinite()) it.coerceIn(0f, 1.5f) else 0.707f }
-        showLoadingOverlay = PlayerSettingsStorage.loadShowLoadingOverlay() ?: true
         useLegacyPlayerLayout = PlayerSettingsStorage.loadUseLegacyPlayerLayout() ?: false
+        showLoadingOverlay = PlayerSettingsStorage.loadShowLoadingOverlay() ?: true
+        showPlayerLoadingStatus = PlayerSettingsStorage.loadShowPlayerLoadingStatus() ?: true
+        pauseOverlayEnabled = PlayerSettingsStorage.loadPauseOverlayEnabled() ?: true
         playerTitleAtTop = PlayerSettingsStorage.loadPlayerTitleAtTop() ?: false
         showParentalGuide = PlayerSettingsStorage.loadShowParentalGuide() ?: true
         resizeMode = PlayerSettingsStorage.loadResizeMode()
@@ -331,8 +288,16 @@ object PlayerSettingsRepository {
         holdToSpeedEnabled = PlayerSettingsStorage.loadHoldToSpeedEnabled() ?: true
         holdToSpeedValue = PlayerSettingsStorage.loadHoldToSpeedValue() ?: 2f
         touchGesturesEnabled = PlayerSettingsStorage.loadTouchGesturesEnabled() ?: true
-        externalPlayerEnabled = PlayerSettingsStorage.loadExternalPlayerEnabled() ?: false
-        externalPlayerForwardSubtitles = PlayerSettingsStorage.loadExternalPlayerForwardSubtitles() ?: false
+        externalPlayerEnabled = if (AppFeaturePolicy.externalPlayerSupported) {
+            PlayerSettingsStorage.loadExternalPlayerEnabled() ?: false
+        } else {
+            false
+        }
+        externalPlayerForwardSubtitles = if (AppFeaturePolicy.externalPlayerSupported) {
+            PlayerSettingsStorage.loadExternalPlayerForwardSubtitles() ?: false
+        } else {
+            false
+        }
         externalPlayerSendSkipSegments = PlayerSettingsStorage.loadExternalPlayerSendSkipSegments() ?: false
         externalPlayerId = PlayerSettingsStorage.loadExternalPlayerId()
             ?: ExternalPlayerPlatform.defaultPlayerId()
@@ -416,16 +381,26 @@ object PlayerSettingsRepository {
             PlayerSettingsStorage.saveStreamAutoPlayTimeoutSeconds(streamAutoPlayTimeoutSeconds)
         }
         skipIntroEnabled = PlayerSettingsStorage.loadSkipIntroEnabled() ?: true
+        autoSkipSegmentTypes = PlayerSettingsStorage.loadAutoSkipSegmentTypes()
+            ?.mapNotNull(AutoSkipSegmentType::fromStoredValue)?.toSet() ?: buildSet {
+                if (PlayerSettingsStorage.loadAutoSkipMovieCredits() == true) add(AutoSkipSegmentType.MOVIE_CREDITS)
+            }
         animeSkipEnabled = PlayerSettingsStorage.loadAnimeSkipEnabled() ?: false
         animeSkipClientId = PlayerSettingsStorage.loadAnimeSkipClientId() ?: ""
         introDbApiKey = PlayerSettingsStorage.loadIntroDbApiKey() ?: ""
         theIntroDbApiKey = PlayerSettingsStorage.loadTheIntroDbApiKey() ?: ""
         introSubmitEnabled = PlayerSettingsStorage.loadIntroSubmitEnabled() ?: false
         seekForwardSeconds = (PlayerSettingsStorage.loadSeekForwardSeconds() ?: 10).coerceIn(5, 300)
+        audioDelayMs = PlayerSettingsStorage.loadAudioDelayMs()?.coerceIn(-2_000, 2_000) ?: 0
+        audioAmplificationDb = PlayerSettingsStorage.loadAudioAmplificationDb()?.takeIf(Float::isFinite)?.coerceIn(0f, 12f) ?: 0f
+        videoEnhancement = VideoEnhancement.fromStorage(PlayerSettingsStorage.loadVideoEnhancement())
+        enhancementResolution = EnhancementResolution.fromStorage(PlayerSettingsStorage.loadEnhancementResolution())
+        preloadNextEpisode = PlayerSettingsStorage.loadPreloadNextEpisode() ?: true
+        preferSameServer = PlayerSettingsStorage.loadPreferSameServer() ?: true
         streamAutoPlayNextEpisodeEnabled = PlayerSettingsStorage.loadStreamAutoPlayNextEpisodeEnabled() ?: false
         streamAutoPlayNextEpisodeFallbackEnabled = PlayerSettingsStorage.loadStreamAutoPlayNextEpisodeFallbackEnabled() ?: true
         streamAutoPlayPreferBingeGroup = PlayerSettingsStorage.loadStreamAutoPlayPreferBingeGroup() ?: true
-        streamAutoPlayReuseBingeGroup = PlayerSettingsStorage.loadStreamAutoPlayReuseBingeGroup() ?: true
+        streamAutoPlayReuseBingeGroup = PlayerSettingsStorage.loadStreamAutoPlayReuseBingeGroup() ?: false
         nextEpisodeThresholdMode = PlayerSettingsStorage.loadNextEpisodeThresholdMode()
             ?.let { runCatching { NextEpisodeThresholdMode.valueOf(it) }.getOrNull() }
             ?: NextEpisodeThresholdMode.PERCENTAGE
@@ -458,7 +433,16 @@ object PlayerSettingsRepository {
         iosContrast = PlayerSettingsStorage.loadIosContrast() ?: 0
         iosSaturation = PlayerSettingsStorage.loadIosSaturation() ?: 0
         iosGamma = PlayerSettingsStorage.loadIosGamma() ?: 0
+        nvidiaRtxSuperResolutionEnabled = PlayerSettingsStorage.loadNvidiaRtxSuperResolutionEnabled() ?: false
         publish()
+    }
+
+    fun setUseLegacyPlayerLayout(enabled: Boolean) {
+        ensureLoaded()
+        if (useLegacyPlayerLayout == enabled) return
+        useLegacyPlayerLayout = enabled
+        publish()
+        PlayerSettingsStorage.saveUseLegacyPlayerLayout(enabled)
     }
 
     fun setShowLoadingOverlay(enabled: Boolean) {
@@ -469,12 +453,20 @@ object PlayerSettingsRepository {
         PlayerSettingsStorage.saveShowLoadingOverlay(enabled)
     }
 
-    fun setUseLegacyPlayerLayout(enabled: Boolean) {
+    fun setShowPlayerLoadingStatus(enabled: Boolean) {
         ensureLoaded()
-        if (useLegacyPlayerLayout == enabled) return
-        useLegacyPlayerLayout = enabled
+        if (showPlayerLoadingStatus == enabled) return
+        showPlayerLoadingStatus = enabled
         publish()
-        PlayerSettingsStorage.saveUseLegacyPlayerLayout(enabled)
+        PlayerSettingsStorage.saveShowPlayerLoadingStatus(enabled)
+    }
+
+    fun setPauseOverlayEnabled(enabled: Boolean) {
+        ensureLoaded()
+        if (pauseOverlayEnabled == enabled) return
+        pauseOverlayEnabled = enabled
+        publish()
+        PlayerSettingsStorage.savePauseOverlayEnabled(enabled)
     }
 
     fun setPlayerTitleAtTop(enabled: Boolean) {
@@ -528,18 +520,21 @@ object PlayerSettingsRepository {
 
     fun setExternalPlayerEnabled(enabled: Boolean) {
         ensureLoaded()
-        if (enabled && externalPlayerId.isNullOrBlank()) {
+        val normalizedEnabled = enabled && AppFeaturePolicy.externalPlayerSupported
+        if (normalizedEnabled && externalPlayerId.isNullOrBlank()) {
             externalPlayerId = ExternalPlayerPlatform.defaultPlayerId()
                 ?: ExternalPlayerPlatform.availablePlayers().firstOrNull()?.id
             PlayerSettingsStorage.saveExternalPlayerId(externalPlayerId)
         }
-        if (externalPlayerEnabled == enabled) {
+        if (externalPlayerEnabled == normalizedEnabled) {
             publish()
             return
         }
-        externalPlayerEnabled = enabled
+        externalPlayerEnabled = normalizedEnabled
         publish()
-        PlayerSettingsStorage.saveExternalPlayerEnabled(enabled)
+        if (AppFeaturePolicy.externalPlayerSupported) {
+            PlayerSettingsStorage.saveExternalPlayerEnabled(normalizedEnabled)
+        }
     }
 
     fun setExternalPlayerId(playerId: String?) {
@@ -553,10 +548,13 @@ object PlayerSettingsRepository {
 
     fun setExternalPlayerForwardSubtitles(enabled: Boolean) {
         ensureLoaded()
-        if (externalPlayerForwardSubtitles == enabled) return
-        externalPlayerForwardSubtitles = enabled
+        val normalizedEnabled = enabled && AppFeaturePolicy.externalPlayerSupported
+        if (externalPlayerForwardSubtitles == normalizedEnabled) return
+        externalPlayerForwardSubtitles = normalizedEnabled
         publish()
-        PlayerSettingsStorage.saveExternalPlayerForwardSubtitles(enabled)
+        if (AppFeaturePolicy.externalPlayerSupported) {
+            PlayerSettingsStorage.saveExternalPlayerForwardSubtitles(normalizedEnabled)
+        }
     }
 
     fun setExternalPlayerSendSkipSegments(enabled: Boolean) {
@@ -615,8 +613,8 @@ object PlayerSettingsRepository {
         PlayerSettingsStorage.saveSubtitleOutlineEnabled(normalized.outlineEnabled)
         PlayerSettingsStorage.saveSubtitleOutlineWidth(normalized.outlineWidth)
         PlayerSettingsStorage.saveSubtitleBold(normalized.bold)
-        PlayerSettingsStorage.saveSubtitleFontFamily(normalized.fontFamily.storageValue)
         PlayerSettingsStorage.saveSubtitleFontSizeSp(normalized.fontSizeSp)
+        PlayerSettingsStorage.saveSubtitleFontFamily(normalized.fontFamily.storageValue)
         PlayerSettingsStorage.saveSubtitleBottomOffset(normalized.bottomOffset)
         PlayerSettingsStorage.saveSubtitleStripSdh(normalized.stripSdh)
         PlayerSettingsStorage.saveSubtitleUseForcedSubtitles(normalized.useForcedSubtitles)
@@ -754,6 +752,15 @@ object PlayerSettingsRepository {
         PlayerSettingsStorage.saveSkipIntroEnabled(enabled)
     }
 
+    fun setAutoSkipSegmentTypeEnabled(segmentType: AutoSkipSegmentType, enabled: Boolean) {
+        ensureLoaded()
+        val updated = if (enabled) autoSkipSegmentTypes + segmentType else autoSkipSegmentTypes - segmentType
+        if (autoSkipSegmentTypes == updated) return
+        autoSkipSegmentTypes = updated
+        publish()
+        PlayerSettingsStorage.saveAutoSkipSegmentTypes(updated.mapTo(linkedSetOf()) { it.storedValue })
+    }
+
     fun setAnimeSkipEnabled(enabled: Boolean) {
         ensureLoaded()
         if (animeSkipEnabled == enabled) return
@@ -801,6 +808,56 @@ object PlayerSettingsRepository {
         seekForwardSeconds = normalized
         publish()
         PlayerSettingsStorage.saveSeekForwardSeconds(normalized)
+    }
+
+    fun setAudioDelayMs(value: Int) {
+        ensureLoaded()
+        val clamped = value.coerceIn(-2_000, 2_000)
+        if (audioDelayMs == clamped) return
+        audioDelayMs = clamped
+        PlayerSettingsStorage.saveAudioDelayMs(clamped)
+        publish()
+    }
+
+    fun setAudioAmplificationDb(value: Float) {
+        ensureLoaded()
+        val clamped = value.takeIf(Float::isFinite)?.coerceIn(0f, 12f) ?: 0f
+        if (audioAmplificationDb == clamped) return
+        audioAmplificationDb = clamped
+        PlayerSettingsStorage.saveAudioAmplificationDb(clamped)
+        publish()
+    }
+
+    fun setVideoEnhancement(value: VideoEnhancement) {
+        ensureLoaded()
+        if (videoEnhancement == value) return
+        videoEnhancement = value
+        PlayerSettingsStorage.saveVideoEnhancement(value.name)
+        publish()
+    }
+
+    fun setEnhancementResolution(value: EnhancementResolution) {
+        ensureLoaded()
+        if (enhancementResolution == value) return
+        enhancementResolution = value
+        PlayerSettingsStorage.saveEnhancementResolution(value.name)
+        publish()
+    }
+
+    fun setPreloadNextEpisode(value: Boolean) {
+        ensureLoaded()
+        if (preloadNextEpisode == value) return
+        preloadNextEpisode = value
+        PlayerSettingsStorage.savePreloadNextEpisode(value)
+        publish()
+    }
+
+    fun setPreferSameServer(value: Boolean) {
+        ensureLoaded()
+        if (preferSameServer == value) return
+        preferSameServer = value
+        PlayerSettingsStorage.savePreferSameServer(value)
+        publish()
     }
 
     fun setStreamAutoPlayNextEpisodeEnabled(enabled: Boolean) {
@@ -865,6 +922,14 @@ object PlayerSettingsRepository {
         useLibass = enabled
         publish()
         PlayerSettingsStorage.saveUseLibass(enabled)
+    }
+
+    fun setNvidiaRtxSuperResolutionEnabled(enabled: Boolean) {
+        ensureLoaded()
+        if (nvidiaRtxSuperResolutionEnabled == enabled) return
+        nvidiaRtxSuperResolutionEnabled = enabled
+        publish()
+        PlayerSettingsStorage.saveNvidiaRtxSuperResolutionEnabled(enabled)
     }
 
     fun setLibassRenderType(renderType: String) {
@@ -1040,155 +1105,20 @@ object PlayerSettingsRepository {
         PlayerSettingsStorage.saveIosHdrComputePeakEnabled(iosHdrComputePeakEnabled)
     }
 
-    fun setAutoSwitchPlaybackEngineOnError(value: Boolean) {
-        ensureLoaded()
-        autoSwitchPlaybackEngineOnError = value
-        PlayerSettingsStorage.saveAutoSwitchPlaybackEngineOnError(value)
-        publish()
-    }
-
-    fun setShowDetailedLoadingStatus(value: Boolean) {
-        ensureLoaded()
-        showDetailedLoadingStatus = value
-        PlayerSettingsStorage.saveShowDetailedLoadingStatus(value)
-        publish()
-    }
-
-    fun setShowPauseOverlay(value: Boolean) {
-        ensureLoaded()
-        showPauseOverlay = value
-        PlayerSettingsStorage.saveShowPauseOverlay(value)
-        publish()
-    }
-
-    fun setEnhancementResolution(value: EnhancementResolution) {
-        ensureLoaded()
-        enhancementResolution = value
-        PlayerSettingsStorage.saveEnhancementResolution(value.name)
-        publish()
-    }
-
-    fun setVideoEnhancement(value: VideoEnhancement) {
-        ensureLoaded()
-        videoEnhancement = value
-        PlayerSettingsStorage.saveVideoEnhancement(value.name)
-        publish()
-    }
-
-    fun setExoChaptersEnabled(value: Boolean) {
-        ensureLoaded()
-        exoChaptersEnabled = value
-        PlayerSettingsStorage.saveExoChaptersEnabled(value)
-        publish()
-    }
-
-    fun setPreloadNextEpisode(value: Boolean) {
-        ensureLoaded()
-        preloadNextEpisode = value
-        PlayerSettingsStorage.savePreloadNextEpisode(value)
-        publish()
-    }
-
-    fun setPreferSameServer(value: Boolean) {
-        ensureLoaded()
-        preferSameServer = value
-        PlayerSettingsStorage.savePreferSameServer(value)
-        publish()
-    }
-
-    fun setDefaultServerKey(value: String) {
-        ensureLoaded()
-        defaultServerKey = value
-        PlayerSettingsStorage.saveDefaultServerKey(value)
-        publish()
-    }
-
-    fun setRememberAudioDelay(value: Boolean) {
-        ensureLoaded()
-        rememberAudioDelay = value
-        PlayerSettingsStorage.saveRememberAudioDelay(value)
-        publish()
-    }
-
-    fun setAudioDelayMs(value: Int) {
-        ensureLoaded()
-        audioDelayMs = value.coerceIn(-2000, 2000)
-        if (rememberAudioDelay) activeAudioDevice?.let { PlayerSettingsStorage.saveAudioDelayForDevice(it, audioDelayMs) }
-        publish()
-    }
-
-    fun setPersistAudioAmplification(value: Boolean) {
-        ensureLoaded()
-        persistAudioAmplification = value
-        PlayerSettingsStorage.savePersistAudioAmplification(value)
-        PlayerSettingsStorage.saveAudioAmplificationDb(if (value) audioAmplificationDb else 0f)
-        publish()
-    }
-
-    fun setAudioAmplificationDb(value: Float) {
-        ensureLoaded()
-        audioAmplificationDb = if (value.isFinite()) value.coerceIn(0f, 20f) else 0f
-        if (persistAudioAmplification) PlayerSettingsStorage.saveAudioAmplificationDb(audioAmplificationDb)
-        publish()
-    }
-
-    fun setAudioDownmix(value: Boolean) {
-        ensureLoaded()
-        audioDownmix = value
-        PlayerSettingsStorage.saveAudioDownmix(value)
-        publish()
-    }
-
-    fun setAudioChannels(value: String) {
-        ensureLoaded()
-        audioChannels = value.takeIf { it in setOf("auto", "mono", "stereo", "5.1", "7.1") } ?: "auto"
-        PlayerSettingsStorage.saveAudioChannels(audioChannels)
-        publish()
-    }
-
-    fun setAudioMaintainVolume(value: Boolean) {
-        ensureLoaded()
-        audioMaintainVolume = value
-        PlayerSettingsStorage.saveAudioMaintainVolume(value)
-        publish()
-    }
-
-    fun setAudioCenterMixLevel(value: Float) {
-        ensureLoaded()
-        audioCenterMixLevel = if (value.isFinite()) value.coerceIn(0f, 1.5f) else 0.707f
-        PlayerSettingsStorage.saveAudioCenterMixLevel(audioCenterMixLevel)
-        publish()
-    }
-
     private fun publish() {
         _uiState.value = PlayerSettingsUiState(
-            autoSwitchPlaybackEngineOnError = autoSwitchPlaybackEngineOnError,
-            showDetailedLoadingStatus = showDetailedLoadingStatus,
-            showPauseOverlay = showPauseOverlay,
-            exoChaptersEnabled = exoChaptersEnabled,
-            videoEnhancement = videoEnhancement,
-            enhancementResolution = enhancementResolution,
-            preloadNextEpisode = preloadNextEpisode,
-            preferSameServer = preferSameServer,
-            defaultServerKey = defaultServerKey,
-            rememberAudioDelay = rememberAudioDelay,
-            audioDelayMs = audioDelayMs,
-            persistAudioAmplification = persistAudioAmplification,
-            audioAmplificationDb = audioAmplificationDb,
-            audioDownmix = audioDownmix,
-            audioChannels = audioChannels,
-            audioMaintainVolume = audioMaintainVolume,
-            audioCenterMixLevel = audioCenterMixLevel,
-            showLoadingOverlay = showLoadingOverlay,
             useLegacyPlayerLayout = useLegacyPlayerLayout,
+            showLoadingOverlay = showLoadingOverlay,
+            showPlayerLoadingStatus = showPlayerLoadingStatus,
+            pauseOverlayEnabled = pauseOverlayEnabled,
             playerTitleAtTop = playerTitleAtTop,
             showParentalGuide = showParentalGuide,
             resizeMode = resizeMode,
             holdToSpeedEnabled = holdToSpeedEnabled,
             holdToSpeedValue = holdToSpeedValue,
             touchGesturesEnabled = touchGesturesEnabled,
-            externalPlayerEnabled = externalPlayerEnabled,
-            externalPlayerForwardSubtitles = externalPlayerForwardSubtitles,
+            externalPlayerEnabled = externalPlayerEnabled && AppFeaturePolicy.externalPlayerSupported,
+            externalPlayerForwardSubtitles = externalPlayerForwardSubtitles && AppFeaturePolicy.externalPlayerSupported,
             externalPlayerSendSkipSegments = externalPlayerSendSkipSegments,
             externalPlayerId = externalPlayerId,
             preferredAudioLanguage = preferredAudioLanguage,
@@ -1212,12 +1142,19 @@ object PlayerSettingsRepository {
             streamAutoPlayRegex = streamAutoPlayRegex,
             streamAutoPlayTimeoutSeconds = streamAutoPlayTimeoutSeconds,
             skipIntroEnabled = skipIntroEnabled,
+            autoSkipSegmentTypes = autoSkipSegmentTypes,
             animeSkipEnabled = animeSkipEnabled,
             animeSkipClientId = animeSkipClientId,
             introDbApiKey = introDbApiKey,
             theIntroDbApiKey = theIntroDbApiKey,
             introSubmitEnabled = introSubmitEnabled,
             seekForwardSeconds = seekForwardSeconds,
+            audioDelayMs = audioDelayMs,
+            audioAmplificationDb = audioAmplificationDb,
+            videoEnhancement = videoEnhancement,
+            enhancementResolution = enhancementResolution,
+            preloadNextEpisode = preloadNextEpisode,
+            preferSameServer = preferSameServer,
             streamAutoPlayNextEpisodeEnabled = streamAutoPlayNextEpisodeEnabled,
             streamAutoPlayNextEpisodeFallbackEnabled = streamAutoPlayNextEpisodeFallbackEnabled,
             streamAutoPlayPreferBingeGroup = streamAutoPlayPreferBingeGroup,
@@ -1242,6 +1179,7 @@ object PlayerSettingsRepository {
             iosContrast = iosContrast,
             iosSaturation = iosSaturation,
             iosGamma = iosGamma,
+            nvidiaRtxSuperResolutionEnabled = nvidiaRtxSuperResolutionEnabled,
         )
     }
 

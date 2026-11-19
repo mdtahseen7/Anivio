@@ -40,17 +40,17 @@ internal fun pluginPbkdf2(
     val prfAlgo = normalizeHmacAlgorithm(algorithm)
     val mac = Mac.getInstance(prfAlgo)
     mac.init(SecretKeySpec(password, prfAlgo))
-    
+
     val hLen = mac.macLength
     val dkLen = keySizeBits / 8
     val dk = ByteArray(dkLen)
-    
+
     val blocks = (dkLen + hLen - 1) / hLen
     val u = ByteArray(hLen)
     val t = ByteArray(hLen)
-    
+
     val blockIndexBytes = ByteArray(4)
-    
+
     for (i in 1..blocks) {
         mac.reset()
         mac.update(salt)
@@ -59,11 +59,11 @@ internal fun pluginPbkdf2(
         blockIndexBytes[2] = (i ushr 8).toByte()
         blockIndexBytes[3] = i.toByte()
         mac.update(blockIndexBytes)
-        
+
         val u1 = mac.doFinal()
         u1.copyInto(t)
         u1.copyInto(u)
-        
+
         for (j in 2..iterations) {
             mac.reset()
             val uj = mac.doFinal(u)
@@ -72,12 +72,12 @@ internal fun pluginPbkdf2(
                 t[k] = (t[k].toInt() xor uj[k].toInt()).toByte()
             }
         }
-        
+
         val offset = (i - 1) * hLen
         val len = minOf(hLen, dkLen - offset)
         t.copyInto(dk, destinationOffset = offset, startIndex = 0, endIndex = len)
     }
-    
+
     return dk
 }
 
@@ -94,7 +94,7 @@ internal fun pluginAesEncrypt(
     }
     val cipher = Cipher.getInstance(normalizedMode)
     val keySpec = SecretKeySpec(key, "AES")
-    
+
     if (normalizedMode.contains("ECB")) {
         cipher.init(Cipher.ENCRYPT_MODE, keySpec)
     } else if (normalizedMode.contains("GCM")) {
@@ -121,7 +121,7 @@ internal fun pluginAesDecrypt(
     }
     val cipher = Cipher.getInstance(normalizedMode)
     val keySpec = SecretKeySpec(key, "AES")
-    
+
     if (normalizedMode.contains("ECB")) {
         cipher.init(Cipher.DECRYPT_MODE, keySpec)
     } else if (normalizedMode.contains("GCM")) {

@@ -10,22 +10,28 @@ import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.realtime.Realtime
 import io.github.jan.supabase.realtime.websocket.KtorRealtimeWebsocketFactory
 import io.github.jan.supabase.storage.Storage
-import io.ktor.client.plugins.HttpRequestRetry
-import io.ktor.client.plugins.defaultRequest
+import io.github.jan.supabase.supabaseJson
 import io.ktor.client.plugins.websocket.WebSockets
+import io.ktor.serialization.kotlinx.KotlinxWebsocketSerializationConverter
+import kotlin.time.Duration.Companion.seconds
+import io.ktor.client.plugins.HttpRequestRetry
+import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.defaultRequest
 import io.ktor.http.HttpHeaders
 import io.ktor.http.takeFrom
-import io.ktor.serialization.kotlinx.KotlinxWebsocketSerializationConverter
-import io.github.jan.supabase.supabaseJson
-import kotlin.time.Duration.Companion.seconds
+import kotlinx.atomicfu.locks.SynchronizedObject
+import kotlinx.atomicfu.locks.synchronized
 
 object SupabaseProvider {
+    private val clientLock = SynchronizedObject()
     private var cachedClient: SupabaseClient? = null
     private val rateLimitCoordinator = BackendRateLimitCoordinator()
 
     @OptIn(SupabaseInternal::class)
     val client: SupabaseClient
-        get() = cachedClient ?: createClient().also { cachedClient = it }
+        get() = synchronized(clientLock) {
+            cachedClient ?: createClient().also { cachedClient = it }
+        }
 
     @OptIn(SupabaseInternal::class)
     private fun createClient(): SupabaseClient {
@@ -39,6 +45,13 @@ object SupabaseProvider {
             httpConfig {
                 install(BackendRateLimitPlugin) {
                     coordinator = rateLimitCoordinator
+                }
+                // Bound every Supabase call: Ktor has no timeout by default, so a
+                // hung (not refused) connection could block the gate/sync forever.
+                install(HttpTimeout) {
+                    connectTimeoutMillis = 10_000
+                    requestTimeoutMillis = 15_000
+                    socketTimeoutMillis = 15_000
                 }
                 install(HttpRequestRetry) {
                     retryOnExceptionIf(maxRetries = 1) { request, cause ->
@@ -105,15 +118,18 @@ object SupabaseProvider {
                     contentConverter = KotlinxWebsocketSerializationConverter(supabaseJson)
                 }
             }
+
             install(Auth)
             install(Postgrest)
             install(Functions)
             install(Storage)
-            install(Realtime) {
-                customUrl = SupabaseEndpointConfig.realtimeUrl(configuration.backendUrl)
-                reconnectDelay = 3.seconds
-                websocketFactory = RealtimeSocketFactory { url ->
-                    KtorRealtimeWebsocketFactory(client.httpClient.httpClient).create(url)
+            if (configuration.capabilities.watchParty) {
+                install(Realtime) {
+                    customUrl = SupabaseEndpointConfig.realtimeUrl(configuration.backendUrl)
+                    reconnectDelay = 3.seconds
+                    websocketFactory = RealtimeSocketFactory { url ->
+                        KtorRealtimeWebsocketFactory(client.httpClient.httpClient).create(url)
+                    }
                 }
             }
         }
@@ -121,9 +137,12 @@ object SupabaseProvider {
     }
 
     suspend fun reset() {
-        val previous = cachedClient
-        cachedClient = null
-        rateLimitCoordinator.clear()
+        val previous = synchronized(clientLock) {
+            cachedClient.also {
+                cachedClient = null
+                rateLimitCoordinator.clear()
+            }
+        }
         previous?.close()
     }
 }

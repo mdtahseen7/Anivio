@@ -14,8 +14,6 @@ data class AniListMediaDetail(
     val format: String? = null,
     val status: String? = null,
     val episodes: Int? = null,
-    val chapters: Int? = null,
-    val volumes: Int? = null,
     val duration: Int? = null,
     val averageScore: Int? = null,
     val popularity: Int? = null,
@@ -185,8 +183,6 @@ const val ANILIST_MEDIA_DETAIL_FIELDS: String = """
     format
     status
     episodes
-    chapters
-    volumes
     duration
     averageScore
     popularity

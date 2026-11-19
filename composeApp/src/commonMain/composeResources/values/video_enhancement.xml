@@ -29,7 +29,7 @@
     <string name="enhancement_fsrcnnx_description">Upscale detail using the 8-channel model. Requires more GPU work.</string>
     <string name="enhancement_gan">Anime4K GAN · Experimental</string>
     <string name="enhancement_gan_description">Small 2× GAN model. May change textures or introduce artifacts.</string>
-    <string name="enhancement_limits">For the built-in Android ExoPlayer. SDR video only; enabling enhancement disables hardware tunneling for this playback session. Small models are used to limit GPU load. Upscaling fits the display and your output limit, up to 2× the source size. Light restoration keeps the source resolution. Unsupported or slow effects return to the original picture.</string>
+    <string name="enhancement_limits">Uses bundled shaders in the Windows player. Upscaling runs on eligible video sizes up to the selected display ceiling. Light restoration keeps the source resolution.</string>
     <string name="enhancement_preparing">Checking GPU and preparing enhancement…</string>
     <string name="enhancement_active">Enhancement is active.</string>
     <string name="enhancement_unsupported">This GPU or video decoder cannot run the effect. Playing the original picture.</string>
@@ -39,5 +39,6 @@
     <string name="enhancement_failed">Enhancement could not run. Playing the original picture; select a mode to retry.</string>
     <string name="enhancement_too_slow">Enhancement could not keep up. Playing the original picture.</string>
     <string name="enhancement_recovered">Enhancement was turned off after interrupted playback. You can enable it again.</string>
-    <string name="enhancement_unavailable">Enhancement is available with the built-in ExoPlayer on Android.</string>
+    <string name="enhancement_unavailable">Video enhancement is unavailable for this playback engine.</string>
+    <string name="enhancement_shaders_loaded">Shader preset loaded. Upscaling is applied when the video and display sizes fit the selected mode.</string>
 </resources>

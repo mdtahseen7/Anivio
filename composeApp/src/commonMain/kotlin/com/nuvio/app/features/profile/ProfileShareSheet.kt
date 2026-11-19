@@ -463,3 +463,10 @@ fun ProfileCelebrationOverlay(
         }
     }
 }
+
+private fun oneDecimal(value: Double): String {
+    val scaled = kotlin.math.round(value * 10).toLong()
+    val whole = scaled / 10
+    val fraction = kotlin.math.abs(scaled % 10)
+    return "$whole.$fraction"
+}

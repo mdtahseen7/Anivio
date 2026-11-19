@@ -6,6 +6,8 @@ import com.nuvio.app.features.streams.StreamItem
 import com.nuvio.app.features.streams.StreamProxyHeaders
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import io.ktor.http.URLProtocol
+import io.ktor.http.Url
 
 @Serializable
 data class PartySource(
@@ -73,9 +75,18 @@ data class PartyStream(
     )
 }
 
-internal fun isShareableStreamUrl(url: String): Boolean = SHAREABLE_URL.containsMatchIn(url)
+internal fun isShareableStreamUrl(value: String): Boolean {
+    val url = runCatching { Url(value) }.getOrNull() ?: return false
+    if (url.protocol != URLProtocol.HTTPS || url.user != null || url.password != null) return false
+    val host = url.host.trimEnd('.').lowercase()
+    return host.contains('.') && !host.endsWith(".localhost") && !host.endsWith(".local") &&
+        host.last().isLetter() && host.all { it.isLetterOrDigit() || it == '-' || it == '.' }
+}
 
-private val SHAREABLE_URL = Regex("^https?://(?!localhost|127\\.|0\\.0\\.0\\.0|\\[::1])[^\\s/]+", RegexOption.IGNORE_CASE)
+private val SharedStreamHeaders = setOf("accept", "origin", "referer", "user-agent")
+
+internal fun partyStreamRequestHeaders(headers: Map<String, String>): Map<String, String> =
+    headers.filterKeys { it.lowercase() in SharedStreamHeaders }
 
 internal fun partyMediaKey(metaType: String, metaId: String, season: Int?, episode: Int?): String =
     listOf(metaType.lowercase(), metaId, season?.toString().orEmpty(), episode?.toString().orEmpty())

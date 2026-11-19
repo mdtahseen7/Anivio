@@ -56,8 +56,7 @@ object TrackingWriteCoordinator {
         item: TrackingMediaReference,
         destination: TrackingListStatus?,
     ): TrackingWriteDispatchResult {
-        IncognitoModeRepository.ensureLoaded()
-        if (IncognitoModeRepository.enabled.value) return TrackingWriteDispatchResult()
+        if (IncognitoModeRepository.isEnabled()) return TrackingWriteDispatchResult()
         TrackingProviderRegistry.ensureLoaded()
         return dispatchTrackingListStatus(
             writers = TrackingProviderRegistry.connectedListWriters(),

@@ -11,11 +11,12 @@ fun resolveProfileBackground(
     profile: NuvioProfile,
     entitlements: CosmeticEntitlements,
 ): ProfileBackgroundSelection? {
-    // Profiles can be restored from another device or an older membership state. Do not hide a
-    // background that was already selected and saved: a profile's appearance must be stable.
     profile.profileBackgroundUrl?.trim()?.takeIf { it.isNotBlank() }?.let {
         return ProfileBackgroundSelection.Custom(it)
     }
+    if (!entitlements.includes(CosmeticEntitlement.PROFILE_BACKGROUNDS) &&
+        profile.profileBackgroundId?.startsWith("anilist-banner-") != true
+    ) return null
     profile.profileBackgroundId?.trim()?.takeIf { it.isNotBlank() }?.let {
         return ProfileBackgroundSelection.Catalog(it)
     }

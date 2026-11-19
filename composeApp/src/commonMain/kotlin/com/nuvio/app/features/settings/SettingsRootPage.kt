@@ -1,30 +1,37 @@
 package com.nuvio.app.features.settings
 
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.material.icons.rounded.VisibilityOff
+import com.nuvio.app.core.ui.NuvioToastController
+import nuvio.composeapp.generated.resources.settings_incognito_title
+import nuvio.composeapp.generated.resources.settings_incognito_description
+import nuvio.composeapp.generated.resources.settings_incognito_on
+import nuvio.composeapp.generated.resources.settings_incognito_off
+import nuvio.composeapp.generated.resources.compose_settings_root_downloads_title
+import nuvio.composeapp.generated.resources.compose_settings_root_downloads_description
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.rounded.AccountCircle
-import androidx.compose.material.icons.rounded.Person
-import androidx.compose.material.icons.rounded.GridView
-import androidx.compose.material.icons.rounded.Explore
-import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.Extension
+import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Groups
+import com.nuvio.app.features.party.PartyRepository
+import nuvio.composeapp.generated.resources.party_settings_description
+import nuvio.composeapp.generated.resources.party_title
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Link
-import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.People
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Policy
 import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
@@ -32,10 +39,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Alignment
 import com.nuvio.app.core.build.AppVersionConfig
-import com.nuvio.app.core.ui.NuvioToastController
+import nuvio.composeapp.generated.resources.settings_page_layout
+import nuvio.composeapp.generated.resources.settings_page_layout_description
 import nuvio.composeapp.generated.resources.Res
-import nuvio.composeapp.generated.resources.compose_about_made_with
-import nuvio.composeapp.generated.resources.compose_about_version_format
 import nuvio.composeapp.generated.resources.compose_settings_page_account
 import nuvio.composeapp.generated.resources.compose_settings_page_advanced
 import nuvio.composeapp.generated.resources.compose_settings_page_appearance
@@ -44,60 +50,40 @@ import nuvio.composeapp.generated.resources.compose_settings_page_licenses_attri
 import nuvio.composeapp.generated.resources.compose_settings_page_notifications
 import nuvio.composeapp.generated.resources.compose_settings_page_playback
 import nuvio.composeapp.generated.resources.compose_settings_page_privacy_policy
-import nuvio.composeapp.generated.resources.compose_settings_page_reader
 import nuvio.composeapp.generated.resources.compose_settings_page_about
 import nuvio.composeapp.generated.resources.compose_settings_root_account_description
 import nuvio.composeapp.generated.resources.compose_settings_root_appearance_description
 import nuvio.composeapp.generated.resources.compose_settings_root_check_updates_description
 import nuvio.composeapp.generated.resources.compose_settings_root_check_updates_title
 import nuvio.composeapp.generated.resources.compose_settings_root_content_discovery_description
-import nuvio.composeapp.generated.resources.compose_settings_root_downloads_description
-import nuvio.composeapp.generated.resources.compose_settings_root_downloads_title
-import nuvio.composeapp.generated.resources.compose_settings_root_general_section
 import nuvio.composeapp.generated.resources.compose_settings_root_integrations_description
 import nuvio.composeapp.generated.resources.compose_settings_root_notifications_description
-import nuvio.composeapp.generated.resources.settings_incognito_mode_title
-import nuvio.composeapp.generated.resources.settings_incognito_mode_description
-import nuvio.composeapp.generated.resources.settings_section_personalize
-import nuvio.composeapp.generated.resources.settings_section_services
-import nuvio.composeapp.generated.resources.settings_section_system
-import nuvio.composeapp.generated.resources.settings_section_watch
-import nuvio.composeapp.generated.resources.settings_section_you
 import nuvio.composeapp.generated.resources.compose_settings_root_privacy_policy_description
-import nuvio.composeapp.generated.resources.compose_settings_root_reader_description
 import nuvio.composeapp.generated.resources.compose_settings_root_switch_profile_description
 import nuvio.composeapp.generated.resources.compose_settings_root_switch_profile_title
 import nuvio.composeapp.generated.resources.compose_settings_root_tracking_description
 import nuvio.composeapp.generated.resources.compose_settings_root_about_section
 import nuvio.composeapp.generated.resources.compose_settings_root_account_section
 import nuvio.composeapp.generated.resources.compose_settings_root_advanced_description
-import nuvio.composeapp.generated.resources.compose_settings_root_advanced_section
 import nuvio.composeapp.generated.resources.compose_settings_page_content_discovery
 import nuvio.composeapp.generated.resources.compose_settings_page_tracking
-import nuvio.composeapp.generated.resources.party_settings_description
-import nuvio.composeapp.generated.resources.party_title
 import nuvio.composeapp.generated.resources.settings_playback_subtitle
 import nuvio.composeapp.generated.resources.updates_debug_test_description
 import nuvio.composeapp.generated.resources.updates_debug_test_title
 import nuvio.composeapp.generated.resources.about_page_subtitle
 import nuvio.composeapp.generated.resources.about_licenses_attributions_subtitle
-import nuvio.composeapp.generated.resources.*
-import org.jetbrains.compose.resources.StringResource
-import androidx.compose.ui.graphics.vector.ImageVector
 import org.jetbrains.compose.resources.stringResource
 
 
 internal fun LazyListScope.settingsRootContent(
     isTablet: Boolean,
-    sectionPage: SettingsPage = SettingsPage.Root,
-    onSectionClick: (SettingsPage) -> Unit,
     onPlaybackClick: () -> Unit,
-    onReaderClick: () -> Unit,
     onAppearanceClick: () -> Unit,
+    onLayoutClick: () -> Unit,
+    onDownloadsClick: (() -> Unit)? = null,
+    onWatchPartyClick: (() -> Unit)? = null,
     onAdvancedClick: () -> Unit,
     onNotificationsClick: () -> Unit,
-    incognitoModeEnabled: Boolean = false,
-    onIncognitoModeChanged: (Boolean) -> Unit = {},
     onContentDiscoveryClick: () -> Unit,
     onIntegrationsClick: () -> Unit,
     onTrackingClick: () -> Unit,
@@ -106,186 +92,231 @@ internal fun LazyListScope.settingsRootContent(
     onLicensesAttributionsClick: () -> Unit,
     onCheckForUpdatesClick: (() -> Unit)? = null,
     onTestUpdateBannerClick: (() -> Unit)? = null,
-    onDownloadsClick: () -> Unit,
     onAccountClick: () -> Unit,
     onSwitchProfileClick: (() -> Unit)? = null,
-    onWatchPartyClick: (() -> Unit)? = null,
+    showNotificationsEntry: Boolean = true,
     showAccountSection: Boolean = true,
     showGeneralSection: Boolean = true,
     showAboutSection: Boolean = true,
     showAdvancedSection: Boolean = true,
+    showAttribution: Boolean = true,
     showAboutPage: Boolean = true,
 ) {
-    if (sectionPage == SettingsPage.Root) {
-        fun card(key: String, rows: List<SettingsHubRow>) {
-            if (rows.isEmpty()) return
-            item(key = key) {
-                SettingsGroup(isTablet = isTablet) {
-                    rows.forEachIndexed { index, row ->
-                        if (index > 0) SettingsGroupDivider(isTablet)
-                        SettingsNavigationRow(
-                            title = stringResource(row.title), description = stringResource(row.description),
-                            icon = row.icon, isTablet = isTablet, onClick = row.onClick,
-                        )
-                    }
-                }
-            }
-        }
-        if (showAccountSection) card("settings-account", buildList {
-            add(SettingsHubRow(Res.string.compose_settings_page_account, Res.string.compose_settings_root_account_description, Icons.Rounded.Person, onAccountClick))
-            onSwitchProfileClick?.let { add(SettingsHubRow(Res.string.compose_settings_root_switch_profile_title, Res.string.compose_settings_root_switch_profile_description, Icons.Rounded.People, it)) }
-            onWatchPartyClick?.let { add(SettingsHubRow(Res.string.party_title, Res.string.party_settings_description, Icons.Rounded.Groups, it)) }
-        })
-        if (showGeneralSection) {
-            card("settings-appearance", listOf(
-                SettingsHubRow(Res.string.compose_settings_page_appearance, Res.string.settings_root_appearance_summary, Icons.Rounded.Palette, onAppearanceClick),
-                SettingsHubRow(SettingsPage.Layout.titleRes, Res.string.settings_root_layout_summary, Icons.Rounded.GridView) { onSectionClick(SettingsPage.Layout) },
-            ))
-            card("settings-media", listOf(
-                SettingsHubRow(Res.string.compose_settings_page_content_discovery, Res.string.compose_settings_root_content_discovery_description, Icons.Rounded.Explore, onContentDiscoveryClick),
-                SettingsHubRow(Res.string.compose_settings_page_playback, Res.string.settings_playback_subtitle, Icons.Rounded.PlayArrow, onPlaybackClick),
-            ))
-            card("settings-services", listOf(
-                SettingsHubRow(Res.string.compose_settings_page_integrations, Res.string.compose_settings_root_integrations_description, Icons.Rounded.Link, onIntegrationsClick),
-                SettingsHubRow(Res.string.compose_settings_page_tracking, Res.string.compose_settings_root_tracking_description, Icons.Default.Sync, onTrackingClick),
-            ))
-        }
-        if (showGeneralSection) {
-            item(key = "settings-anivio") {
-                androidx.compose.foundation.layout.Column {
-                    SettingsGroup(isTablet) {
-                        listOf(
-                            SettingsHubRow(Res.string.compose_settings_root_downloads_title, Res.string.compose_settings_root_downloads_description, Icons.Rounded.CloudDownload, onDownloadsClick),
-                        ).forEachIndexed { index, row ->
-                            if (index > 0) SettingsGroupDivider(isTablet)
-                            SettingsNavigationRow(title = stringResource(row.title), description = stringResource(row.description), icon = row.icon, isTablet = isTablet, onClick = row.onClick)
-                        }
-                        SettingsGroupDivider(isTablet)
-                        SettingsSwitchRow(
-                            title = stringResource(Res.string.settings_incognito_mode_title),
-                            description = stringResource(Res.string.settings_incognito_mode_description),
-                            icon = Icons.Rounded.VisibilityOff, checked = incognitoModeEnabled,
-                            isTablet = isTablet, onCheckedChange = { enabled ->
-                                onIncognitoModeChanged(enabled)
-                                NuvioToastController.show(if (enabled) "Incognito mode is on" else "Incognito mode is off")
-                            },
-                        )
-                    }
-                }
-            }
-        }
-        card("settings-system", buildList {
-            if (showAdvancedSection) {
-                add(SettingsHubRow(Res.string.compose_settings_page_notifications, Res.string.compose_settings_root_notifications_description, Icons.Rounded.Notifications, onNotificationsClick))
-                add(SettingsHubRow(Res.string.compose_settings_page_advanced, Res.string.compose_settings_root_advanced_description, Icons.Rounded.Build, onAdvancedClick))
-            }
-            if (showAboutSection) add(SettingsHubRow(Res.string.compose_settings_page_about, Res.string.settings_root_about_summary, Icons.Rounded.Info) { onSectionClick(SettingsPage.AboutSettings) })
-        })
-        item(key = "settings-footer") {
-            androidx.compose.foundation.layout.Column(
-                Modifier.fillMaxWidth().padding(vertical = 20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+    if (showAccountSection) {
+        item {
+            SettingsSection(
+                title = stringResource(Res.string.compose_settings_root_account_section),
+                isTablet = isTablet,
             ) {
-                AppBrandWordmark(Modifier.height(28.dp), contentDescription = "Anivio")
-                Text(stringResource(Res.string.compose_about_made_with), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
-                Text(stringResource(Res.string.compose_about_version_format, AppVersionConfig.VERSION_NAME, AppVersionConfig.VERSION_CODE.toString()), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                SettingsGroup(isTablet = isTablet) {
+                    SettingsNavigationRow(
+                        title = stringResource(Res.string.compose_settings_page_account),
+                        description = stringResource(Res.string.compose_settings_root_account_description),
+                        icon = Icons.Rounded.AccountCircle,
+                        isTablet = isTablet,
+                        onClick = onAccountClick,
+                    )
+                    if (onSwitchProfileClick != null) {
+                        SettingsGroupDivider(isTablet)
+                        SettingsNavigationRow(
+                            title = stringResource(Res.string.compose_settings_root_switch_profile_title),
+                            description = stringResource(Res.string.compose_settings_root_switch_profile_description),
+                            icon = Icons.Rounded.People,
+                            isTablet = isTablet,
+                            onClick = onSwitchProfileClick,
+                        )
+                    }
+                    if (onWatchPartyClick != null) {
+                        val watchPartyAvailable by PartyRepository.available.collectAsStateWithLifecycle()
+                        if (watchPartyAvailable) {
+                            SettingsGroupDivider(isTablet)
+                            SettingsNavigationRow(
+                                title = stringResource(Res.string.party_title),
+                                description = stringResource(Res.string.party_settings_description),
+                                icon = Icons.Rounded.Groups,
+                                isTablet = isTablet,
+                                onClick = onWatchPartyClick,
+                            )
+                        }
+                    }
+                }
             }
         }
-        return
     }
-    val rows = mutableListOf<SettingsHubRow>()
-    fun row(title: StringResource, description: StringResource, icon: ImageVector, action: () -> Unit) {
-        rows += SettingsHubRow(title, description, icon, action)
-    }
-    fun page(target: SettingsPage, description: StringResource, icon: ImageVector) {
-        row(target.titleRes, description, icon) { onSectionClick(target) }
-    }
-    when (sectionPage) {
-        SettingsPage.Root -> {
-            if (showAccountSection) page(SettingsPage.YourSpace, Res.string.settings_section_you_description, Icons.Rounded.AccountCircle)
-            if (showGeneralSection) {
-                page(SettingsPage.Personalize, Res.string.settings_section_personalize_description, Icons.Rounded.Palette)
-                page(SettingsPage.WatchSettings, Res.string.settings_section_watch_description, Icons.Rounded.PlayArrow)
-                page(SettingsPage.Services, Res.string.settings_section_services_description, Icons.Rounded.Link)
-                page(SettingsPage.Anivio, Res.string.settings_section_anivio_description, Icons.Rounded.MenuBook)
-            }
-            if (showAdvancedSection) page(SettingsPage.SystemSettings, Res.string.settings_section_system_description, Icons.Rounded.Tune)
-            if (showAboutSection) page(SettingsPage.AboutSettings, Res.string.about_page_subtitle, Icons.Rounded.Info)
-        }
-        SettingsPage.YourSpace -> {
-            row(Res.string.compose_settings_page_account, Res.string.compose_settings_root_account_description, Icons.Rounded.AccountCircle, onAccountClick)
-            onSwitchProfileClick?.let { row(Res.string.compose_settings_root_switch_profile_title, Res.string.compose_settings_root_switch_profile_description, Icons.Rounded.People, it) }
-            onWatchPartyClick?.let { row(Res.string.party_title, Res.string.party_settings_description, Icons.Rounded.Groups, it) }
-        }
-        SettingsPage.Personalize -> {
-            row(Res.string.compose_settings_page_appearance, Res.string.compose_settings_root_appearance_description, Icons.Rounded.Palette, onAppearanceClick)
-            page(SettingsPage.Layout, Res.string.settings_layout_description, Icons.Rounded.Tune)
-        }
-        SettingsPage.WatchSettings -> {
-            row(Res.string.compose_settings_page_content_discovery, Res.string.compose_settings_root_content_discovery_description, Icons.Rounded.Extension, onContentDiscoveryClick)
-            row(Res.string.compose_settings_page_playback, Res.string.settings_playback_subtitle, Icons.Rounded.PlayArrow, onPlaybackClick)
-        }
-        SettingsPage.Services -> {
-            row(Res.string.compose_settings_page_integrations, Res.string.compose_settings_root_integrations_description, Icons.Rounded.Link, onIntegrationsClick)
-            row(Res.string.compose_settings_page_tracking, Res.string.compose_settings_root_tracking_description, Icons.Default.Sync, onTrackingClick)
-        }
-        SettingsPage.Anivio -> {
-            row(Res.string.compose_settings_root_downloads_title, Res.string.compose_settings_root_downloads_description, Icons.Rounded.CloudDownload, onDownloadsClick)
-        }
-        SettingsPage.SystemSettings -> {
-            row(Res.string.compose_settings_page_notifications, Res.string.compose_settings_root_notifications_description, Icons.Rounded.Notifications, onNotificationsClick)
-            row(Res.string.compose_settings_page_advanced, Res.string.compose_settings_root_advanced_description, Icons.Rounded.Tune, onAdvancedClick)
-        }
-        SettingsPage.AboutSettings -> {
-            page(SettingsPage.SupportersContributors, Res.string.settings_community_description, Icons.Rounded.People)
-            if (showAboutPage) row(Res.string.compose_settings_page_about, Res.string.about_page_subtitle, Icons.Rounded.Info, onAboutClick)
-            row(Res.string.compose_settings_page_privacy_policy, Res.string.compose_settings_root_privacy_policy_description, Icons.Rounded.Policy, onPrivacyPolicyClick)
-            row(Res.string.compose_settings_page_licenses_attributions, Res.string.about_licenses_attributions_subtitle, Icons.Rounded.Info, onLicensesAttributionsClick)
-            onCheckForUpdatesClick?.let { row(Res.string.compose_settings_root_check_updates_title, Res.string.compose_settings_root_check_updates_description, Icons.Rounded.CloudDownload, it) }
-            onTestUpdateBannerClick?.let { row(Res.string.updates_debug_test_title, Res.string.updates_debug_test_description, Icons.Rounded.BugReport, it) }
-        }
-        else -> Unit
-    }
-    item {
-        SettingsGroup(isTablet = isTablet) {
-            rows.forEachIndexed { index, row ->
-                if (index > 0) SettingsGroupDivider(isTablet = isTablet)
+    if (showGeneralSection) {
+        item {
+            SettingsGroup(isTablet) {
                 SettingsNavigationRow(
-                    title = stringResource(row.title),
-                    description = stringResource(row.description),
-                    icon = row.icon,
+                    title = stringResource(Res.string.compose_settings_page_appearance),
+                    description = stringResource(Res.string.compose_settings_root_appearance_description),
+                    icon = Icons.Rounded.Palette,
                     isTablet = isTablet,
-                    onClick = row.onClick,
+                    onClick = onAppearanceClick,
+                )
+                SettingsGroupDivider(isTablet)
+                SettingsNavigationRow(
+                    title = stringResource(Res.string.settings_page_layout),
+                    description = stringResource(Res.string.settings_page_layout_description),
+                    icon = Icons.Rounded.GridView,
+                    isTablet = isTablet,
+                    onClick = onLayoutClick,
                 )
             }
         }
-    }
-    if (sectionPage == SettingsPage.AboutSettings && com.nuvio.app.features.updater.AppUpdaterPlatform.isSupported) {
-        item { SettingsGroup(isTablet = isTablet) { UpdateChannelSettingsRow(isTablet) } }
-    }
-    if (sectionPage == SettingsPage.SystemSettings) {
         item {
-            SettingsGroup(isTablet = isTablet) {
-                SettingsSwitchRow(
-                    title = stringResource(Res.string.settings_incognito_mode_title),
-                    description = if (incognitoModeEnabled) "Active — progress, history, reading progress, and tracking updates are paused." else stringResource(Res.string.settings_incognito_mode_description),
-                    icon = Icons.Rounded.VisibilityOff,
-                    checked = incognitoModeEnabled,
+            SettingsGroup(isTablet) {
+                SettingsNavigationRow(
+                    title = stringResource(Res.string.compose_settings_page_content_discovery),
+                    description = stringResource(Res.string.compose_settings_root_content_discovery_description),
+                    icon = Icons.Rounded.Extension,
                     isTablet = isTablet,
+                    onClick = onContentDiscoveryClick,
+                )
+                SettingsGroupDivider(isTablet)
+                SettingsNavigationRow(
+                    title = stringResource(Res.string.compose_settings_page_playback),
+                    description = stringResource(Res.string.settings_playback_subtitle),
+                    icon = Icons.Rounded.PlayArrow,
+                    isTablet = isTablet,
+                    onClick = onPlaybackClick,
+                )
+            }
+        }
+        item {
+            SettingsGroup(isTablet) {
+                SettingsNavigationRow(
+                    title = stringResource(Res.string.compose_settings_page_integrations),
+                    description = stringResource(Res.string.compose_settings_root_integrations_description),
+                    icon = Icons.Rounded.Link,
+                    isTablet = isTablet,
+                    onClick = onIntegrationsClick,
+                )
+                SettingsGroupDivider(isTablet)
+                SettingsNavigationRow(
+                    title = stringResource(Res.string.compose_settings_page_tracking),
+                    description = stringResource(Res.string.compose_settings_root_tracking_description),
+                    icon = Icons.Default.Sync,
+                    isTablet = isTablet,
+                    onClick = onTrackingClick,
+                )
+            }
+        }
+        item {
+            val incognitoEnabled by remember {
+                IncognitoModeRepository.isEnabled()
+                IncognitoModeRepository.enabled
+            }.collectAsStateWithLifecycle()
+            val enabledMessage = stringResource(Res.string.settings_incognito_on)
+            val disabledMessage = stringResource(Res.string.settings_incognito_off)
+            SettingsGroup(isTablet) {
+                if (onDownloadsClick != null) {
+                    SettingsNavigationRow(
+                        title = stringResource(Res.string.compose_settings_root_downloads_title),
+                        description = stringResource(Res.string.compose_settings_root_downloads_description),
+                        icon = Icons.Rounded.CloudDownload,
+                        isTablet = isTablet,
+                        onClick = onDownloadsClick,
+                    )
+                    SettingsGroupDivider(isTablet)
+                }
+                SettingsSwitchRow(
+                    title = stringResource(Res.string.settings_incognito_title),
+                    description = stringResource(Res.string.settings_incognito_description),
+                    icon = Icons.Rounded.VisibilityOff,
+                    isTablet = isTablet,
+                    checked = incognitoEnabled,
                     onCheckedChange = { enabled ->
-                        onIncognitoModeChanged(enabled)
-                        NuvioToastController.show(if (enabled) "Incognito mode is on" else "Incognito mode is off")
+                        IncognitoModeRepository.setEnabled(enabled)
+                        NuvioToastController.show(if (enabled) enabledMessage else disabledMessage)
                     },
                 )
             }
         }
     }
+    if (showAdvancedSection) {
+        item {
+            SettingsGroup(isTablet) {
+                if (showNotificationsEntry) {
+                    SettingsNavigationRow(
+                        title = stringResource(Res.string.compose_settings_page_notifications),
+                        description = stringResource(Res.string.compose_settings_root_notifications_description),
+                        icon = Icons.Rounded.Notifications,
+                        isTablet = isTablet,
+                        onClick = onNotificationsClick,
+                    )
+                    SettingsGroupDivider(isTablet)
+                }
+                SettingsNavigationRow(
+                    title = stringResource(Res.string.compose_settings_page_advanced),
+                    description = stringResource(Res.string.compose_settings_root_advanced_description),
+                    icon = Icons.Rounded.Tune,
+                    isTablet = isTablet,
+                    onClick = onAdvancedClick,
+                )
+            }
+        }
+    }
+    if (showAboutSection) {
+        item {
+            SettingsSection(
+                title = stringResource(Res.string.compose_settings_root_about_section),
+                isTablet = isTablet,
+            ) {
+                SettingsGroup(isTablet = isTablet) {
+                    if (showAboutPage) {
+                        SettingsNavigationRow(
+                            title = stringResource(Res.string.compose_settings_page_about),
+                            description = stringResource(Res.string.about_page_subtitle),
+                            icon = Icons.Rounded.Info,
+                            isTablet = isTablet,
+                            onClick = onAboutClick,
+                        )
+                        SettingsGroupDivider(isTablet = isTablet)
+                    }
+                    SettingsNavigationRow(
+                        title = stringResource(Res.string.compose_settings_page_privacy_policy),
+                        description = stringResource(Res.string.compose_settings_root_privacy_policy_description),
+                        icon = Icons.Rounded.Policy,
+                        isTablet = isTablet,
+                        onClick = onPrivacyPolicyClick,
+                    )
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsNavigationRow(
+                        title = stringResource(Res.string.compose_settings_page_licenses_attributions),
+                        description = stringResource(Res.string.about_licenses_attributions_subtitle),
+                        icon = Icons.Rounded.Info,
+                        isTablet = isTablet,
+                        onClick = onLicensesAttributionsClick,
+                    )
+                    if (onCheckForUpdatesClick != null) {
+                        SettingsGroupDivider(isTablet = isTablet)
+                        UpdateChannelSettingsRow(isTablet = isTablet)
+                        SettingsGroupDivider(isTablet = isTablet)
+                        SettingsNavigationRow(
+                            title = stringResource(Res.string.compose_settings_root_check_updates_title),
+                            description = stringResource(Res.string.compose_settings_root_check_updates_description),
+                            icon = Icons.Rounded.CloudDownload,
+                            isTablet = isTablet,
+                            onClick = onCheckForUpdatesClick,
+                        )
+                    }
+                    if (onTestUpdateBannerClick != null) {
+                        SettingsGroupDivider(isTablet = isTablet)
+                        SettingsNavigationRow(
+                            title = stringResource(Res.string.updates_debug_test_title),
+                            description = stringResource(Res.string.updates_debug_test_description),
+                            icon = Icons.Rounded.BugReport,
+                            isTablet = isTablet,
+                            onClick = onTestUpdateBannerClick,
+                        )
+                    }
+                }
+            }
+        }
+    }
+    if (showAttribution) {
+        item(key = "settings-attribution") {
+            SettingsAttribution(isTablet = isTablet)
+        }
+    }
 }
-
-private data class SettingsHubRow(
-    val title: StringResource,
-    val description: StringResource,
-    val icon: ImageVector,
-    val onClick: () -> Unit,
-)

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
@@ -16,11 +17,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nuvio.app.isDesktop
 import com.nuvio.app.core.ui.floatingNavigationGlowSupported
 import com.nuvio.app.core.ui.AppTheme
 import com.nuvio.app.isIos
@@ -31,10 +34,12 @@ import com.nuvio.app.core.ui.dismissNuvioBottomSheet
 import com.nuvio.app.core.ui.labelRes
 import kotlinx.coroutines.launch
 import nuvio.composeapp.generated.resources.Res
+import nuvio.composeapp.generated.resources.settings_page_navigation
 import nuvio.composeapp.generated.resources.cd_selected
 import nuvio.composeapp.generated.resources.collections_header
 import nuvio.composeapp.generated.resources.compose_settings_page_continue_watching
 import nuvio.composeapp.generated.resources.compose_settings_page_homescreen
+import nuvio.composeapp.generated.resources.compose_settings_page_hover_preview
 import nuvio.composeapp.generated.resources.compose_settings_page_meta_screen
 import nuvio.composeapp.generated.resources.compose_settings_page_poster_customization
 import nuvio.composeapp.generated.resources.compose_settings_page_streams
@@ -42,12 +47,21 @@ import nuvio.composeapp.generated.resources.settings_appearance_app_language
 import nuvio.composeapp.generated.resources.settings_appearance_app_language_sheet_title
 import nuvio.composeapp.generated.resources.settings_appearance_app_icon
 import nuvio.composeapp.generated.resources.settings_appearance_nav_bar_style
+import nuvio.composeapp.generated.resources.settings_appearance_sidebar_style
+import nuvio.composeapp.generated.resources.settings_appearance_top_bar_style
+import nuvio.composeapp.generated.resources.settings_appearance_nav_bar_style_sheet_title
+import nuvio.composeapp.generated.resources.settings_appearance_sidebar_style_sheet_title
+import nuvio.composeapp.generated.resources.settings_appearance_top_bar_style_sheet_title
 import nuvio.composeapp.generated.resources.settings_nav_bar_glow_on
 import nuvio.composeapp.generated.resources.settings_nav_bar_glow_off
 import nuvio.composeapp.generated.resources.settings_nav_bar_summary
 import nuvio.composeapp.generated.resources.settings_appearance_amoled_black
 import nuvio.composeapp.generated.resources.settings_appearance_amoled_description
 import nuvio.composeapp.generated.resources.settings_appearance_continue_watching_description
+import nuvio.composeapp.generated.resources.settings_appearance_desktop_navigation
+import nuvio.composeapp.generated.resources.settings_appearance_desktop_navigation_top_bar
+import nuvio.composeapp.generated.resources.settings_appearance_desktop_navigation_sheet_title
+import nuvio.composeapp.generated.resources.settings_appearance_hover_preview_description
 import nuvio.composeapp.generated.resources.settings_appearance_liquid_glass
 import nuvio.composeapp.generated.resources.settings_appearance_liquid_glass_description
 import nuvio.composeapp.generated.resources.settings_appearance_poster_customization_description
@@ -88,43 +102,111 @@ internal fun LazyListScope.appearanceSettingsContent(
     onCollectionsClick: () -> Unit,
     onContinueWatchingClick: () -> Unit,
     onPosterCustomizationClick: () -> Unit,
+    onHoverPreviewClick: () -> Unit,
 ) {
     if (!layoutOnly) {
-    item {
-        SettingsSection(
-            title = stringResource(Res.string.settings_appearance_section_theme),
-            isTablet = isTablet,
-        ) {
-            SettingsGroup(isTablet = isTablet) {
-                AppearanceThemePicker(
-                    isTablet = isTablet,
-                    selectedTheme = selectedTheme,
-                    onThemeSelected = onThemeSelected,
-                )
+        item {
+            SettingsSection(
+                title = stringResource(Res.string.settings_appearance_section_theme),
+                isTablet = isTablet,
+            ) {
+                SettingsGroup(isTablet = isTablet) {
+                    AppearanceThemePicker(
+                        isTablet = isTablet,
+                        selectedTheme = selectedTheme,
+                        onThemeSelected = onThemeSelected,
+                    )
+                }
             }
         }
+        item {
+            var showLanguageSheet by rememberSaveable { mutableStateOf(false) }
+            var showAppIconPicker by rememberSaveable { mutableStateOf(false) }
+            SettingsSection(
+                title = stringResource(Res.string.settings_appearance_section_display),
+                isTablet = isTablet,
+            ) {
+                SettingsGroup(isTablet = isTablet) {
+                    SettingsSwitchRow(
+                        title = stringResource(Res.string.settings_appearance_amoled_black),
+                        description = stringResource(Res.string.settings_appearance_amoled_description),
+                        checked = amoledEnabled,
+                        isTablet = isTablet,
+                        onCheckedChange = onAmoledToggle,
+                    )
+                    if (AppIconPlatform.isSupported) {
+                        SettingsGroupDivider(isTablet = isTablet)
+                        SettingsNavigationRow(
+                            title = stringResource(Res.string.settings_appearance_app_icon),
+                            description = stringResource(appIconState.selected.labelResource),
+                            enabled = appIconState.pending == null,
+                            isTablet = isTablet,
+                            trailingContent = {
+                                AppIconThumbnail(
+                                    icon = appIconState.selected,
+                                    modifier = Modifier.size(if (isTablet) 44.dp else 40.dp),
+                                    cornerRadius = if (isTablet) 11.dp else 10.dp,
+                                )
+                            },
+                            onClick = {
+                                onAppIconFailureDismissed()
+                                showAppIconPicker = true
+                            },
+                        )
+                    }
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsNavigationRow(
+                        title = stringResource(Res.string.settings_appearance_app_language),
+                        description = stringResource(selectedAppLanguage.labelRes),
+                        isTablet = isTablet,
+                        onClick = { showLanguageSheet = true },
+                    )
+                }
+            }
+
+            if (showLanguageSheet) {
+                AppearanceLanguageBottomSheet(
+                    selectedLanguage = selectedAppLanguage,
+                    onLanguageSelected = {
+                        onAppLanguageSelected(it)
+                        showLanguageSheet = false
+                    },
+                    onDismiss = { showLanguageSheet = false },
+                )
+            }
+
+            if (showAppIconPicker) {
+                AppIconPicker(
+                    isTablet = isTablet,
+                    state = appIconState,
+                    onSelected = onAppIconSelected,
+                    onDismiss = {
+                        onAppIconFailureDismissed()
+                        showAppIconPicker = false
+                    },
+                )
+            }
+
+        }
+        return
     }
+
     item {
-        var showLanguageSheet by remember { mutableStateOf(false) }
-        var showNavBarStyleSheet by remember { mutableStateOf(false) }
-        var showAppIconPicker by remember { mutableStateOf(false) }
+        var showDesktopNavigationSheet by rememberSaveable { mutableStateOf(false) }
+        val desktopNavigationLayout by remember {
+            ThemeSettingsRepository.ensureLoaded()
+            ThemeSettingsRepository.desktopNavigationLayout
+        }.collectAsStateWithLifecycle()
+        var showNavBarStyleSheet by rememberSaveable { mutableStateOf(false) }
         val navBarStyleAvailable = !isIos
         val glowEnabled by ThemeSettingsRepository.navBarGlowEnabled.collectAsStateWithLifecycle()
         val effectiveNavBarStyle = if (isTablet) NavBarStyle.COMPACT else selectedNavBarStyle
         SettingsSection(
-            title = stringResource(Res.string.settings_appearance_section_display),
+            title = stringResource(Res.string.settings_page_navigation),
             isTablet = isTablet,
         ) {
             SettingsGroup(isTablet = isTablet) {
-                SettingsSwitchRow(
-                    title = stringResource(Res.string.settings_appearance_amoled_black),
-                    description = stringResource(Res.string.settings_appearance_amoled_description),
-                    checked = amoledEnabled,
-                    isTablet = isTablet,
-                    onCheckedChange = onAmoledToggle,
-                )
                 if (liquidGlassNativeTabBarSupported) {
-                    SettingsGroupDivider(isTablet = isTablet)
                     SettingsSwitchRow(
                         title = stringResource(Res.string.settings_appearance_liquid_glass),
                         description = stringResource(Res.string.settings_appearance_liquid_glass_description),
@@ -133,112 +215,90 @@ internal fun LazyListScope.appearanceSettingsContent(
                         onCheckedChange = onLiquidGlassNativeTabBarToggle,
                     )
                 }
-                SettingsGroupDivider(isTablet = isTablet)
-                SettingsNavigationRow(
-                    title = stringResource(Res.string.settings_appearance_app_icon),
-                    description = stringResource(appIconState.selected.labelResource),
-                    enabled = appIconState.pending == null,
-                    isTablet = isTablet,
-                    trailingContent = {
-                        AppIconThumbnail(
-                            icon = appIconState.selected,
-                            modifier = Modifier.size(if (isTablet) 44.dp else 40.dp),
-                            cornerRadius = if (isTablet) 11.dp else 10.dp,
-                        )
-                    },
-                    onClick = {
-                        onAppIconFailureDismissed()
-                        showAppIconPicker = true
-                    },
-                )
-                SettingsGroupDivider(isTablet = isTablet)
-                SettingsNavigationRow(
-                    title = stringResource(Res.string.settings_appearance_app_language),
-                    description = stringResource(selectedAppLanguage.labelRes),
-                    isTablet = isTablet,
-                    onClick = { showLanguageSheet = true },
-                )
-                if (navBarStyleAvailable) {
-                    SettingsGroupDivider(isTablet = isTablet)
+                if (isDesktop) {
+                    if (liquidGlassNativeTabBarSupported) SettingsGroupDivider(isTablet = isTablet)
+                    val desktopNavDescription = if (isTablet) {
+                        stringResource(desktopNavigationLayout.labelRes)
+                    } else {
+                        stringResource(Res.string.settings_appearance_desktop_navigation_top_bar)
+                    }
                     SettingsNavigationRow(
-                        title = stringResource(Res.string.settings_appearance_nav_bar_style),
-                        description = if (floatingNavigationGlowSupported && effectiveNavBarStyle != NavBarStyle.CLASSIC) {
-                            stringResource(
-                                Res.string.settings_nav_bar_summary,
-                                stringResource(effectiveNavBarStyle.labelRes),
-                                stringResource(if (glowEnabled) Res.string.settings_nav_bar_glow_on else Res.string.settings_nav_bar_glow_off),
-                            )
-                        } else {
-                            stringResource(effectiveNavBarStyle.labelRes)
+                        title = stringResource(Res.string.settings_appearance_desktop_navigation),
+                        description = desktopNavDescription,
+                        isTablet = isTablet,
+                        onClick = {
+                            if (isTablet) {
+                                showDesktopNavigationSheet = true
+                            }
                         },
+                    )
+                }
+                if (!isIos) {
+                    if (isDesktop || liquidGlassNativeTabBarSupported) SettingsGroupDivider(isTablet = isTablet)
+                    val isSidebarActive = isDesktop && isTablet && desktopNavigationLayout == DesktopNavigationLayout.Sidebar
+                    val styleTitle = if (isSidebarActive) {
+                        stringResource(Res.string.settings_appearance_sidebar_style)
+                    } else if (isDesktop) {
+                        stringResource(Res.string.settings_appearance_top_bar_style)
+                    } else {
+                        stringResource(Res.string.settings_appearance_nav_bar_style)
+                    }
+                    val styleDescription = stringResource(selectedNavBarStyle.labelRes)
+                    SettingsNavigationRow(
+                        title = styleTitle,
+                        description = styleDescription,
                         isTablet = isTablet,
                         onClick = { showNavBarStyleSheet = true },
+                    )
+                }
+                if (isDesktop) {
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsNavigationRow(
+                        title = stringResource(Res.string.compose_settings_page_hover_preview),
+                        description = stringResource(Res.string.settings_appearance_hover_preview_description),
+                        isTablet = isTablet,
+                        onClick = onHoverPreviewClick,
                     )
                 }
             }
         }
 
-        if (showLanguageSheet) {
-            AppearanceLanguageBottomSheet(
-                selectedLanguage = selectedAppLanguage,
-                onLanguageSelected = {
-                    onAppLanguageSelected(it)
-                    showLanguageSheet = false
+        if (showDesktopNavigationSheet) {
+            DesktopNavigationLayoutBottomSheet(
+                selectedLayout = desktopNavigationLayout,
+                onLayoutSelected = {
+                    ThemeSettingsRepository.setDesktopNavigationLayout(it)
+                    showDesktopNavigationSheet = false
                 },
-                onDismiss = { showLanguageSheet = false },
+                onDismiss = { showDesktopNavigationSheet = false },
             )
         }
 
-        if (showAppIconPicker) {
-            AppIconPicker(
-                isTablet = isTablet,
-                state = appIconState,
-                onSelected = onAppIconSelected,
-                onDismiss = {
-                    onAppIconFailureDismissed()
-                    showAppIconPicker = false
-                },
-            )
-        }
-
-        if (navBarStyleAvailable && showNavBarStyleSheet) {
-            NavigationBarSettingsSheet(
-                isTablet = isTablet,
-                selectedStyle = effectiveNavBarStyle,
-                onStyleSelected = onNavBarStyleSelected,
-                glowEnabled = glowEnabled,
-                onGlowChanged = ThemeSettingsRepository::setNavBarGlowEnabled,
-                onDismiss = { showNavBarStyleSheet = false },
-            )
+        if (showNavBarStyleSheet) {
+            if (isDesktop) {
+                NavBarStyleBottomSheet(
+                    selectedStyle = selectedNavBarStyle,
+                    isTablet = isTablet,
+                    desktopNavigationLayout = desktopNavigationLayout,
+                    onStyleSelected = {
+                        onNavBarStyleSelected(it)
+                        showNavBarStyleSheet = false
+                    },
+                    onDismiss = { showNavBarStyleSheet = false },
+                )
+            } else if (navBarStyleAvailable) {
+                NavigationBarSettingsSheet(
+                    isTablet = isTablet,
+                    selectedStyle = effectiveNavBarStyle,
+                    onStyleSelected = onNavBarStyleSelected,
+                    glowEnabled = glowEnabled,
+                    onGlowChanged = ThemeSettingsRepository::setNavBarGlowEnabled,
+                    onDismiss = { showNavBarStyleSheet = false },
+                )
+            }
         }
     }
 
-    }
-    if (layoutOnly) {
-    item {
-        var showNavigation by remember { mutableStateOf(false) }
-        val glowEnabled by ThemeSettingsRepository.navBarGlowEnabled.collectAsStateWithLifecycle()
-        SettingsGroup(isTablet = isTablet) {
-            if (!isIos) SettingsNavigationRow(
-                title = stringResource(Res.string.settings_appearance_nav_bar_style),
-                description = stringResource(selectedNavBarStyle.labelRes),
-                isTablet = isTablet,
-                onClick = { showNavigation = true },
-            )
-            if (liquidGlassNativeTabBarSupported) SettingsSwitchRow(
-                title = stringResource(Res.string.settings_appearance_liquid_glass),
-                description = stringResource(Res.string.settings_appearance_liquid_glass_description),
-                checked = liquidGlassNativeTabBarEnabled, isTablet = isTablet,
-                onCheckedChange = onLiquidGlassNativeTabBarToggle,
-            )
-        }
-        if (showNavigation) NavigationBarSettingsSheet(
-            isTablet = isTablet, selectedStyle = if (isTablet) NavBarStyle.COMPACT else selectedNavBarStyle,
-            onStyleSelected = onNavBarStyleSelected, glowEnabled = glowEnabled,
-            onGlowChanged = ThemeSettingsRepository::setNavBarGlowEnabled,
-            onDismiss = { showNavigation = false },
-        )
-    }
     item {
         SettingsSection(
             title = stringResource(Res.string.settings_appearance_section_home),
@@ -305,6 +365,65 @@ internal fun LazyListScope.appearanceSettingsContent(
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DesktopNavigationLayoutBottomSheet(
+    selectedLayout: DesktopNavigationLayout,
+    onLayoutSelected: (DesktopNavigationLayout) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val coroutineScope = rememberCoroutineScope()
+
+    NuvioModalBottomSheet(
+        onDismissRequest = {
+            coroutineScope.launch {
+                dismissNuvioBottomSheet(sheetState = sheetState, onDismiss = onDismiss)
+            }
+        },
+        sheetState = sheetState,
+    ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+        ) {
+            item {
+                Text(
+                    text = stringResource(Res.string.settings_appearance_desktop_navigation_sheet_title),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                )
+            }
+
+            itemsIndexed(DesktopNavigationLayout.entries) { index, layout ->
+                if (index > 0) {
+                    NuvioBottomSheetDivider()
+                }
+                NuvioBottomSheetActionRow(
+                    title = stringResource(layout.labelRes),
+                    onClick = {
+                        onLayoutSelected(layout)
+                        coroutineScope.launch {
+                            dismissNuvioBottomSheet(sheetState = sheetState, onDismiss = onDismiss)
+                        }
+                    },
+                    trailingContent = {
+                        if (layout == selectedLayout) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = stringResource(Res.string.cd_selected),
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    },
+                )
+            }
+        }
     }
 }
 
@@ -354,12 +473,10 @@ private fun AppearanceLanguageBottomSheet(
                 )
             }
 
-            itemsIndexed(options) { index, option ->
-                if (index > 0) {
-                    NuvioBottomSheetDivider()
-                }
+            items(options) { option ->
                 NuvioBottomSheetActionRow(
                     title = stringResource(option.labelRes),
+                    selected = option.language == selectedLanguage,
                     onClick = {
                         onLanguageSelected(option.language)
                         coroutineScope.launch {
@@ -380,3 +497,81 @@ private fun AppearanceLanguageBottomSheet(
         }
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NavBarStyleBottomSheet(
+    selectedStyle: NavBarStyle,
+    isTablet: Boolean = true,
+    desktopNavigationLayout: DesktopNavigationLayout = DesktopNavigationLayout.Default,
+    onStyleSelected: (NavBarStyle) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val coroutineScope = rememberCoroutineScope()
+    val isSidebarActive = isDesktop && isTablet && desktopNavigationLayout == DesktopNavigationLayout.Sidebar
+    val availableStyles = remember(isDesktop, isTablet) {
+        when {
+            isDesktop -> listOf(NavBarStyle.ADAPTIVE, NavBarStyle.EXPANDED, NavBarStyle.COMPACT)
+            isIos -> NavBarStyle.entries.filter { it != NavBarStyle.CLASSIC }
+            else -> NavBarStyle.entries
+        }
+    }
+
+    NuvioModalBottomSheet(
+        onDismissRequest = {
+            coroutineScope.launch {
+                dismissNuvioBottomSheet(sheetState = sheetState, onDismiss = onDismiss)
+            }
+        },
+        sheetState = sheetState,
+    ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+        ) {
+            item {
+                Text(
+                    text = if (isSidebarActive) {
+                        stringResource(Res.string.settings_appearance_sidebar_style_sheet_title)
+                    } else if (isDesktop) {
+                        stringResource(Res.string.settings_appearance_top_bar_style_sheet_title)
+                    } else {
+                        stringResource(Res.string.settings_appearance_nav_bar_style_sheet_title)
+                    },
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                )
+            }
+
+            itemsIndexed(availableStyles) { index, style ->
+                if (index > 0) {
+                    NuvioBottomSheetDivider()
+                }
+                val rowTitle = stringResource(style.labelRes)
+                NuvioBottomSheetActionRow(
+                    title = rowTitle,
+                    onClick = {
+                        onStyleSelected(style)
+                        coroutineScope.launch {
+                            dismissNuvioBottomSheet(sheetState = sheetState, onDismiss = onDismiss)
+                        }
+                    },
+                    trailingContent = {
+                        if (style == selectedStyle) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = stringResource(Res.string.cd_selected),
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    },
+                )
+            }
+        }
+    }
+}
+

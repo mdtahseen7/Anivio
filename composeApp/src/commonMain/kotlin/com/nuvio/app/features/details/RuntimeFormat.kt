@@ -1,11 +1,5 @@
 package com.nuvio.app.features.details
 
-import kotlinx.coroutines.runBlocking
-import nuvio.composeapp.generated.resources.Res
-import nuvio.composeapp.generated.resources.details_runtime_hours_minutes
-import nuvio.composeapp.generated.resources.details_runtime_hours_only
-import nuvio.composeapp.generated.resources.details_runtime_minutes_only
-import org.jetbrains.compose.resources.getString
 
 private val hourTokenRegex = Regex("""(?i)(\d+)\s*h(?:ours?)?""")
 private val minuteTokenRegex = Regex("""(?i)(\d+)\s*m(?:in(?:ute)?s?)?""")
@@ -23,16 +17,18 @@ internal fun formatRuntimeFromMinutes(totalMinutes: Int): String {
     val hours = totalMinutes / 60
     val minutes = totalMinutes % 60
 
-    return runBlocking {
-        when {
-            hours > 0 && minutes > 0 -> getString(Res.string.details_runtime_hours_minutes, hours, minutes)
-            hours > 0 -> getString(Res.string.details_runtime_hours_only, hours)
-            else -> getString(Res.string.details_runtime_minutes_only, minutes)
-        }
+    // Plain templates: the resource loader is suspending, and wrapping it
+    // in a blocking call blocks a dispatcher worker (deadlock risk).
+    // Verified English formats: "%1$dh %2$dm", "%1$dh", "%1$dm".
+    return when {
+        hours > 0 && minutes > 0 -> "${hours}h ${minutes}m"
+        hours > 0 -> "${hours}h"
+        else -> "${minutes}m"
     }
 }
 
-private fun parseRuntimeMinutes(value: String): Int? {
+internal fun parseRuntimeMinutes(rawRuntime: String?): Int? {
+    val value = rawRuntime?.trim()?.takeIf(String::isNotBlank) ?: return null
     hourMinuteColonRegex.matchEntire(value)?.let { match ->
         val hours = match.groupValues[1].toIntOrNull() ?: return null
         val minutes = match.groupValues[2].toIntOrNull() ?: return null

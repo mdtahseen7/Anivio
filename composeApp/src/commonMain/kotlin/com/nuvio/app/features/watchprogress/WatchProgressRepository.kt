@@ -1,6 +1,7 @@
 package com.nuvio.app.features.watchprogress
 
 import co.touchlab.kermit.Logger
+import com.nuvio.app.features.settings.IncognitoModeRepository
 import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
 import com.nuvio.app.core.network.NetworkStatusRepository
@@ -23,7 +24,6 @@ import com.nuvio.app.features.tracking.WatchProgressSource
 import com.nuvio.app.features.tracking.effectiveWatchProgressSource
 import com.nuvio.app.features.tracking.providerId
 import com.nuvio.app.features.watching.application.WatchingActions
-import com.nuvio.app.features.settings.IncognitoModeRepository
 import com.nuvio.app.features.watching.sync.ProgressDeltaEvent
 import com.nuvio.app.features.watching.sync.ProgressSyncRecord
 import com.nuvio.app.features.watching.sync.ProgressSyncAdapter
@@ -311,7 +311,6 @@ object WatchProgressRepository {
     }
 
     fun ensureLoaded() {
-        IncognitoModeRepository.ensureLoaded()
         ensureTrackingProvidersRegistered()
         TrackingProviderRegistry.ensureLoaded()
         TrackingSettingsRepository.ensureLoaded()
@@ -372,11 +371,6 @@ object WatchProgressRepository {
         providerMetadataOverlay.clear()
         clearLocalEntries()
 
-        if (IncognitoModeRepository.enabled.value) {
-            publish()
-            return
-        }
-
         val payload = WatchProgressStorage.loadPayload(profileId).orEmpty().trim()
         if (payload.isNotEmpty()) {
             val storedPayload = WatchProgressCodec.decodePayload(payload)
@@ -420,8 +414,6 @@ object WatchProgressRepository {
     ): Boolean = isActiveOperation(profileId, generation) && activeSource == source
 
     suspend fun pullFromServer(profileId: Int) {
-        IncognitoModeRepository.ensureLoaded()
-        if (IncognitoModeRepository.enabled.value) return
         refreshForSource(
             profileId = profileId,
             source = activeSource,
@@ -1153,8 +1145,8 @@ object WatchProgressRepository {
         snapshot: PlayerPlaybackSnapshot,
         syncRemote: Boolean = true,
     ) {
+        if (IncognitoModeRepository.isEnabled()) return
         ensureLoaded()
-        if (IncognitoModeRepository.enabled.value) return
         upsert(session = session, snapshot = snapshot, persist = true, syncRemote = syncRemote)
     }
 
@@ -1163,8 +1155,8 @@ object WatchProgressRepository {
         snapshot: PlayerPlaybackSnapshot,
         syncRemote: Boolean = true,
     ) {
+        if (IncognitoModeRepository.isEnabled()) return
         ensureLoaded()
-        if (IncognitoModeRepository.enabled.value) return
         upsert(session = session, snapshot = snapshot, persist = true, syncRemote = syncRemote)
     }
 
@@ -1443,7 +1435,6 @@ object WatchProgressRepository {
     }
 
     private fun pushScrobbleToServer(entry: WatchProgressEntry, profileId: Int) {
-        if (IncognitoModeRepository.enabled.value) return
         val operationGeneration = profileGeneration.takeIf { profileId == currentProfileId }
         accountScopeSnapshot().launch {
             runCatching {
@@ -1485,7 +1476,6 @@ object WatchProgressRepository {
     }
 
     private fun persist() {
-        if (IncognitoModeRepository.enabled.value) return
         WatchProgressStorage.savePayload(
             currentProfileId,
             WatchProgressCodec.encodePayload(

@@ -21,11 +21,6 @@ import com.nuvio.app.navigation.EntityBrowseRoute
 import com.nuvio.app.navigation.NuvioNavigator
 import com.nuvio.app.navigation.PersonDetailRoute
 import kotlinx.coroutines.launch
-import nuvio.composeapp.generated.resources.Res
-import nuvio.composeapp.generated.resources.person_role_creator
-import nuvio.composeapp.generated.resources.person_role_director
-import nuvio.composeapp.generated.resources.person_role_writer
-import org.jetbrains.compose.resources.stringResource
 
 internal typealias ContentPlayAction = (
     type: String,
@@ -45,18 +40,19 @@ internal typealias ContentPlayAction = (
 ) -> Unit
 
 @Composable
-private fun rememberOpenMeta(navController: NuvioNavigator): (MetaPreview) -> Unit {
+internal fun rememberOpenMeta(navController: NuvioNavigator): (MetaPreview) -> Unit {
     val scope = rememberCoroutineScope()
     return { preview ->
         scope.launch {
             val resolvedId = if (preview.id.startsWith("tmdb:")) {
                 val tmdbId = preview.id.removePrefix("tmdb:").toIntOrNull()
-                tmdbId?.let {
+                val resolved = tmdbId?.let {
                     TmdbService.tmdbToImdb(
                         tmdbId = it,
                         mediaType = preview.type,
                     )
                 } ?: preview.id
+                resolved
             } else {
                 preview.id
             }
@@ -108,9 +104,17 @@ internal fun DetailsDestination(
 ) {
     val onBack = rememberGuardedPopBackStack(navController, route)
     val onOpenMeta = rememberOpenMeta(navController)
-    val directorRole = stringResource(Res.string.person_role_director)
-    val writerRole = stringResource(Res.string.person_role_writer)
-    val creatorRole = stringResource(Res.string.person_role_creator)
+    // Role labels are only compared against TMDB role names (which arrive in
+    // English for this locale; the English-literal checks below already cover
+    // them). Do NOT use stringResource() here: it blocks the UI thread with
+    // runBlocking to load the string, and when the DefaultDispatcher workers
+    // are occupied by hanging metadata fetches (dual-core: only 2 workers),
+    // the load coroutine can never run -> the UI thread parks forever and
+    // the app freezes the instant a details page opens. Plain literals never
+    // block.
+    val directorRole = "Director"
+    val writerRole = "Writer"
+    val creatorRole = "Creator"
     MetaDetailsScreen(
         type = route.type,
         id = route.id,

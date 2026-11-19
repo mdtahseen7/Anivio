@@ -1,5 +1,6 @@
 package com.nuvio.app.features.settings
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -18,9 +19,6 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
@@ -32,10 +30,7 @@ import com.nuvio.app.core.build.AppVersionConfig
 import com.nuvio.app.core.ui.NuvioScreen
 import com.nuvio.app.core.ui.NuvioScreenHeader
 import com.nuvio.app.core.ui.NuvioSurfaceCard
-import com.nuvio.app.features.discord.DiscordAuth
-import com.nuvio.app.features.discord.DiscordUser
 import coil3.compose.AsyncImage
-import kotlinx.coroutines.delay
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
 
@@ -58,25 +53,18 @@ fun AboutSettingsScreen(
 
 internal fun LazyListScope.aboutContent(
     isTablet: Boolean,
+    onCommunityClick: (() -> Unit)? = null,
 ) {
     item {
-        AboutBody(isTablet = isTablet)
+        AboutBody(isTablet = isTablet, onCommunityClick = onCommunityClick)
     }
 }
 
 @Composable
 private fun AboutBody(
     isTablet: Boolean,
+    onCommunityClick: (() -> Unit)?,
 ) {
-    val ownerProfile = remember { mutableStateOf<DiscordUser?>(null) }
-    LaunchedEffect(Unit) {
-        DiscordAuth.ensureLoaded()
-        while (true) {
-            ownerProfile.value = DiscordAuth.fetchUser(DISCORD_OWNER_ID)
-                ?: DiscordAuth.uiState.value.user?.takeIf { it.id == DISCORD_OWNER_ID }
-            delay(DISCORD_OWNER_REFRESH_INTERVAL_MS)
-        }
-    }
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(if (isTablet) 28.dp else 24.dp),
@@ -86,11 +74,9 @@ private fun AboutBody(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(
-                    text = stringResource(Res.string.about_app_name),
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = FontWeight.Bold,
+                AppBrandWordmark(
+                    contentDescription = stringResource(Res.string.about_app_name),
+                    modifier = Modifier.width(170.dp),
                 )
                 Text(
                     text = stringResource(
@@ -109,12 +95,22 @@ private fun AboutBody(
             }
         }
 
-        CreatorSpotlight(owner = ownerProfile.value)
+        CreatorSpotlight()
+        if (onCommunityClick != null) {
+            SettingsGroup(isTablet = isTablet) {
+                SettingsNavigationRow(
+                    title = stringResource(Res.string.settings_page_community),
+                    description = stringResource(Res.string.settings_community_description),
+                    isTablet = isTablet,
+                    onClick = onCommunityClick,
+                )
+            }
+        }
     }
 }
 
 @Composable
-private fun CreatorSpotlight(owner: DiscordUser?) {
+private fun CreatorSpotlight() {
     val colors = MaterialTheme.colorScheme
     val shape = RoundedCornerShape(28.dp)
     Box(
@@ -141,24 +137,23 @@ private fun CreatorSpotlight(owner: DiscordUser?) {
                         .border(2.dp, colors.primary.copy(alpha = 0.72f), CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
-                    owner?.avatarUrl?.let { avatarUrl ->
-                        AsyncImage(
-                            model = avatarUrl,
-                            contentDescription = "Anivio creator profile picture",
-                            modifier = Modifier.size(78.dp).clip(CircleShape),
-                            contentScale = ContentScale.Crop,
-                        )
-                    } ?: Text(
+                    Text(
                         text = "MT",
                         style = MaterialTheme.typography.titleLarge,
                         color = colors.primary,
                         fontWeight = FontWeight.Bold,
                     )
+                    AsyncImage(
+                        model = "https://github.com/mdtahseen7.png?size=160",
+                        contentDescription = "Anivio creator profile picture",
+                        modifier = Modifier.size(78.dp).clip(CircleShape),
+                        contentScale = ContentScale.Crop,
+                    )
                 }
                 Spacer(modifier = Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(
-                        text = owner?.globalName ?: owner?.username ?: "Md Tahseen Hussain",
+                        text = "Md Tahseen Hussain",
                         style = MaterialTheme.typography.titleLarge,
                         color = colors.onSurface,
                         fontWeight = FontWeight.Bold,
@@ -179,6 +174,3 @@ private fun CreatorSpotlight(owner: DiscordUser?) {
         }
     }
 }
-
-private const val DISCORD_OWNER_ID = "1015817994292711608"
-private const val DISCORD_OWNER_REFRESH_INTERVAL_MS = 5 * 60 * 1_000L

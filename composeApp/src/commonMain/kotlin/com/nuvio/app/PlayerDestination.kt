@@ -12,8 +12,9 @@ import com.nuvio.app.features.player.ExternalPlayerPlatform
 import com.nuvio.app.features.player.PlayerLaunch
 import com.nuvio.app.features.player.PlayerLaunchStore
 import com.nuvio.app.features.player.PlayerScreen
-import com.nuvio.app.features.party.PartyMedia
 import com.nuvio.app.features.watchprogress.ResumePromptRepository
+import com.nuvio.app.features.party.PartyMedia
+import com.nuvio.app.features.player.PlayerReleaseBeforeBack
 import com.nuvio.app.navigation.NuvioNavigator
 import com.nuvio.app.navigation.PlayerRoute
 
@@ -27,16 +28,39 @@ internal fun PlayerDestination(
     onExternalPlayerLaunch: (PlayerLaunch) -> Unit,
     launchExternalPlayer: (ExternalPlayerIntentResult.Success) -> Boolean,
     openExternalStreamUrl: (String) -> Boolean,
-    onOpenPartyMedia: (PartyMedia) -> Unit = {},
+    onSystemBackHandlerChanged: (PlayerRoute, (() -> Unit)?) -> Unit,
+    onOpenPartyMedia: (PartyMedia) -> Unit,
 ) {
-    val onBack = rememberGuardedPopBackStack(navController, route)
+    val popBack = rememberGuardedPopBackStack(
+        navController = navController,
+        route = route,
+        beforePop = ResumePromptRepository::markPlayerExitedNormally,
+    )
     val launch = remember(route.launchId) { PlayerLaunchStore.get(route.launchId) }
     if (launch == null) {
         LaunchedEffect(route.launchId) {
-            onBack()
+            popBack()
         }
         Box(modifier = Modifier.fillMaxSize())
         return
+    }
+    val currentFullscreen = com.nuvio.app.core.ui.isFullscreenActionActive()
+    val initialFullscreen = remember { currentFullscreen }
+    val onBackBase = rememberGuardedPlayerPopBackStack(
+        navController = navController,
+        route = route,
+        beforePop = ResumePromptRepository::markPlayerExitedNormally,
+    )
+    val onBack = remember(onBackBase, initialFullscreen, currentFullscreen) {
+        { releaseBeforeBack: com.nuvio.app.features.player.PlayerReleaseBeforeBack ->
+            if (currentFullscreen != initialFullscreen) {
+                com.nuvio.app.core.ui.toggleFullscreenAction()
+            }
+            onBackBase(releaseBeforeBack)
+        }
+    }
+    val registerSystemBack = remember(route, onSystemBackHandlerChanged) {
+        { handler: (() -> Unit)? -> onSystemBackHandlerChanged(route, handler) }
     }
     LaunchedEffect(launch.videoId) {
         launch.videoId?.let { ResumePromptRepository.markPlayerEntered(it) }
@@ -74,8 +98,21 @@ internal fun PlayerDestination(
         initialPositionMs = launch.initialPositionMs,
         initialProgressFraction = launch.initialProgressFraction,
         contentLanguage = launch.contentLanguage,
+        launchId = route.launchId,
         onBack = onBack,
-        onOpenInExternalPlayer = { request ->
+        onSystemBackHandlerChanged = registerSystemBack,
+        onOpenPartyMedia = { media, release ->
+            onBack { afterRelease, releaseFailed ->
+                release(
+                    {
+                        afterRelease()
+                        if (navController.currentRoute != route) onOpenPartyMedia(media)
+                    },
+                    releaseFailed,
+                )
+            }
+        },
+        onOpenInExternalPlayer = if (externalPlayerSupported) { { request ->
             val playerLaunch = PlayerLaunch(
                 profileId = launch.profileId,
                 title = launch.title,
@@ -110,6 +147,8 @@ internal fun PlayerDestination(
                     val launched = launchExternalPlayer(intentResult)
                     if (!launched) {
                         NuvioToastController.show(externalPlayerFailedText)
+                    } else if (externalPlayerId == "infuse") {
+                        popBack()
                     }
                 }
                 ExternalPlayerIntentResult.NotConfigured -> {
@@ -119,11 +158,10 @@ internal fun PlayerDestination(
                     NuvioToastController.show(externalPlayerFailedText)
                 }
             }
-        },
+        } } else null,
         onOpenExternalUrl = { url ->
             openExternalStreamUrl(url)
         },
-        onOpenPartyMedia = onOpenPartyMedia,
         modifier = Modifier.fillMaxSize(),
     )
 }

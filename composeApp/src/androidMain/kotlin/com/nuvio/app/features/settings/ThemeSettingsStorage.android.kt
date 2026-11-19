@@ -19,17 +19,17 @@ actual object ThemeSettingsStorage {
     private const val customThemeColorsKey = "custom_theme_colors"
     private const val amoledEnabledKey = "amoled_enabled"
     private const val liquidGlassNativeTabBarEnabledKey = "liquid_glass_native_tab_bar_enabled"
+    private const val desktopNavigationLayoutKey = "desktop_navigation_layout"
     private const val selectedAppLanguageKey = "selected_app_language"
     private const val NAV_BAR_STYLE_KEY = "nav_bar_style"
     private const val navBarGlowEnabledKey = "nav_bar_glow_enabled"
-    private const val incognitoModeEnabledKey = "incognito_mode_enabled"
-    private const val homeTopBarEnabledKey = "home_top_bar_enabled"
     private val profileScopedSyncKeys = listOf(
         selectedThemeKey,
         customThemeColorsKey,
         amoledEnabledKey,
         navBarGlowEnabledKey,
         liquidGlassNativeTabBarEnabledKey,
+        desktopNavigationLayoutKey,
         NAV_BAR_STYLE_KEY,
     )
 
@@ -86,23 +86,6 @@ actual object ThemeSettingsStorage {
             ?.apply()
     }
 
-    actual fun loadIncognitoModeEnabled(): Boolean? = preferences?.let { prefs ->
-        val key = incognitoModeEnabledKey
-        if (prefs.contains(key)) prefs.getBoolean(key, false) else null
-    }
-
-    actual fun saveIncognitoModeEnabled(enabled: Boolean) {
-        preferences?.edit()?.putBoolean(incognitoModeEnabledKey, enabled)?.apply()
-    }
-
-    actual fun loadHomeTopBarEnabled(): Boolean? = preferences?.let { prefs ->
-        if (prefs.contains(homeTopBarEnabledKey)) prefs.getBoolean(homeTopBarEnabledKey, true) else null
-    }
-
-    actual fun saveHomeTopBarEnabled(enabled: Boolean) {
-        preferences?.edit()?.putBoolean(homeTopBarEnabledKey, enabled)?.apply()
-    }
-
     actual fun loadLiquidGlassNativeTabBarEnabled(): Boolean? =
         preferences?.let { prefs ->
             val key = ProfileScopedKey.of(liquidGlassNativeTabBarEnabledKey)
@@ -113,6 +96,16 @@ actual object ThemeSettingsStorage {
         preferences
             ?.edit()
             ?.putBoolean(ProfileScopedKey.of(liquidGlassNativeTabBarEnabledKey), enabled)
+            ?.apply()
+    }
+
+    actual fun loadDesktopNavigationLayout(): String? =
+        preferences?.getString(ProfileScopedKey.of(desktopNavigationLayoutKey), null)
+
+    actual fun saveDesktopNavigationLayout(layoutName: String) {
+        preferences
+            ?.edit()
+            ?.putString(ProfileScopedKey.of(desktopNavigationLayoutKey), layoutName)
             ?.apply()
     }
 
@@ -141,6 +134,15 @@ actual object ThemeSettingsStorage {
         }
     }
 
+    actual fun loadIncognitoModeEnabled(): Boolean? {
+        val key = ProfileScopedKey.of("incognito_mode_enabled")
+        return preferences?.takeIf { it.contains(key) }?.getBoolean(key, false)
+    }
+
+    actual fun saveIncognitoModeEnabled(enabled: Boolean) {
+        preferences?.edit()?.putBoolean(ProfileScopedKey.of("incognito_mode_enabled"), enabled)?.apply()
+    }
+
     actual fun loadNavBarStyle(): String? =
         preferences?.getString(ProfileScopedKey.of(NAV_BAR_STYLE_KEY), null)
 
@@ -157,6 +159,7 @@ actual object ThemeSettingsStorage {
         loadNavBarGlowEnabled()?.let { put(navBarGlowEnabledKey, encodeSyncBoolean(it)) }
         loadAmoledEnabled()?.let { put(amoledEnabledKey, encodeSyncBoolean(it)) }
         loadLiquidGlassNativeTabBarEnabled()?.let { put(liquidGlassNativeTabBarEnabledKey, encodeSyncBoolean(it)) }
+        loadDesktopNavigationLayout()?.let { put(desktopNavigationLayoutKey, encodeSyncString(it)) }
         loadNavBarStyle()?.let { put(NAV_BAR_STYLE_KEY, encodeSyncString(it)) }
     }
 
@@ -170,6 +173,7 @@ actual object ThemeSettingsStorage {
         payload.decodeSyncBoolean(navBarGlowEnabledKey)?.let(::saveNavBarGlowEnabled)
         payload.decodeSyncBoolean(amoledEnabledKey)?.let(::saveAmoledEnabled)
         payload.decodeSyncBoolean(liquidGlassNativeTabBarEnabledKey)?.let(::saveLiquidGlassNativeTabBarEnabled)
+        payload.decodeSyncString(desktopNavigationLayoutKey)?.let(::saveDesktopNavigationLayout)
         payload.decodeSyncString(NAV_BAR_STYLE_KEY)?.let(::saveNavBarStyle)
         applySelectedAppLanguage(loadSelectedAppLanguage() ?: AppLanguage.DEVICE.code)
     }

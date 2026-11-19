@@ -29,13 +29,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
-import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.window.DialogProperties
 
 enum class DialogButtonStyle {
@@ -63,7 +61,7 @@ fun DialogSurface(
             shape = tokens.shapes.dialog,
             color = tokens.colors.surfaceDialog,
             contentColor = tokens.colors.textPrimary,
-            border = BorderStroke(tokens.borders.thin, tokens.colors.textPrimary.copy(alpha = tokens.opacity.subtle)),
+            border = BorderStroke(tokens.borders.thin, SurfaceEdge),
         ) {
             Column(
                 modifier = Modifier.padding(tokens.spacing.dialogPadding),

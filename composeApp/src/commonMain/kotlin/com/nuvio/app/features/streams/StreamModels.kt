@@ -1,10 +1,7 @@
 package com.nuvio.app.features.streams
 
 import com.nuvio.app.core.build.AppFeaturePolicy
-import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
-import nuvio.composeapp.generated.resources.*
-import org.jetbrains.compose.resources.getString
 
 @Serializable
 data class StreamSubtitle(
@@ -35,7 +32,7 @@ data class StreamItem(
     val badges: List<StreamBadge> = emptyList(),
 ) {
     val streamLabel: String
-        get() = name ?: runBlocking { getString(Res.string.stream_default_name) }
+        get() = name?.takeIf { it.isNotBlank() } ?: "Stream"
 
     val streamSubtitle: String?
         get() = description
@@ -116,7 +113,7 @@ data class StreamItem(
         get() = url != null || infoHash != null || externalUrl != null || clientResolve != null
 }
 
-@Serializable
+@kotlinx.serialization.Serializable
 data class StreamBadge(
     val name: String,
     val imageURL: String = "",
@@ -292,6 +289,7 @@ enum class StreamsEmptyStateReason {
 
 data class StreamsUiState(
     val requestToken: String? = null,
+    val autoPlayDecided: Boolean = false,
     val groups: List<AddonStreamGroup> = emptyList(),
     val activeAddonIds: Set<String> = emptySet(),
     val selectedFilter: String? = null,

@@ -2,12 +2,12 @@ package com.nuvio.app.features.details
 
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.streams.StreamItem
-import kotlinx.serialization.Serializable
 
 data class MetaDetails(
     val id: String,
     val type: String,
     val name: String,
+    val imdbId: String? = null,
     val poster: String? = null,
     val background: String? = null,
     val logo: String? = null,
@@ -19,8 +19,6 @@ data class MetaDetails(
     val imdbRating: String? = null,
     val ageRating: String? = null,
     val runtime: String? = null,
-    /** AniList-only reading information. Null for anime and addon metadata. */
-    val mangaInfo: MangaInfo? = null,
     val externalRatings: List<MetaExternalRating> = emptyList(),
     val genres: List<String> = emptyList(),
     val director: List<String> = emptyList(),
@@ -44,23 +42,13 @@ data class MetaDetails(
     val collectionItems: List<MetaPreview> = emptyList(),
     val trailers: List<MetaTrailer> = emptyList(),
     val links: List<MetaLink> = emptyList(),
+    val seasonPosters: Map<Int, String> = emptyMap(),
     val videos: List<MetaVideo> = emptyList(),
-)
-
-data class MangaInfo(
-    val format: String? = null,
-    val chapters: Int? = null,
-    val volumes: Int? = null,
-    /** Optional MangaBaka enrichment; empty when the source has no matching record. */
-    val authors: List<String> = emptyList(),
-    val artists: List<String> = emptyList(),
-    val publishers: List<String> = emptyList(),
 )
 
 enum class MoreLikeThisSource {
     TMDB,
     ANILIST,
-    ANIVIO,
 }
 
 /** A single AniList user review shown in the Comments section. */
@@ -74,10 +62,10 @@ data class AnimeReview(
     val body: String,
 )
 
-@Serializable
 data class MetaExternalRating(
     val source: String,
     val value: Double,
+    val isCertified: Boolean = false,
 )
 
 data class MetaTrailer(

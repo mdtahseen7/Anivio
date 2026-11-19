@@ -15,10 +15,11 @@ import kotlinx.atomicfu.locks.synchronized
 
 enum class TrackingProviderId(
     val storageId: String,
+    val displayName: String,
 ) {
-    ANILIST("anilist"),
-
-    MAL("mal");
+    ANILIST("anilist", "AniList"),
+    MAL("mal", "MyAnimeList"),
+    MDBLIST("mdblist", "MDBList");
 
     companion object {
         fun fromStorage(value: String?): TrackingProviderId? =
@@ -58,6 +59,8 @@ interface TrackingProfileStore {
 
 interface TrackingAuthProvider : TrackingProfileStore {
     val descriptor: TrackingProviderDescriptor
+    val accountGeneration: Long
+        get() = 0L
     val isAuthenticated: StateFlow<Boolean>
     override val providerId: TrackingProviderId
         get() = descriptor.id

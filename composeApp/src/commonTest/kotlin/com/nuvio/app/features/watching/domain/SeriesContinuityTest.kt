@@ -2,8 +2,10 @@ package com.nuvio.app.features.watching.domain
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class SeriesContinuityTest {
     private val show = WatchingContentRef(type = "series", id = "show")
@@ -12,6 +14,71 @@ class SeriesContinuityTest {
         WatchingReleasedEpisode(videoId = "ep2", seasonNumber = 1, episodeNumber = 2, title = "Episode 2", releasedDate = "2026-03-08"),
         WatchingReleasedEpisode(videoId = "ep3", seasonNumber = 1, episodeNumber = 3, title = "Episode 3", releasedDate = "2026-03-15"),
     )
+
+    @Test
+    fun seriesLikeContentType_supports_anime_only_when_requested() {
+        assertTrue(" TvShow ".isSeriesLikeWatchingContentType())
+        assertFalse("anime".isSeriesLikeWatchingContentType())
+        assertTrue(" ANIME ".isSeriesLikeWatchingContentType(includeAnime = true))
+    }
+
+    @Test
+    fun decideSeriesPrimaryAction_restarts_completed_series_from_first_episode() {
+        val action = decideSeriesPrimaryAction(
+            content = show,
+            episodes = episodes,
+            progressRecords = listOf(
+                WatchingProgressRecord(
+                    content = show,
+                    videoId = "show:1:3",
+                    seasonNumber = 1,
+                    episodeNumber = 3,
+                    lastUpdatedEpochMs = 100L,
+                    isCompleted = true,
+                ),
+            ),
+            watchedRecords = emptyList(),
+            todayIsoDate = "2026-03-30",
+            defaultVideoId = "ep2",
+            allowRewatch = true,
+        )
+
+        assertNotNull(action)
+        assertEquals("show:1:1", action.videoId)
+        assertEquals("Play S1 E1", action.label)
+        assertNull(action.resumePositionMs)
+    }
+
+    @Test
+    fun decideSeriesPrimaryAction_has_no_next_up_after_final_episode() {
+        val action = decideSeriesPrimaryAction(
+            content = show,
+            episodes = episodes,
+            progressRecords = emptyList(),
+            watchedRecords = listOf(
+                WatchingWatchedRecord(content = show, seasonNumber = 1, episodeNumber = 3, markedAtEpochMs = 100L),
+            ),
+            todayIsoDate = "2026-03-30",
+        )
+
+        assertNull(action)
+    }
+
+    @Test
+    fun decideSeriesPrimaryAction_does_not_rewatch_unavailable_episodes() {
+        val action = decideSeriesPrimaryAction(
+            content = show,
+            episodes = episodes.map { it.copy(available = false, releasedDate = null) },
+            progressRecords = emptyList(),
+            watchedRecords = listOf(
+                WatchingWatchedRecord(content = show, seasonNumber = 1, episodeNumber = 3, markedAtEpochMs = 100L),
+            ),
+            todayIsoDate = "2026-03-30",
+            allowRewatch = true,
+        )
+
+        assertNull(action)
+    }
 
     @Test
     fun continueWatchingProgressEntries_drops_older_resume_when_latest_series_progress_is_completed() {
@@ -161,10 +228,11 @@ class SeriesContinuityTest {
                 ),
             ),
             todayIsoDate = "2026-03-30",
+            allowRewatch = true,
         )
 
         assertNotNull(action)
-        assertEquals("Next Up • S1E3", action.label)
+        assertEquals("Next Up • S1 E3", action.label)
         assertEquals("show:1:3", action.videoId)
         assertEquals(3, action.episodeNumber)
     }
@@ -193,10 +261,11 @@ class SeriesContinuityTest {
                 ),
             ),
             todayIsoDate = "2026-03-30",
+            allowRewatch = true,
         )
 
         assertNotNull(action)
-        assertEquals("Resume S1E2", action.label)
+        assertEquals("Resume S1 E2", action.label)
         assertEquals("show:1:2", action.videoId)
         assertEquals(1_500L, action.resumePositionMs)
     }
@@ -218,7 +287,7 @@ class SeriesContinuityTest {
         )
 
         assertNotNull(action)
-        assertEquals("Play S1E1", action.label)
+        assertEquals("Play S1 E1", action.label)
         assertEquals("show:1:1", action.videoId)
     }
 
@@ -320,7 +389,7 @@ class SeriesContinuityTest {
         )
 
         assertNotNull(action)
-        assertEquals("Play S0E1", action.label)
+        assertEquals("Play S0 E1", action.label)
     }
 
     @Test
@@ -350,7 +419,7 @@ class SeriesContinuityTest {
         )
 
         assertNotNull(action)
-        assertEquals("Next Up • S2E2", action.label)
+        assertEquals("Next Up • S2 E2", action.label)
         assertEquals("show:2:2", action.videoId)
     }
 }

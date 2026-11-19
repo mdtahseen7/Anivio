@@ -141,5 +141,7 @@ private fun writeUtf8File(path: String, value: String): Boolean {
 
 internal fun currentPluginPlatform(): String = "ios"
 
+internal fun currentPluginPlatformTags(): Set<String> = setOf(currentPluginPlatform())
+
 internal fun currentEpochMillis(): Long =
     (platform.Foundation.NSDate().timeIntervalSince1970 * 1000.0).toLong()

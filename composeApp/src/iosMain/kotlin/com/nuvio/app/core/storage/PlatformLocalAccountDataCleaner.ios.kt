@@ -23,6 +23,7 @@ internal actual object PlatformLocalAccountDataCleaner {
         "watch_progress_payload_",
     )
     private val profileScopedBaseKeys = listOf(
+        "episode_shuffle",
         "catalog_settings_payload",
         "home_catalog_cache_payload",
         "anilist_list_cache_payload",
@@ -73,7 +74,6 @@ internal actual object PlatformLocalAccountDataCleaner {
         "pending_watch_progress_source",
         "collection_mobile_settings_payload",
         "collections_payload",
-        "profile_background_brightness",
     )
 
     actual fun wipe() {

@@ -12,13 +12,16 @@ import com.nuvio.app.features.library.LibraryItem
 import com.nuvio.app.features.player.ExternalPlayerPlaybackRequest
 import com.nuvio.app.features.player.PlayerLaunch
 import com.nuvio.app.features.player.PlayerLaunchStore
+import com.nuvio.app.features.player.externalPlaybackSession
 import com.nuvio.app.features.streams.StreamLaunchStore
 import com.nuvio.app.features.streams.StreamsRepository
 import com.nuvio.app.features.watchprogress.ResumePromptRepository
+import com.nuvio.app.features.watchprogress.WatchProgressRepository
 import com.nuvio.app.navigation.*
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
 import kotlinx.serialization.modules.subclass
+import com.nuvio.app.core.build.AppFeaturePolicy
 
 internal val navigationSavedStateConfiguration = SavedStateConfiguration {
     serializersModule = SerializersModule {
@@ -31,8 +34,7 @@ internal val navigationSavedStateConfiguration = SavedStateConfiguration {
             subclass(HomescreenSettingsRoute::class, HomescreenSettingsRoute.serializer())
             subclass(MetaScreenSettingsRoute::class, MetaScreenSettingsRoute.serializer())
             subclass(ContinueWatchingSettingsRoute::class, ContinueWatchingSettingsRoute.serializer())
-            subclass(PartyRoute::class, PartyRoute.serializer())
-            subclass(DownloadsSettingsRoute::class, DownloadsSettingsRoute.serializer())
+            subclass(DownloadsRoute::class, DownloadsRoute.serializer())
             subclass(DownloadShowRoute::class, DownloadShowRoute.serializer())
             subclass(AddonsSettingsRoute::class, AddonsSettingsRoute.serializer())
             subclass(PluginsSettingsRoute::class, PluginsSettingsRoute.serializer())
@@ -79,6 +81,8 @@ internal fun disposeRouteResources(route: AppRoute) {
     }
 }
 
+internal val externalPlayerSupported = AppFeaturePolicy.externalPlayerSupported
+
 internal data class PosterActionTarget(
     val preview: MetaPreview,
     val libraryItem: LibraryItem? = null,
@@ -92,6 +96,13 @@ internal fun PlayerLaunch.toExternalPlayerPlaybackRequest(): ExternalPlayerPlayb
         streamTitle = streamTitle,
         sourceHeaders = sourceHeaders,
         resumePositionMs = initialPositionMs,
+        durationMs = WatchProgressRepository.progressForVideo(
+            videoId = videoId ?: parentMetaId,
+            parentMetaId = parentMetaId,
+            seasonNumber = seasonNumber,
+            episodeNumber = episodeNumber,
+        )?.durationMs?.takeIf { it > 0L },
+        playbackSession = externalPlaybackSession(),
         season = seasonNumber,
         episode = episodeNumber,
         episodeTitle = episodeTitle,

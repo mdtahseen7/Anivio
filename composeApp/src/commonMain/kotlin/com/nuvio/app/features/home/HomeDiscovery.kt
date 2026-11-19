@@ -54,7 +54,6 @@ internal fun MetaPreview.withResolvedDiscoveryArtwork(artwork: MetaPreview?): Me
 
 /** Discovery excludes donghua and short episodes; ordinary 12-episode seasons are unaffected. */
 internal fun MetaPreview.isHomeDiscoveryEligible(): Boolean {
-    if (type.equals("manga", ignoreCase = true)) return true
     // Unknown origins are held out rather than letting unclassified donghua slip through.
     val country = countryOfOrigin?.trim()?.uppercase() ?: return false
     if (country.length != 2 || country.any { it !in 'A'..'Z' } || country == "CN") return false

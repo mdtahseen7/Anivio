@@ -26,11 +26,13 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -84,6 +86,8 @@ import com.nuvio.app.core.ui.nuvio
 import com.nuvio.app.core.ui.platformExitApp
 import com.nuvio.app.features.addons.AddAddonResult
 import com.nuvio.app.features.addons.AddonRepository
+import com.nuvio.app.features.addons.enabledAddons
+import com.nuvio.app.features.addons.isWaitingForFirstEnabledManifest
 import com.nuvio.app.features.catalog.CatalogTarget
 import com.nuvio.app.features.cloud.CloudLibraryContentType
 import com.nuvio.app.features.cloud.CloudLibraryFile
@@ -99,8 +103,12 @@ import com.nuvio.app.features.collection.CollectionSyncService
 import com.nuvio.app.features.details.MetaDetailsRepository
 import com.nuvio.app.features.details.MetaScreenSettingsRepository
 import com.nuvio.app.features.downloads.DownloadItem
+import com.nuvio.app.features.downloads.DownloadSubtitles
 import com.nuvio.app.features.downloads.DownloadsRepository
 import com.nuvio.app.features.home.HomeCatalogSection
+import com.nuvio.app.features.home.HomeCatalogSettingsRepository
+import com.nuvio.app.features.home.HomeRepository
+import com.nuvio.app.features.home.buildAddonCatalogRefreshSignature
 import com.nuvio.app.features.home.components.shouldBlurContinueWatchingArtwork
 import com.nuvio.app.features.library.LibraryItem
 import com.nuvio.app.features.library.LibraryRepository
@@ -118,13 +126,22 @@ import com.nuvio.app.features.membership.MemberAccessRepository
 import com.nuvio.app.features.notifications.EpisodeReleaseNotificationsRepository
 import com.nuvio.app.features.p2p.P2pSettingsRepository
 import com.nuvio.app.features.player.ExternalPlayerIntentResult
+import com.nuvio.app.features.player.externalPlaybackSession
+import com.nuvio.app.features.player.infusePlaybackCallbacks
+import com.nuvio.app.features.player.recordExternalPlaybackProgress
 import com.nuvio.app.features.player.ExternalPlayerPlatform
 import com.nuvio.app.features.player.PlayerLaunch
+import com.nuvio.app.features.party.PartyMedia
+import com.nuvio.app.features.party.PartyRepository
+import com.nuvio.app.features.party.PartySync
+import com.nuvio.app.features.party.isShareableStreamUrl
+import com.nuvio.app.features.party.partyStreamRequestHeaders
 import com.nuvio.app.features.player.PlayerLaunchStore
-import com.nuvio.app.features.player.PlayerPlaybackSnapshot
 import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.player.SubtitleLanguageOption
 import com.nuvio.app.features.player.prepareExternalPlayerLaunch
+import com.nuvio.app.features.player.LockPlayerToLandscape
+import com.nuvio.app.features.player.HidePlayerSystemBars
 import com.nuvio.app.features.player.rememberExternalPlayerLauncher
 import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.settings.AccountSettingsScreen
@@ -140,15 +157,13 @@ import com.nuvio.app.features.settings.ThemeSettingsRepository
 import com.nuvio.app.features.streams.BingeGroupCacheRepository
 import com.nuvio.app.features.streams.StreamAutoPlayPolicy
 import com.nuvio.app.features.streams.StreamLaunch
+import com.nuvio.app.features.streams.PlaybackAvailability
+import com.nuvio.app.features.streams.rememberPlaybackAvailability
 import com.nuvio.app.features.streams.StreamLaunchStore
 import com.nuvio.app.features.streams.StreamsRepository
 import com.nuvio.app.features.tracking.TrackingLibraryTab
 import com.nuvio.app.features.tracking.TrackingMembershipApplyResult
 import com.nuvio.app.features.tracking.TrackingProviderId
-import com.nuvio.app.features.tracking.TrackingScrobbleAction
-import com.nuvio.app.features.tracking.TrackingScrobbleCoordinator
-import com.nuvio.app.features.tracking.TrackingScrobbleEvent
-import com.nuvio.app.features.tracking.buildTrackingMediaReference
 import com.nuvio.app.features.tracking.toggleTrackingLibraryMembership
 import com.nuvio.app.features.updater.AppUpdaterHost
 import com.nuvio.app.features.updater.AppUpdaterPlatform
@@ -156,31 +171,36 @@ import com.nuvio.app.features.updater.rememberAppUpdaterController
 import com.nuvio.app.features.watched.WatchedRepository
 import com.nuvio.app.features.watching.application.WatchingActions
 import com.nuvio.app.features.watching.application.WatchingState
-import com.nuvio.app.features.watching.domain.isShortPlaceholderDuration
 import com.nuvio.app.features.watchprogress.ContinueWatchingItem
 import com.nuvio.app.features.watchprogress.ContinueWatchingPreferencesRepository
 import com.nuvio.app.features.watchprogress.ResumePromptRepository
-import com.nuvio.app.features.watchprogress.WatchProgressPlaybackSession
 import com.nuvio.app.features.watchprogress.WatchProgressRepository
 import com.nuvio.app.features.watchprogress.WatchProgressSourceCoordinator
 import com.nuvio.app.features.watchprogress.continueWatchingItemKey
-import com.nuvio.app.features.party.PartyMedia
-import com.nuvio.app.features.party.PartyRepository
-import com.nuvio.app.features.party.PartyScreen
-import com.nuvio.app.features.party.PartySync
 import com.nuvio.app.features.watchprogress.nextUpDismissKey
 import com.nuvio.app.features.watchprogress.toContinueWatchingItem
 import com.nuvio.app.navigation.*
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.input.pointer.PointerButton
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
+import com.nuvio.app.core.ui.AppPresenceState
+import com.nuvio.app.core.ui.PresenceSnapshot
+import androidx.compose.ui.ExperimentalComposeUiApi
+import com.nuvio.app.features.player.dispatchNavigationBack
 
-@OptIn(ExperimentalSharedTransitionApi::class)
+@OptIn(ExperimentalSharedTransitionApi::class, ExperimentalComposeUiApi::class)
 @Composable
 internal fun MainAppContent(
     initialTab: AppScreenTab = AppScreenTab.Home,
@@ -223,17 +243,6 @@ internal fun MainAppContent(
             )
         }
         val appUpdaterController = rememberAppUpdaterController()
-        if (ownsAppRuntime) {
-            remember {
-                EpisodeReleaseNotificationsRepository.ensureLoaded()
-            }
-            remember {
-                CollectionSyncService.startObserving()
-            }
-            remember {
-                ProfileSettingsSync.startObserving()
-            }
-        }
         val hapticFeedback = LocalHapticFeedback.current
         val focusManager = LocalFocusManager.current
         val uriHandler = LocalUriHandler.current
@@ -246,8 +255,15 @@ internal fun MainAppContent(
         val searchListState = rememberLazyListState()
         val libraryScrollToTopRequests = remember { MutableSharedFlow<Unit>(extraBufferCapacity = 1) }
         val settingsRootActionRequests = remember { MutableSharedFlow<Unit>(extraBufferCapacity = 1) }
+
+        LaunchedEffect(ownsAppRuntime) {
+            if (!ownsAppRuntime) return@LaunchedEffect
+            warmProfileBoundRepositories()
+        }
         val currentRoute = navBackStack.lastOrNull() as? AppRoute
-        val watchPartyTitle = stringResource(Res.string.party_title)
+        var registeredPlayerSystemBack by remember {
+            mutableStateOf<Pair<PlayerRoute, () -> Unit>?>(null)
+        }
         LaunchedEffect(currentRoute, posterNavigationEnabled) {
             val request = posterNavigation.active
             if (!posterNavigationEnabled || (request != null && currentRoute != request.to)) posterNavigation.clear()
@@ -262,6 +278,9 @@ internal fun MainAppContent(
         }
         val liquidGlassNativeTabBarEnabled by remember {
             ThemeSettingsRepository.liquidGlassNativeTabBarEnabled
+        }.collectAsStateWithLifecycle()
+        val desktopNavigationLayout by remember {
+            ThemeSettingsRepository.desktopNavigationLayout
         }.collectAsStateWithLifecycle()
         val liquidGlassNativeTabBarSupported = remember { isLiquidGlassNativeTabBarSupported() }
         var showExitConfirmation by rememberSaveable { mutableStateOf(false) }
@@ -306,6 +325,12 @@ internal fun MainAppContent(
         PlayerSettingsRepository.ensureLoaded()
         PlayerSettingsRepository.uiState
     }.collectAsStateWithLifecycle()
+    var visiblePlayerEntries by remember { mutableIntStateOf(0) }
+    var streamLandscapeLoadingVisible by remember(currentRoute) { mutableStateOf(false) }
+    if (currentRoute is PlayerRoute || visiblePlayerEntries > 0 || streamLandscapeLoadingVisible) {
+        LockPlayerToLandscape()
+        HidePlayerSystemBars()
+    }
     val p2pSettingsUiState by remember {
         P2pSettingsRepository.ensureLoaded()
         P2pSettingsRepository.uiState
@@ -322,6 +347,8 @@ internal fun MainAppContent(
     val networkStatusUiState by remember {
         NetworkStatusRepository.uiState
     }.collectAsStateWithLifecycle()
+    val playbackAvailability = rememberPlaybackAvailability()
+    val playbackUnavailableMessage = stringResource(Res.string.playback_unavailable_message)
     val downloadedProviderLabel = stringResource(Res.string.provider_downloaded)
     val externalPlayerNotConfiguredText = stringResource(Res.string.external_player_not_configured)
     val externalPlayerUnavailableText = stringResource(Res.string.external_player_unavailable)
@@ -340,7 +367,8 @@ internal fun MainAppContent(
     val metaScreenSettingsTitle = stringResource(Res.string.compose_settings_page_meta_screen)
     val continueWatchingSettingsTitle = stringResource(Res.string.compose_settings_page_continue_watching)
     val debridSettingsTitle = stringResource(Res.string.compose_settings_page_debrid)
-    val downloadsSettingsTitle = stringResource(Res.string.compose_settings_root_downloads_title)
+    val partyTitle = stringResource(Res.string.party_title)
+    val downloadsTitle = stringResource(Res.string.compose_settings_root_downloads_title)
     val addonsSettingsTitle = stringResource(Res.string.compose_settings_page_addons)
     val pluginsSettingsTitle = stringResource(Res.string.compose_settings_page_plugins)
     val accountSettingsTitle = stringResource(Res.string.compose_settings_page_account)
@@ -364,6 +392,17 @@ internal fun MainAppContent(
     var networkToastBaselineReady by rememberSaveable { mutableStateOf(false) }
     var lastNetworkToastCondition by rememberSaveable { mutableStateOf(NetworkCondition.Unknown.name) }
     var watchSourceReconnectPending by remember { mutableStateOf(false) }
+    val homeCatalogRefreshKey = remember(addonsUiState.addons) {
+        buildAddonCatalogRefreshSignature(addonsUiState.addons)
+    }
+
+    LaunchedEffect(appContentGeneration, homeCatalogRefreshKey) {
+        if (!ownsAppRuntime) return@LaunchedEffect
+        val enabledAddons = addonsUiState.addons.enabledAddons()
+        if (enabledAddons.isWaitingForFirstEnabledManifest()) return@LaunchedEffect
+        HomeCatalogSettingsRepository.syncCatalogs(enabledAddons)
+        HomeRepository.refresh(enabledAddons)
+    }
 
     fun activateTab(tab: AppScreenTab) {
         if (useNativeNavigation && onActivate != null) {
@@ -395,8 +434,9 @@ internal fun MainAppContent(
         liquidGlassNativeTabBarSupported,
         liquidGlassNativeTabBarEnabled,
         useNativeNavigation,
+        onActivate,
+        initialTab,
         currentRoute,
-        selectedTab,
     ) {
         NativeTabBridge.requestedTabs.collectLatest { requestedTab ->
             val requestedAppTab = requestedTab.toAppScreenTab()
@@ -441,11 +481,26 @@ internal fun MainAppContent(
         )
     }
 
-    LaunchedEffect(selectedTab) {
-        NativeTabBridge.publishSelectedTab(selectedTab.toNativeNavigationTab())
-        if (selectedTab != AppScreenTab.Search) {
-            searchFocusRequestCount = 0
+    LaunchedEffect(initialTab) {
+        snapshotFlow { selectedTab }.collectLatest { tab ->
+            NativeTabBridge.publishSelectedTab(tab.toNativeNavigationTab())
+            if (tab != AppScreenTab.Search) {
+                searchFocusRequestCount = 0
+            }
         }
+    }
+
+    LaunchedEffect(selectedTab, navBackStack.lastOrNull()) {
+        val topRoute = navBackStack.lastOrNull()
+        if (topRoute is PlayerRoute) return@LaunchedEffect
+        val detailTitle = (topRoute as? DetailRoute)?.title
+        AppPresenceState.publish(
+            if (!detailTitle.isNullOrBlank()) {
+                PresenceSnapshot.Details(detailTitle)
+            } else {
+                PresenceSnapshot.Tab(selectedTab)
+            },
+        )
     }
 
     var profileSwitchLoading by remember { mutableStateOf(false) }
@@ -598,12 +653,13 @@ internal fun MainAppContent(
             NetworkCondition.ServersUnreachable,
             -> {
                 offlineLaunchRouteHandled = true
+                if (!AppFeaturePolicy.downloadsEnabled) return@LaunchedEffect
                 val hasPlayableDownload = downloadsUiState.completedItems.any {
                     DownloadsRepository.playableLocalFileUri(it) != null
                 }
                 if (hasPlayableDownload) {
-                    activateTab(AppScreenTab.Settings)
-                    navController.navigate(DownloadsSettingsRoute(downloadsSettingsTitle)) {
+                    activateTab(AppScreenTab.Library)
+                    navController.navigate(DownloadsRoute(downloadsTitle)) {
                         launchSingleTop = true
                     }
                 }
@@ -618,7 +674,11 @@ internal fun MainAppContent(
         val syncProfileId = activeProfileId?.takeIf {
             authenticatedState != null && !authenticatedState.isAnonymous
         }
-        syncProfileId?.let(SyncManager::pullAllForProfile)
+        if (syncProfileId != null) {
+            withContext(Dispatchers.Default) {
+                SyncManager.pullAllForProfile(syncProfileId)
+            }
+        }
         try {
             AppForegroundMonitor.events().collect { visibility ->
                 AppVisibilityState.set(visibility)
@@ -645,80 +705,15 @@ internal fun MainAppContent(
     var lastExternalPlayerLaunch by remember { mutableStateOf<PlayerLaunch?>(null) }
     val activePlaybackProfileId = profileState.activeProfile?.profileIndex ?: ProfileRepository.activeProfileId
     val launchExternalPlayer = rememberExternalPlayerLauncher { result ->
-        if (result != null && result.positionMs > 0L) {
+        if (result != null) {
+            val fallbackSession = lastExternalPlayerLaunch?.externalPlaybackSession()
             coroutineScope.launch {
-                val durationMs = result.durationMs
-                // Guard: debrid cache-sync placeholders and error clips report a short
-                // duration reaching completion. Skip scrobble + progress for those.
-                if (durationMs != null && isShortPlaceholderDuration(durationMs)) return@launch
-                val progressPercent = if (durationMs != null && durationMs > 0L) {
-                    (result.positionMs.toFloat() / durationMs.toFloat() * 100f).coerceIn(0f, 100f)
-                } else {
-                    null
-                }
-                val playerLaunch = lastExternalPlayerLaunch
-                if (progressPercent != null && playerLaunch != null) {
-                    val trackingMedia = buildTrackingMediaReference(
-                        contentType = playerLaunch.parentMetaType,
-                        parentMetaId = playerLaunch.parentMetaId,
-                        videoId = playerLaunch.videoId,
-                        title = playerLaunch.title,
-                        seasonNumber = playerLaunch.seasonNumber,
-                        episodeNumber = playerLaunch.episodeNumber,
-                        episodeTitle = playerLaunch.episodeTitle,
-                    )
-                    if (trackingMedia.hasResolvableIdentity) {
-                        runCatching {
-                            TrackingScrobbleCoordinator.scrobble(
-                                profileId = playerLaunch.profileId,
-                                action = TrackingScrobbleAction.STOP,
-                                event = TrackingScrobbleEvent(
-                                    media = trackingMedia,
-                                    progressPercent = progressPercent.toDouble(),
-                                ),
-                            )
-                        }
-                    }
-                }
-                playerLaunch?.let { playerLaunch ->
-                    val session = WatchProgressPlaybackSession(
-                        profileId = playerLaunch.profileId,
-                        contentType = playerLaunch.contentType ?: playerLaunch.parentMetaType,
-                        parentMetaId = playerLaunch.parentMetaId,
-                        parentMetaType = playerLaunch.parentMetaType,
-                        videoId = playerLaunch.videoId ?: playerLaunch.parentMetaId,
-                        title = playerLaunch.title,
-                        logo = playerLaunch.logo,
-                        poster = playerLaunch.poster,
-                        background = playerLaunch.background,
-                        seasonNumber = playerLaunch.seasonNumber,
-                        episodeNumber = playerLaunch.episodeNumber,
-                        episodeTitle = playerLaunch.episodeTitle,
-                        episodeThumbnail = playerLaunch.episodeThumbnail,
-                        providerName = playerLaunch.providerName,
-                        providerAddonId = playerLaunch.providerAddonId,
-                        lastStreamTitle = playerLaunch.streamTitle,
-                        lastSourceUrl = playerLaunch.sourceUrl,
-                    )
-                    val snapshot = PlayerPlaybackSnapshot(
-                        isLoading = false,
-                        isPlaying = false,
-                        isEnded = !result.endedByUser,
-                        durationMs = durationMs ?: 0L,
-                        positionMs = result.positionMs,
-                    )
-                    WatchProgressRepository.upsertPlaybackProgress(
-                        session = session,
-                        snapshot = snapshot,
-                    )
-                }
+                recordExternalPlaybackProgress(result, fallbackSession)
+                result.callbackId?.let(infusePlaybackCallbacks::consume)
             }
         }
     }
-    val continueWatchingPreferencesUiState by remember {
-        ContinueWatchingPreferencesRepository.ensureLoaded()
-        ContinueWatchingPreferencesRepository.uiState
-    }.collectAsStateWithLifecycle()
+    val continueWatchingPreferencesUiState by ContinueWatchingPreferencesRepository.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(
         initialHomeReady,
@@ -735,7 +730,7 @@ internal fun MainAppContent(
     }
 
     LaunchedEffect(currentRoute) {
-        val inPlaybackFlow = currentRoute is StreamRoute || currentRoute is PlayerRoute || currentRoute is PartyRoute
+        val inPlaybackFlow = currentRoute is StreamRoute || currentRoute is PlayerRoute
         if (inPlaybackFlow) {
             resumePromptItem = null
         }
@@ -783,17 +778,20 @@ internal fun MainAppContent(
                         AppDeepLinkRepository.markConsumed(deepLink)
                     }
 
-                    AppDeepLink.Downloads -> {
+                    is AppDeepLink.Party -> {
                         activateTab(AppScreenTab.Settings)
-                        navController.navigate(DownloadsSettingsRoute(downloadsSettingsTitle)) {
+                        navController.navigate(PartyRoute(code = deepLink.code, title = partyTitle)) {
                             launchSingleTop = true
                         }
                         AppDeepLinkRepository.markConsumed(deepLink)
                     }
 
-                    is AppDeepLink.Party -> {
-                        navController.navigate(PartyRoute(code = deepLink.code, title = watchPartyTitle)) {
-                            launchSingleTop = true
+                    AppDeepLink.Downloads -> {
+                        if (AppFeaturePolicy.downloadsEnabled) {
+                            activateTab(AppScreenTab.Library)
+                            navController.navigate(DownloadsRoute(downloadsTitle)) {
+                                launchSingleTop = true
+                            }
                         }
                         AppDeepLinkRepository.markConsumed(deepLink)
                     }
@@ -804,6 +802,8 @@ internal fun MainAppContent(
         }
 
         suspend fun openExternalPlayback(launch: PlayerLaunch): Boolean {
+            if (!externalPlayerSupported) return false
+
             lastExternalPlayerLaunch = launch
 
             val bingeGroup = launch.bingeGroup
@@ -824,11 +824,12 @@ internal fun MainAppContent(
                 request = baseRequest,
                 type = launch.contentType ?: launch.parentMetaType,
                 videoId = launch.videoId ?: launch.parentMetaId,
+                contentId = launch.parentMetaId,
                 forwardSubtitles = playerSettingsUiState.externalPlayerForwardSubtitles,
                 sendSkipSegments = shouldSendSkipSegments,
                 preferredLanguage = playerSettingsUiState.preferredSubtitleLanguage,
                 secondaryLanguage = playerSettingsUiState.secondaryPreferredSubtitleLanguage,
-                onOverlayMessage = { _ -> },
+                onOverlayMessage = { message -> StreamsRepository.setOverlayVisible(true, message) },
             )
             StreamsRepository.setOverlayVisible(false)
             return when (
@@ -857,8 +858,6 @@ internal fun MainAppContent(
 
         fun openDownloadedItem(item: DownloadItem) {
             val sourceUrl = DownloadsRepository.playableLocalFileUri(item) ?: return
-            println("openDownloadedItem: title=${item.title} subtitles=${item.subtitles.size} " +
-                item.subtitles.joinToString { "[uri=${it.localFileUri} lang=${it.language}]" })
             val resumeEntry = item.videoId
                 .takeIf { it.isNotBlank() }
                 ?.let(WatchProgressRepository::progressForVideo)
@@ -870,13 +869,7 @@ internal fun MainAppContent(
                 sourceUrl = sourceUrl,
                 sourceHeaders = emptyMap(),
                 sourceResponseHeaders = emptyMap(),
-                externalSubtitles = item.subtitles.map {
-                    com.nuvio.app.features.streams.StreamSubtitle(
-                        url = it.localFileUri,
-                        language = it.language,
-                        name = it.name,
-                    )
-                },
+                externalSubtitles = DownloadSubtitles.localSubtitles(sourceUrl),
                 streamType = null,
                 logo = item.logo,
                 poster = item.poster,
@@ -947,7 +940,7 @@ internal fun MainAppContent(
                         initialPositionMs = if (startFromBeginning) 0L else (resumePositionMs ?: 0L),
                         initialProgressFraction = if (startFromBeginning) null else resumeProgressFraction,
                     )
-                    if (playerSettingsUiState.externalPlayerEnabled) {
+                    if (externalPlayerSupported && playerSettingsUiState.externalPlayerEnabled) {
                         openExternalPlayback(playerLaunch)
                         true
                     } else {
@@ -983,7 +976,7 @@ internal fun MainAppContent(
             val targetResumePositionMs = if (startFromBeginning) 0L else (resumePositionMs ?: 0L)
             val targetResumeProgressFraction = if (startFromBeginning) null else resumeProgressFraction
 
-            if (!manualSelection) {
+            if (!manualSelection && AppFeaturePolicy.downloadsEnabled) {
                 val downloadedItem = DownloadsRepository.findPlayableDownload(
                     parentMetaId = parentMetaId,
                     seasonNumber = seasonNumber,
@@ -998,13 +991,7 @@ internal fun MainAppContent(
                         sourceUrl = localSourceUrl,
                         sourceHeaders = emptyMap(),
                         sourceResponseHeaders = emptyMap(),
-                        externalSubtitles = downloadedItem?.subtitles.orEmpty().map {
-                            com.nuvio.app.features.streams.StreamSubtitle(
-                                url = it.localFileUri,
-                                language = it.language,
-                                name = it.name,
-                            )
-                        },
+                        externalSubtitles = DownloadSubtitles.localSubtitles(localSourceUrl),
                         logo = logo,
                         poster = poster,
                         background = background,
@@ -1024,7 +1011,7 @@ internal fun MainAppContent(
                         initialPositionMs = targetResumePositionMs,
                         initialProgressFraction = targetResumeProgressFraction,
                     )
-                    if (playerSettingsUiState.externalPlayerEnabled) {
+                    if (externalPlayerSupported && playerSettingsUiState.externalPlayerEnabled) {
                         coroutineScope.launch { openExternalPlayback(playerLaunch) }
                         return
                     }
@@ -1032,6 +1019,11 @@ internal fun MainAppContent(
                     navController.navigate(PlayerRoute(launchId = launchId, title = playerLaunch.title))
                     return
                 }
+            }
+
+            if (!PlaybackAvailability.current().canStream(type, videoId)) {
+                NuvioToastController.show(playbackUnavailableMessage)
+                return
             }
 
             val streamLaunchId = StreamLaunchStore.put(
@@ -1065,6 +1057,36 @@ internal fun MainAppContent(
             val resumePositionMs = PartyRepository.playback.value
                 ?.takeIf { it.mediaKey == null || it.mediaKey == media.key }
                 ?.let { PartySync.expectedPositionMs(it, PartyRepository.nowMs()) }
+            val shared = PartyRepository.sharedStream.value
+                ?.takeIf { it.mediaKey == media.key && isShareableStreamUrl(it.url) }
+            if (shared != null) {
+                val launch = PlayerLaunch(
+                    profileId = activePlaybackProfileId,
+                    title = media.title,
+                    sourceUrl = shared.url,
+                    sourceHeaders = partyStreamRequestHeaders(shared.headers),
+                    streamType = shared.streamType,
+                    logo = media.logo,
+                    poster = media.poster,
+                    background = media.background,
+                    seasonNumber = media.season,
+                    episodeNumber = media.episode,
+                    episodeTitle = media.episodeTitle,
+                    streamTitle = shared.name.orEmpty(),
+                    streamSubtitle = shared.description,
+                    bingeGroup = shared.bingeGroup,
+                    pauseDescription = media.description,
+                    providerName = shared.addonName,
+                    providerAddonId = shared.addonId,
+                    contentType = media.type,
+                    videoId = media.videoId ?: media.metaId,
+                    parentMetaId = media.metaId,
+                    parentMetaType = media.metaType,
+                    initialPositionMs = resumePositionMs ?: 0L,
+                )
+                navController.navigate(PlayerRoute(PlayerLaunchStore.put(launch), title = media.title))
+                return
+            }
             launchPlaybackWithDownloadPreference(
                 type = media.type,
                 videoId = media.videoId ?: media.metaId,
@@ -1153,6 +1175,7 @@ internal fun MainAppContent(
             LibrarySourceMode.ANILIST -> stringResource(Res.string.anilist_source_name)
             LibrarySourceMode.MAL -> stringResource(Res.string.tracking_source_mal)
             LibrarySourceMode.LOCAL -> stringResource(Res.string.compose_catalog_subtitle_library)
+            LibrarySourceMode.MDBLIST -> stringResource(Res.string.library_mdblist_title)
         }
 
         val onLibrarySectionViewAllClick: (LibrarySection, LibrarySortOption) -> Unit = { section, sortOption ->
@@ -1175,6 +1198,19 @@ internal fun MainAppContent(
                 ),
             )
         }
+
+        fun canPlayContinueWatching(item: ContinueWatchingItem): Boolean =
+            item.isCloudLibraryContinueWatchingItem() || playbackAvailability.canPlay(
+                type = item.parentMetaType,
+                videoId = item.videoId,
+                parentMetaId = item.parentMetaId,
+                seasonNumber = item.seasonNumber,
+                episodeNumber = item.episodeNumber,
+            )
+
+        fun canSelectContinueWatchingStreams(item: ContinueWatchingItem): Boolean =
+            !item.isCloudLibraryContinueWatchingItem() &&
+                playbackAvailability.canStream(item.parentMetaType, item.videoId)
 
         val openContinueWatching: (ContinueWatchingItem, Boolean, Boolean) -> Unit = { item, manualSelection, startFromBeginning ->
             resumePromptItem = null
@@ -1290,7 +1326,22 @@ internal fun MainAppContent(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(MaterialTheme.nuvio.colors.background),
+                    .background(MaterialTheme.nuvio.colors.background)
+                    .pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                if (event.type == PointerEventType.Press) {
+                                    if (!event.changes.any { it.isConsumed }) {
+                                        if (event.button == PointerButton.Back) {
+                                            event.changes.forEach { it.consume() }
+                                            navController.popBackStack()
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
             ) {
             Box(
                 modifier = Modifier
@@ -1313,7 +1364,16 @@ internal fun MainAppContent(
                 NavDisplay(
                     backStack = navBackStack,
                     modifier = Modifier.fillMaxSize(),
-                    onBack = { navController.popBackStack() },
+                    onBack = {
+                        val routeAtRequest = navController.currentRoute
+                        dispatchNavigationBack(
+                            isPlayerRoute = routeAtRequest is PlayerRoute,
+                            playerBack = registeredPlayerSystemBack
+                                ?.takeIf { (route, _) -> route == routeAtRequest }
+                                ?.second,
+                            pop = { navController.popBackStack() },
+                        )
+                    },
                     entryDecorators = listOf(
                         rememberSaveableStateHolderNavEntryDecorator<NavKey>(),
                         routeDisposalDecorator,
@@ -1330,6 +1390,7 @@ internal fun MainAppContent(
                         useNativeTabBar = useNativeTabBar,
                         liquidGlassNativeTabBarSupported = liquidGlassNativeTabBarSupported,
                         liquidGlassNativeTabBarEnabled = liquidGlassNativeTabBarEnabled,
+                        desktopNavigationLayout = desktopNavigationLayout,
                         requests = AppTabRequests(
                             homeScrollToTopRequests = homeScrollToTopRequests,
                             searchScrollToTopRequests = searchScrollToTopRequests,
@@ -1340,9 +1401,9 @@ internal fun MainAppContent(
                         state = AppTabState(
                             searchListState = searchListState,
                             homeContentGeneration = appContentGeneration,
+                            profileId = profileState.activeProfile?.profileIndex,
                             searchFocusRequestCount = searchFocusRequestCount,
-                            rootActionsEnabled = currentRoute is TabsRoute,
-                            animateHomeCollectionGifs = currentRoute is TabsRoute,
+                            tabsRouteActiveState = rememberUpdatedState(currentRoute is TabsRoute),
                             libraryDisintegrationRequest = libraryDisintegrationRequests.current,
                             continueWatchingDisintegrationRequest = continueWatchingDisintegrationRequests.current,
                             requestedSettingsPageName = requestedSettingsPageName,
@@ -1411,6 +1472,8 @@ internal fun MainAppContent(
                                         activateTab(AppScreenTab.Settings)
                                     }
                                 },
+                                onDownloadsClick = { navController.navigate(DownloadsRoute(downloadsTitle)) },
+                                onWatchPartyClick = { navController.navigate(PartyRoute(title = partyTitle)) },
                                 onContinueWatchingClick = onContinueWatchingClick,
                                 onContinueWatchingLongPress = onContinueWatchingLongPress,
                                 onSwitchProfile = onSwitchProfile,
@@ -1424,7 +1487,6 @@ internal fun MainAppContent(
                                 onHomescreenSettingsClick = { navController.navigate(HomescreenSettingsRoute(homescreenSettingsTitle)) },
                                 onMetaScreenSettingsClick = { navController.navigate(MetaScreenSettingsRoute(metaScreenSettingsTitle)) },
                                 onContinueWatchingSettingsClick = { navController.navigate(ContinueWatchingSettingsRoute(continueWatchingSettingsTitle)) },
-                                onDownloadsSettingsClick = { navController.navigate(DownloadsSettingsRoute(downloadsSettingsTitle)) },
                                 onAddonsSettingsClick = { navController.navigate(AddonsSettingsRoute(addonsSettingsTitle)) },
                                 onPluginsSettingsClick = {
                                     if (AppFeaturePolicy.pluginsEnabled) {
@@ -1461,7 +1523,6 @@ internal fun MainAppContent(
                                     null
                                 },
                                 onCollectionsSettingsClick = { navController.navigate(CollectionsRoute(collectionsTitle)) },
-                                onWatchPartySettingsClick = { navController.navigate(PartyRoute(title = watchPartyTitle)) },
                                 onFolderClick = { collectionId, folderId ->
                                     val folderTitle = CollectionRepository.collections.value
                                         .firstOrNull { it.id == collectionId }
@@ -1495,8 +1556,18 @@ internal fun MainAppContent(
                             profileSwitchLoading = true
                             NativeTabBridge.publishTabBarVisible(false)
                             activateTab(AppScreenTab.Home)
-                            ProfileRepository.selectProfile(profile.profileIndex)
-                            SyncManager.pullAllForProfile(profile.profileIndex)
+                            coroutineScope.launch {
+                                try {
+                                    ProfileRepository.switchToProfile(profile.profileIndex)
+                                    warmProfileBoundRepositories()
+                                    withContext(Dispatchers.Default) {
+                                        SyncManager.pullAllForProfile(profile.profileIndex)
+                                    }
+                                    delay(300)
+                                } finally {
+                                    profileSwitchLoading = false
+                                }
+                            }
                         },
                         onAddProfileRequested = onSwitchProfile,
                     )
@@ -1533,9 +1604,24 @@ internal fun MainAppContent(
                 entry<EntityBrowseRoute> { route ->
                     EntityDestination(route = route, navController = navController)
                 }
-                entry<StreamRoute> { route ->
+                entry<StreamRoute>(
+                    metadata = if (isDesktop) {
+                        NavDisplay.transitionSpec {
+                            fadeIn(animationSpec = tween(160)) togetherWith
+                                fadeOut(animationSpec = tween(160))
+                        } + NavDisplay.popTransitionSpec {
+                            fadeIn(animationSpec = tween(160)) togetherWith
+                                fadeOut(animationSpec = tween(160))
+                        }
+                    } else {
+                        emptyMap()
+                    },
+                ) { route ->
                     StreamDestination(
                         route = route,
+                        onLandscapeLoadingChanged = { visible ->
+                            if (currentRoute == route) streamLandscapeLoadingVisible = visible
+                        },
                         navController = navController,
                         p2pEnabled = p2pSettingsUiState.p2pEnabled,
                         openExternalPlayback = ::openExternalPlayback,
@@ -1555,6 +1641,12 @@ internal fun MainAppContent(
                         emptyMap()
                     },
                 ) { route ->
+                    if (!isIos) {
+                        DisposableEffect(route) {
+                            visiblePlayerEntries += 1
+                            onDispose { visiblePlayerEntries -= 1 }
+                        }
+                    }
                     PlayerDestination(
                         route = route,
                         navController = navController,
@@ -1565,6 +1657,15 @@ internal fun MainAppContent(
                         launchExternalPlayer = launchExternalPlayer,
                         openExternalStreamUrl = ::openExternalStreamUrl,
                         onOpenPartyMedia = ::openPartyMedia,
+                        onSystemBackHandlerChanged = { playerRoute, handler ->
+                            if (handler == null) {
+                                if (registeredPlayerSystemBack?.first == playerRoute) {
+                                    registeredPlayerSystemBack = null
+                                }
+                            } else {
+                                registeredPlayerSystemBack = playerRoute to handler
+                            }
+                        },
                     )
                 }
                 entry<CatalogRoute> { route ->
@@ -1594,7 +1695,6 @@ internal fun MainAppContent(
                         route = route,
                         navController = navController,
                         useNativeNavigation = useNativeNavigation,
-                        downloadsTitle = downloadsSettingsTitle,
                         collectionsTitle = collectionsTitle,
                         onCheckForUpdates = if (AppFeaturePolicy.inAppUpdaterEnabled) {
                             { appUpdaterController.checkForUpdates(force = true, showNoUpdateFeedback = true) }
@@ -1604,22 +1704,17 @@ internal fun MainAppContent(
                         ) appUpdaterController::showDebugTestUpdate else null,
                     )
                 }
-                entry<DownloadsSettingsRoute> { route ->
+                entry<PartyRoute> { route ->
+                    PartyDestination(route = route, navController = navController, onWatch = ::openPartyMedia)
+                }
+
+                entry<DownloadsRoute> { route ->
                     DownloadsDestination(
                         route = route,
                         navController = navController,
                         useNativeNavigation = useNativeNavigation,
                         onOpenDownload = ::openDownloadedItem,
                     )
-                }
-                entry<PartyRoute> { route ->
-                    SettingsDestination(route, navController) { onBack ->
-                        PartyScreen(
-                            initialCode = route.code,
-                            onBack = onBack,
-                            onWatch = ::openPartyMedia,
-                        )
-                    }
                 }
                 entry<DownloadShowRoute> { route ->
                     DownloadShowDestination(
@@ -1642,9 +1737,7 @@ internal fun MainAppContent(
                 }
                 entry<AccountSettingsRoute> { route ->
                     SettingsDestination(route, navController) { onBack ->
-                        AccountSettingsScreen(onBack = onBack, onNavigatePage = { pageName, title ->
-                            navController.navigate(SettingsPageRoute(pageName, title))
-                        })
+                        AccountSettingsScreen(onBack = onBack)
                     }
                 }
                 entry<AboutSettingsRoute> { route ->
@@ -1876,7 +1969,7 @@ internal fun MainAppContent(
             selectedContinueWatchingForActions?.let { item ->
                 selectedContinueWatchingZoomAnchor?.let { anchor ->
                     key(item.videoId, anchor) {
-                        val showManualPlayOption = StreamAutoPlayPolicy.isEffectivelyEnabled(playerSettingsUiState)
+                        val showManualPlayOption = StreamAutoPlayPolicy.isEffectivelyEnabled(playerSettingsUiState) && canSelectContinueWatchingStreams(item)
                         val showDetailsOption = !item.isCloudLibraryContinueWatchingItem()
                         NuvioPosterZoomActionOverlay(
                             imageUrl = cloudLibraryDisplayArtworkUrl(anchor.imageUrl ?: item.poster ?: item.imageUrl),
@@ -1916,7 +2009,7 @@ internal fun MainAppContent(
                                         ),
                                     )
                                 }
-                                if (!item.isNextUp) {
+                                if (!item.isNextUp && canPlayContinueWatching(item)) {
                                     add(
                                         PosterZoomOverlayAction(
                                             icon = Icons.Default.Replay,
@@ -1946,7 +2039,8 @@ internal fun MainAppContent(
 
             NuvioContinueWatchingActionSheet(
                 item = selectedContinueWatchingForActions.takeIf { selectedContinueWatchingZoomAnchor == null },
-                showManualPlayOption = StreamAutoPlayPolicy.isEffectivelyEnabled(playerSettingsUiState),
+                showManualPlayOption = StreamAutoPlayPolicy.isEffectivelyEnabled(playerSettingsUiState) &&
+                    selectedContinueWatchingForActions?.let(::canSelectContinueWatchingStreams) == true,
                 showDetailsOption = selectedContinueWatchingForActions?.isCloudLibraryContinueWatchingItem() != true,
                 onDismiss = { selectedContinueWatchingForActions = null },
                 onOpenDetails = {
@@ -1961,7 +2055,7 @@ internal fun MainAppContent(
                     }
                 },
                 onStartFromBeginning = selectedContinueWatchingForActions
-                    ?.takeIf { !it.isNextUp }
+                    ?.takeIf { !it.isNextUp && canPlayContinueWatching(it) }
                     ?.let { item -> { onContinueWatchingStartFromBeginning(item) } },
                 onPlayManually = selectedContinueWatchingForActions
                     ?.let { item -> { onContinueWatchingPlayManually(item) } },
@@ -2066,13 +2160,6 @@ internal fun MainAppContent(
                     profile = launchOverlayProfile,
                     modifier = Modifier.fillMaxSize(),
                 )
-            }
-
-            if (profileSwitchLoading) {
-                LaunchedEffect(Unit) {
-                    kotlinx.coroutines.delay(1200)
-                    profileSwitchLoading = false
-                }
             }
 
             NuvioFloatingPrompt(

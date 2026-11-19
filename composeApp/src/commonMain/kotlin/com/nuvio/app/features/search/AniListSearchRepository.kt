@@ -5,8 +5,6 @@ import com.nuvio.app.features.anime.PublicAnimeSource
 import com.nuvio.app.features.anilist.ANILIST_ADDON_ID
 import com.nuvio.app.features.anilist.ANILIST_SEARCH_MOVIE_TYPE
 import com.nuvio.app.features.anilist.ANILIST_SEARCH_SERIES_TYPE
-import com.nuvio.app.features.anilist.ANILIST_SEARCH_MANGA_TYPE
-import com.nuvio.app.features.anilist.AniListSearchSource
 import com.nuvio.app.features.anilist.AniListCatalogSource
 import com.nuvio.app.features.catalog.CatalogPage
 import com.nuvio.app.features.catalog.CatalogTarget
@@ -15,8 +13,6 @@ import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.home.filterReleasedItems
 import com.nuvio.app.features.watchprogress.CurrentDateProvider
-import com.nuvio.app.features.content.ContentMode
-import com.nuvio.app.features.content.ContentModeRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,7 +27,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.anilist_row_movies
-import nuvio.composeapp.generated.resources.anilist_row_popular
 import nuvio.composeapp.generated.resources.anilist_source_name
 import nuvio.composeapp.generated.resources.compose_search_results_series
 import org.jetbrains.compose.resources.getString
@@ -65,8 +60,7 @@ object AniListSearchRepository {
 
         val hideUnreleased = HomeCatalogSettingsRepository.snapshot().hideUnreleasedContent
         val includeAdult = AniListCatalogSource.adultContentEnabled()
-        val mode = ContentModeRepository.mode.value
-        val requestKey = "${normalizedQuery.lowercase()}|$hideUnreleased|$includeAdult|$mode"
+        val requestKey = "${normalizedQuery.lowercase()}|$hideUnreleased|$includeAdult"
         if (canReuseRequestState(forceRefresh, requestKey, lastRequestKey)) return
         lastRequestKey = requestKey
 
@@ -76,13 +70,13 @@ object AniListSearchRepository {
         activeJob = scope.launch {
             try {
                 val sections = coroutineScope {
-                    if (mode == ContentMode.Manga) {
-                        listOfNotNull(fetchSection(normalizedQuery, ANILIST_SEARCH_MANGA_TYPE, forceRefresh))
-                    } else {
-                        val series = async { fetchSection(normalizedQuery, ANILIST_SEARCH_SERIES_TYPE, forceRefresh) }
-                        val movies = async { fetchSection(normalizedQuery, ANILIST_SEARCH_MOVIE_TYPE, forceRefresh) }
-                        listOfNotNull(series.await(), movies.await())
+                    val series = async {
+                        fetchSection(normalizedQuery, ANILIST_SEARCH_SERIES_TYPE, forceRefresh)
                     }
+                    val movies = async {
+                        fetchSection(normalizedQuery, ANILIST_SEARCH_MOVIE_TYPE, forceRefresh)
+                    }
+                    listOfNotNull(series.await(), movies.await())
                 }
 
                 _uiState.value = SearchUiState(
@@ -115,9 +109,7 @@ object AniListSearchRepository {
         contentType: String,
         forceRefresh: Boolean,
     ): HomeCatalogSection? {
-        val page = if (contentType == ANILIST_SEARCH_MANGA_TYPE) AniListSearchSource.searchPage(
-            query = query, contentType = contentType, page = 1, perPage = SEARCH_PER_PAGE, forceRefresh = forceRefresh,
-        ) else PublicAnimeSource.catalog(
+        val page = PublicAnimeSource.catalog(
             catalogId = contentType,
             contentType = contentType,
             page = 1,
@@ -145,9 +137,7 @@ object AniListSearchRepository {
     }
 
     private fun String.searchSectionTitle() =
-        if (equals(ANILIST_SEARCH_MANGA_TYPE, ignoreCase = true)) {
-            Res.string.anilist_row_popular
-        } else if (equals(ANILIST_SEARCH_MOVIE_TYPE, ignoreCase = true)) {
+        if (equals(ANILIST_SEARCH_MOVIE_TYPE, ignoreCase = true)) {
             Res.string.anilist_row_movies
         } else {
             Res.string.compose_search_results_series

@@ -52,8 +52,6 @@ private fun CommunityBody(isTablet: Boolean) {
         catch (_: Exception) { failed = true }
     }
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text("Built by people who love anime", style = MaterialTheme.typography.headlineSmall)
-        Text("Every contribution, bug report and thoughtful suggestion helps Anivio grow.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (!supporters) AiContributions(isTablet)
         SettingsGroup(isTablet) {
             Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -100,23 +98,21 @@ private fun CommunityBody(isTablet: Boolean) {
                 }
             }
         }
-        Text(stringResource(Res.string.enhancement_credits_title), style = MaterialTheme.typography.titleMedium)
         SettingsGroup(isTablet) {
             SettingsNavigationRow(
-                title = stringResource(Res.string.enhancement_credit_anime4k_title),
-                description = stringResource(Res.string.enhancement_credit_anime4k_body),
+                title = "Anime4K",
+                description = "Video restoration and upscaling by bloc97 and contributors. MIT licensed.",
                 isTablet = isTablet,
                 onClick = { uri.openUri("https://github.com/bloc97/Anime4K") },
             )
-            SettingsGroupDivider(isTablet)
+            SettingsGroupDivider(isTablet = isTablet)
             SettingsNavigationRow(
-                title = stringResource(Res.string.enhancement_credit_fsrcnnx_title),
-                description = stringResource(Res.string.enhancement_credit_fsrcnnx_body),
+                title = "FSRCNNX",
+                description = "The included upscaling shader is by igv, distributed under the LGPL.",
                 isTablet = isTablet,
-                onClick = { uri.openUri("https://github.com/igv/FSRCNN-TensorFlow/releases/tag/1.1") },
+                onClick = { uri.openUri("https://github.com/igv/FSRCNN-TensorFlow") },
             )
-        }
-        SettingsGroup(isTablet) {
+            SettingsGroupDivider(isTablet = isTablet)
             SettingsNavigationRow(title = "Anivio on GitHub", description = "Contribute, report an issue or follow development", isTablet = isTablet, onClick = { uri.openUri("https://github.com/mdtahseen7/Anivio") })
             SettingsGroupDivider(isTablet)
             SettingsNavigationRow(title = "Built on Nuvio", description = "Thanks to Nuvio’s creators and upstream contributors", isTablet = isTablet, onClick = { uri.openUri("https://github.com/NuvioMedia/NuvioMobile") })

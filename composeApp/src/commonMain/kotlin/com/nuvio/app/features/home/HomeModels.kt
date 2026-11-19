@@ -2,7 +2,6 @@ package com.nuvio.app.features.home
 
 import com.nuvio.app.features.addons.ManagedAddon
 import com.nuvio.app.features.catalog.CatalogTarget
-import com.nuvio.app.features.details.MetaExternalRating
 import kotlinx.serialization.Serializable
 
 /** Serializable so the home rows can be cached on disk between launches (`HomeCatalogCache`). */
@@ -22,12 +21,10 @@ data class MetaPreview(
     val voteCount: Int? = null,
     val imdbRating: String? = null,
     val genres: List<String> = emptyList(),
+    val rawPosterUrl: String? = null,
+    val landscapePoster: String? = null,
+    val rawLandscapePosterUrl: String? = null,
     val airingStatus: String? = null,
-    val runtime: String? = null,
-    val status: String? = null,
-    val ageRating: String? = null,
-    val language: String? = null,
-    val externalRatings: List<MetaExternalRating> = emptyList(),
     val countryOfOrigin: String? = null,
     val mediaFormat: String? = null,
     val episodeDurationMinutes: Int? = null,
@@ -51,7 +48,6 @@ data class HomeCatalogSection(
     val items: List<MetaPreview>,
     val availableItemCount: Int = items.size,
     val hasMore: Boolean = false,
-    val isRanked: Boolean = false,
 )
 
 fun HomeCatalogSection.canOpenCatalog(previewLimit: Int): Boolean =
@@ -62,9 +58,25 @@ data class HomeUiState(
     val heroItems: List<MetaPreview> = emptyList(),
     val sections: List<HomeCatalogSection> = emptyList(),
     val errorMessage: String? = null,
-    /** Cached catalog content for discovery layouts, independent of whether its rail is visible. */
-    val discoverySourceSections: List<HomeCatalogSection> = emptyList(),
 )
+
+// addonManifestsLoading is intentionally ignored: rows render from the manifest URL
+// directly, so waiting for every manifest only delays first paint. An addon whose
+// manifest hasn't arrived yet has its rows pop in when it lands (HomeScreen
+// re-triggers refresh on manifest-signature change). Kept as a parameter so the
+// call site is unchanged.
+internal fun shouldShowInitialHomeLoading(
+    hasRenderableHomeRows: Boolean,
+    @Suppress("UNUSED_PARAMETER") addonManifestsLoading: Boolean,
+    homeCatalogLoading: Boolean,
+): Boolean = !hasRenderableHomeRows && homeCatalogLoading
+
+internal fun shouldShowHomeHeroSlot(
+    heroEnabled: Boolean,
+    hasHeroItems: Boolean,
+    isResolvingHeroSources: Boolean,
+    hasRenderableHomeRows: Boolean,
+): Boolean = heroEnabled && (hasHeroItems || isResolvingHeroSources || hasRenderableHomeRows)
 
 internal data class CatalogRequest(
     val addon: ManagedAddon,

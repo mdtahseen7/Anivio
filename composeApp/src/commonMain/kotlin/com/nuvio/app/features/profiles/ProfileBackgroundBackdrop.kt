@@ -22,20 +22,21 @@ import com.nuvio.app.features.membership.resolveProfileBackground
 @Composable
 fun ProfileBackgroundBackdrop(
     profile: NuvioProfile?,
+    colorOverride: Color? = null,
     modifier: Modifier = Modifier,
-    imageOverlayAlpha: Float = 0.28f,
-    showFallback: Boolean = true,
 ) {
-    LaunchedEffect(Unit) {
-        ProfileBackgroundRepository.ensureLoaded()
-    }
     val memberAccess by remember {
         MemberAccessRepository.ensureStarted()
         MemberAccessRepository.access
     }.collectAsStateWithLifecycle()
+    val brightness by ProfileBackgroundAppearanceRepository.brightness.collectAsStateWithLifecycle()
+    LaunchedEffect(profile?.profileIndex) {
+        ProfileBackgroundRepository.ensureLoaded()
+        profile?.let { ProfileBackgroundAppearanceRepository.ensureLoaded(it.profileIndex) }
+    }
     val backgroundCatalog by ProfileBackgroundRepository.catalog.collectAsStateWithLifecycle()
-    val profileColor = remember(profile?.avatarColorHex) {
-        profile?.avatarColorHex?.let(::parseHexColor) ?: Color(0xFF1E88E5)
+    val profileColor = remember(profile?.avatarColorHex, colorOverride) {
+        colorOverride ?: profile?.avatarColorHex?.let(::parseHexColor) ?: Color(0xFF1E88E5)
     }
     val backgroundSelection = remember(
         profile?.profileBackgroundId,
@@ -58,9 +59,7 @@ fun ProfileBackgroundBackdrop(
                 .firstOrNull { it.id == backgroundSelection.id }
                 ?.let { background ->
                     if (isPortrait) {
-                        background.portraitImageBytes
-                            ?: background.landscapeImageBytes
-                            ?: background.landscapeImageUrl
+                        background.portraitImageBytes ?: background.landscapeImageBytes ?: background.landscapeImageUrl
                     } else {
                         background.landscapeImageBytes ?: background.landscapeImageUrl
                     }
@@ -70,12 +69,10 @@ fun ProfileBackgroundBackdrop(
         }
 
         if (backgroundModel == null) {
-            if (showFallback) {
-                ProfileMeshBackground(
-                    profileColor = profileColor,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
+            ProfileMeshBackground(
+                profileColor = profileColor,
+                modifier = Modifier.fillMaxSize(),
+            )
         } else {
             AsyncImage(
                 model = backgroundModel,
@@ -86,7 +83,7 @@ fun ProfileBackgroundBackdrop(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = imageOverlayAlpha.coerceIn(0f, 1f))),
+                    .background(Color.Black.copy(alpha = profileBackgroundOverlayAlpha(brightness))),
             )
         }
     }

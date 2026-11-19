@@ -21,6 +21,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.core.anilist.TvdbSettingsRepository
 import com.nuvio.app.features.discord.discordRichPresenceSupported
+import nuvio.composeapp.generated.resources.discord_desktop_presence_connected
+import nuvio.composeapp.generated.resources.discord_desktop_presence_description
+import nuvio.composeapp.generated.resources.discord_desktop_presence_incognito
+import nuvio.composeapp.generated.resources.discord_desktop_presence_unconfigured
+import nuvio.composeapp.generated.resources.discord_desktop_presence_waiting
+import nuvio.composeapp.generated.resources.discord_rich_presence_title
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.compose_settings_page_debrid
 import nuvio.composeapp.generated.resources.compose_settings_page_mdblist_ratings
@@ -78,7 +84,9 @@ internal fun LazyListScope.integrationsContent(
         }
     }
 
-    if (discordRichPresenceSupported) {
+    if (DiscordRichPresenceRepository.isSupported) {
+        item { DesktopDiscordPresenceSettings(isTablet) }
+    } else if (discordRichPresenceSupported) {
         item {
             SettingsSection(
                 title = stringResource(Res.string.settings_integrations_discord_section),
@@ -86,6 +94,39 @@ internal fun LazyListScope.integrationsContent(
             ) {
                 DiscordConnectionCard(isTablet = isTablet)
             }
+        }
+    }
+}
+
+@Composable
+private fun DesktopDiscordPresenceSettings(isTablet: Boolean) {
+    val enabled by remember {
+        DiscordRichPresenceRepository.ensureLoaded()
+        DiscordRichPresenceRepository.enabled
+    }.collectAsStateWithLifecycle()
+    val connected by DiscordRichPresencePlatform.connected.collectAsStateWithLifecycle()
+    val incognito by IncognitoModeRepository.enabled.collectAsStateWithLifecycle()
+    val isConfigured = DiscordRichPresencePlatform.isConfigured
+    val description = when {
+        !isConfigured -> Res.string.discord_desktop_presence_unconfigured
+        enabled && incognito -> Res.string.discord_desktop_presence_incognito
+        connected && enabled -> Res.string.discord_desktop_presence_connected
+        enabled -> Res.string.discord_desktop_presence_waiting
+        else -> Res.string.discord_desktop_presence_description
+    }
+    SettingsSection(
+        title = stringResource(Res.string.settings_integrations_discord_section),
+        isTablet = isTablet,
+    ) {
+        SettingsGroup(isTablet = isTablet) {
+            SettingsSwitchRow(
+                title = stringResource(Res.string.discord_rich_presence_title),
+                description = stringResource(description),
+                checked = enabled,
+                enabled = isConfigured,
+                isTablet = isTablet,
+                onCheckedChange = DiscordRichPresenceRepository::setEnabled,
+            )
         }
     }
 }

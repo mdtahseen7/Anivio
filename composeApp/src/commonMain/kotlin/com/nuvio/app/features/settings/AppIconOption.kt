@@ -4,10 +4,10 @@ internal enum class AppIconOption(
     val key: String,
     val platformName: String?,
 ) {
-    AV(key = "av", platformName = null),
+    AV(key = "av", platformName = "AppIconAV"),
     ORIGINAL(
         key = "original",
-        platformName = "AppIconOriginal",
+        platformName = null,
     ),
     ARCTIC_BLUE(
         key = "arctic_blue",
@@ -33,6 +33,6 @@ internal enum class AppIconOption(
 
     companion object {
         fun fromPlatformName(name: String?): AppIconOption =
-            entries.firstOrNull { it.platformName == name } ?: AV
+            entries.firstOrNull { it.platformName == name } ?: ORIGINAL
     }
 }

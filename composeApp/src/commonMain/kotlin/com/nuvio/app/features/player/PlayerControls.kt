@@ -25,17 +25,14 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.Flag
-import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Forward10
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.LockOpen
 import androidx.compose.material.icons.rounded.Replay10
-import androidx.compose.material.icons.rounded.Speed
-import androidx.compose.material.icons.rounded.SwapHoriz
-import androidx.compose.material.icons.rounded.VideoLibrary
 import com.nuvio.app.core.ui.NuvioLoadingIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -53,18 +50,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.LayoutDirection
 import com.nuvio.app.core.ui.AppIconResource
 import com.nuvio.app.core.ui.NuvioBackButton
@@ -112,10 +112,6 @@ internal fun PlayerControlsShell(
     onSubtitleClick: () -> Unit,
     onAudioClick: () -> Unit,
     onVideoSettingsClick: (() -> Unit)? = null,
-    onSwitchEngineClick: (() -> Unit)? = null,
-    onPartyClick: (() -> Unit)? = null,
-    partyActive: Boolean = false,
-    onStreamInfoClick: () -> Unit = {},
     onSourcesClick: (() -> Unit)? = null,
     onEpisodesClick: (() -> Unit)? = null,
     onOpenInExternalPlayer: (() -> Unit)? = null,
@@ -189,8 +185,6 @@ internal fun PlayerControlsShell(
                     onParentalGuideAnimationComplete = onParentalGuideAnimationComplete,
                     onLockToggle = onLockToggle,
                     onVideoSettingsClick = onVideoSettingsClick,
-                    onPartyClick = onPartyClick,
-                    partyActive = partyActive,
                     onOpenInExternalPlayer = onOpenInExternalPlayer,
                     onBack = onBack,
                     modifier = Modifier
@@ -209,9 +203,6 @@ internal fun PlayerControlsShell(
                         isLocked = isLocked,
                         onLockToggle = onLockToggle,
                         onBack = onBack,
-                        onSwitchEngineClick = onSwitchEngineClick,
-                        onPartyClick = onPartyClick,
-                        partyActive = partyActive,
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .windowInsetsPadding(WindowInsets.safeContent.only(WindowInsetsSides.Top))
@@ -341,7 +332,6 @@ internal fun PlayerControlsShell(
                         onSpeedClick = onSpeedClick,
                         onResizeModeClick = onResizeModeClick,
                         onVideoSettingsClick = onVideoSettingsClick,
-                        onStreamInfoClick = onStreamInfoClick,
                         onOpenInExternalPlayer = onOpenInExternalPlayer,
                         onSubmitIntroClick = onSubmitIntroClick,
                         onInteraction = onInteraction,
@@ -369,8 +359,6 @@ private fun PlayerHeader(
     onParentalGuideAnimationComplete: () -> Unit,
     onLockToggle: () -> Unit,
     onVideoSettingsClick: (() -> Unit)?,
-    onPartyClick: (() -> Unit)?,
-    partyActive: Boolean = false,
     onOpenInExternalPlayer: (() -> Unit)?,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -473,21 +461,11 @@ private fun PlayerHeader(
                     }
                     if (onOpenInExternalPlayer != null) {
                         PlayerHeaderIconButton(
-                            icon = Icons.AutoMirrored.Rounded.OpenInNew,
+                            icon = Icons.Filled.SwapHoriz,
                             contentDescription = stringResource(Res.string.streams_open_external_player),
                             buttonSize = metrics.headerIconSize + 16.dp,
                             iconSize = metrics.headerIconSize,
                             onClick = onOpenInExternalPlayer,
-                        )
-                    }
-                    if (onPartyClick != null) {
-                        PlayerHeaderIconButton(
-                            icon = Icons.Rounded.Groups,
-                            contentDescription = stringResource(Res.string.party_title),
-                            buttonSize = metrics.headerIconSize + 16.dp,
-                            iconSize = metrics.headerIconSize,
-                            onClick = onPartyClick,
-                            tint = if (partyActive) MaterialTheme.colorScheme.primary else Color.White,
                         )
                     }
                     PlayerHeaderIconButton(
@@ -525,13 +503,12 @@ private fun PlayerHeader(
 }
 
 @Composable
-private fun PlayerHeaderIconButton(
+internal fun PlayerHeaderIconButton(
     icon: ImageVector,
     contentDescription: String,
     buttonSize: androidx.compose.ui.unit.Dp,
     iconSize: androidx.compose.ui.unit.Dp,
     onClick: () -> Unit,
-    tint: Color = Color.White,
 ) {
     Box(
         modifier = Modifier
@@ -544,7 +521,7 @@ private fun PlayerHeaderIconButton(
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            tint = tint,
+            tint = Color.White,
             modifier = Modifier.size(iconSize),
         )
     }
@@ -621,7 +598,7 @@ private fun SideControlButton(
 }
 
 @Composable
-private fun PlayPauseControlButton(
+internal fun PlayPauseControlButton(
     isPlaying: Boolean,
     isBuffering: Boolean,
     metrics: PlayerLayoutMetrics,
@@ -640,7 +617,6 @@ private fun PlayPauseControlButton(
     ) {
         if (isBuffering) {
             NuvioLoadingIndicator(
-                color = Color.White,
                 modifier = Modifier.size(metrics.playIconSize),
             )
         } else {
@@ -675,34 +651,21 @@ private fun ProgressControls(
     skipIntervals: List<SkipInterval> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
-    val durationMs = playbackSnapshot.durationMs.coerceAtLeast(1L)
     val aspectRatioPainter = appIconPainter(AppIconResource.PlayerAspectRatio)
     val subtitlesPainter = appIconPainter(AppIconResource.PlayerSubtitles)
     val audioPainter = appIconPainter(AppIconResource.PlayerAudioFilled)
+    val sourcePainter = appIconPainter(AppIconResource.PlayerSource)
+    val episodesPainter = appIconPainter(AppIconResource.PlayerEpisodes)
 
     Column(modifier = modifier) {
-        Slider(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(metrics.sliderTouchHeight)
-                .graphicsLayer(scaleY = metrics.sliderScaleY),
-            value = displayedPositionMs.coerceIn(0L, durationMs).toFloat(),
-            onValueChange = { value -> onScrubChange(value.toLong()) },
-            onValueChangeFinished = { onScrubFinished(displayedPositionMs.coerceIn(0L, durationMs)) },
-            valueRange = 0f..durationMs.toFloat(),
-            track = { sliderState -> PlayerProgressTrack(sliderState, skipIntervals, durationMs) },
+        PlayerSeekBar(
+            durationMs = playbackSnapshot.durationMs,
+            displayedPositionMs = displayedPositionMs,
+            metrics = metrics,
+            onScrubChange = onScrubChange,
+            onScrubFinished = onScrubFinished,
+            skipIntervals = skipIntervals,
         )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp)
-                .padding(top = 4.dp, bottom = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            TimePill(text = formatPlaybackTime(displayedPositionMs), fontSize = metrics.timeSize)
-            TimePill(text = formatPlaybackTime(durationMs), fontSize = metrics.timeSize)
-        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Center,
@@ -728,7 +691,7 @@ private fun ProgressControls(
                     )
                     PlayerActionPillButton(
                         label = formatPlaybackSpeedLabel(playbackSnapshot.playbackSpeed),
-                        icon = Icons.Rounded.Speed,
+                        icon = Icons.Filled.Speed,
                         onClick = onSpeedClick,
                     )
                     PlayerActionPillButton(
@@ -744,19 +707,59 @@ private fun ProgressControls(
                     if (onSourcesClick != null) {
                         PlayerActionPillButton(
                             label = stringResource(Res.string.compose_player_sources),
-                            icon = Icons.Rounded.SwapHoriz,
+                            painter = sourcePainter,
                             onClick = onSourcesClick,
                         )
                     }
                     if (onEpisodesClick != null) {
                         PlayerActionPillButton(
                             label = stringResource(Res.string.compose_player_episodes),
-                            icon = Icons.Rounded.VideoLibrary,
+                            painter = episodesPainter,
                             onClick = onEpisodesClick,
                         )
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+internal fun PlayerSeekBar(
+    durationMs: Long,
+    displayedPositionMs: Long,
+    metrics: PlayerLayoutMetrics,
+    onScrubChange: (Long) -> Unit,
+    onScrubFinished: (Long) -> Unit,
+    skipIntervals: List<SkipInterval> = emptyList(),
+    modifier: Modifier = Modifier,
+) {
+    val seekDurationMs = durationMs.coerceAtLeast(1L)
+    val seekDescription = stringResource(Res.string.player_seek_position)
+    Column(modifier = modifier) {
+        Slider(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(metrics.sliderTouchHeight)
+                .graphicsLayer(scaleY = metrics.sliderScaleY)
+                .semantics { contentDescription = seekDescription },
+            value = displayedPositionMs.coerceIn(0L, seekDurationMs).toFloat(),
+            onValueChange = { value -> onScrubChange(value.toLong()) },
+            onValueChangeFinished = { onScrubFinished(displayedPositionMs.coerceIn(0L, seekDurationMs)) },
+            enabled = durationMs > 0L,
+            valueRange = 0f..seekDurationMs.toFloat(),
+            track = { sliderState -> PlayerProgressTrack(sliderState, skipIntervals, seekDurationMs) },
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp)
+                .padding(top = 4.dp, bottom = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TimePill(text = formatPlaybackTime(displayedPositionMs), fontSize = metrics.timeSize)
+            TimePill(text = formatPlaybackTime(durationMs), fontSize = metrics.timeSize)
         }
     }
 }
@@ -807,6 +810,8 @@ internal fun LockedPlayerOverlay(
     metrics: PlayerLayoutMetrics,
     horizontalSafePadding: androidx.compose.ui.unit.Dp,
     onUnlock: () -> Unit,
+    useLegacyLayout: Boolean = false,
+    showRemainingTime: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val durationMs = playbackSnapshot.durationMs.coerceAtLeast(1L)
@@ -872,28 +877,44 @@ internal fun LockedPlayerOverlay(
                 .padding(horizontal = horizontalSafePadding + metrics.horizontalPadding)
                 .padding(bottom = metrics.sliderBottomOffset),
         ) {
-            Slider(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(metrics.sliderTouchHeight)
-                    .graphicsLayer(scaleY = metrics.sliderScaleY),
-                value = displayedPositionMs.coerceIn(0L, durationMs).toFloat(),
-                onValueChange = {},
-                onValueChangeFinished = {},
-                valueRange = 0f..durationMs.toFloat(),
-                enabled = false,
-                colors = sliderColors,
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp)
-                    .padding(top = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TimePill(text = formatPlaybackTime(displayedPositionMs), fontSize = metrics.timeSize)
-                TimePill(text = formatPlaybackTime(durationMs), fontSize = metrics.timeSize)
+            if (useLegacyLayout) {
+                Slider(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(metrics.sliderTouchHeight)
+                        .graphicsLayer(scaleY = metrics.sliderScaleY),
+                    value = displayedPositionMs.coerceIn(0L, durationMs).toFloat(),
+                    onValueChange = {},
+                    onValueChangeFinished = {},
+                    valueRange = 0f..durationMs.toFloat(),
+                    enabled = false,
+                    colors = sliderColors,
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp)
+                        .padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TimePill(text = formatPlaybackTime(displayedPositionMs), fontSize = metrics.timeSize)
+                    TimePill(text = formatPlaybackTime(durationMs), fontSize = metrics.timeSize)
+                }
+            } else {
+                PlayerTimeline(
+                    snapshot = playbackSnapshot,
+                    displayedPositionMs = displayedPositionMs,
+                    onScrubChange = {},
+                    onScrubFinished = {},
+                    enabled = false,
+                )
+                Text(
+                    text = formatPlaybackRuntime(displayedPositionMs, playbackSnapshot.durationMs, showRemainingTime),
+                    style = MaterialTheme.nuvioTypeScale.bodyMd.copy(fontSize = (metrics.timeSize.value + 2).sp),
+                    color = Color.White.copy(alpha = 0.9f),
+                    modifier = Modifier.align(Alignment.End),
+                )
             }
         }
     }

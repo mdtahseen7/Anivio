@@ -80,9 +80,7 @@ class HomeDiscoveryTest {
         assertFalse(regular.copy(countryOfOrigin = "??").isHomeDiscoveryEligible())
     }
 
-    @Test fun animeRestrictionsDoNotRemoveManga() {
-        assertTrue(MetaPreview("manga", "manga", "Manga", countryOfOrigin = "CN", mediaFormat = "ONE_SHOT", episodeDurationMinutes = 5).isHomeDiscoveryEligible())
-    }
+
 
     @Test fun catalogMetadataSurvivesMappingAndShortSeasonIsNotShortForm() {
         val media = Json.decodeFromString<AniListMedia>("""{

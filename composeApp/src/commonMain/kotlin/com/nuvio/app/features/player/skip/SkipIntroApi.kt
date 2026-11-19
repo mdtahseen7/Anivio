@@ -3,14 +3,15 @@ package com.nuvio.app.features.player.skip
 import com.nuvio.app.features.addons.httpGetText
 import com.nuvio.app.features.addons.httpPostJsonWithHeaders
 import kotlinx.serialization.json.Json
+import kotlinx.coroutines.CancellationException
 
 internal object SkipIntroApi {
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
     private const val ANISKIP_BASE = "https://api.aniskip.com/v2/"
-    private const val ARM_BASE = "https://arm.haglund.dev/api/v2/"
     private const val ANIMESKIP_BASE = "https://api.anime-skip.com/"
+    private const val ARM_BASE = "https://arm.haglund.dev/api/v2/"
 
     /** TheIntroDB (theintrodb.org) — v3 read + submit both require an account API key. */
     private const val THE_INTRO_DB_BASE = "https://api.theintrodb.org/v3/"
@@ -44,6 +45,19 @@ internal object SkipIntroApi {
     }
 
     // --- Legacy IntroDb (introdb.app) — kept for backward compatibility ---
+
+    suspend fun getIntroDbMovieSegments(imdbId: String): IntroDbSegmentsResponse? {
+        val baseUrl = IntroDbConfig.URL.trimEnd('/')
+        if (baseUrl.isBlank()) return null
+        return try {
+            val text = httpGetText(introDbMovieSegmentsUrl(baseUrl, imdbId))
+            json.decodeFromString<IntroDbSegmentsResponse>(text)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        }
+    }
 
     suspend fun getIntroDbSegments(
         imdbId: String,
@@ -226,3 +240,6 @@ internal object SkipIntroApi {
         }
     }
 }
+
+internal fun introDbMovieSegmentsUrl(baseUrl: String, imdbId: String): String =
+    "${baseUrl.trimEnd('/')}/segments?imdb_id=$imdbId&is_movie=true"

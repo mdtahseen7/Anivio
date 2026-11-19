@@ -47,7 +47,7 @@ internal fun ExoPlayer.Builder.buildWithAssSupportCompat(
     mediaSourceFactory.setSubtitleParserFactory(assSubtitleParserFactory)
 
     val player = this
-        .setMediaSourceFactory(AudioDelayMediaSourceFactory(mediaSourceFactory) { PlayerSettingsRepository.uiState.value.audioDelayMs.toLong() * 1000 })
+        .setMediaSourceFactory(mediaSourceFactory)
         .setRenderersFactory(renderersFactory.withAssSupport(assHandler))
         .build()
 
@@ -58,6 +58,16 @@ internal fun ExoPlayer.Builder.buildWithAssSupportCompat(
 }
 
 internal fun ExoPlayer.getAssHandlerCompat(): AssHandler? = assHandlersByPlayer[this]
+
+@OptIn(UnstableApi::class)
+internal fun ExoPlayer.releaseWithAssSupportCompat() {
+    val assHandler = assHandlersByPlayer.remove(this)
+    try {
+        release()
+    } finally {
+        assHandler?.release()
+    }
+}
 
 @OptIn(UnstableApi::class)
 private class CompatAssSubtitleParserFactory(

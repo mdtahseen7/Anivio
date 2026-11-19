@@ -1,27 +1,34 @@
 package com.nuvio.app.features.updater
 
-import com.nuvio.app.core.build.AppVersionConfig
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-enum class UpdateChannel { STABLE, BETA }
+internal class UpdatePreferences(versionName: String = AppUpdaterPlatform.currentVersionName) {
+    private val storedChannel = UpdateChannel.fromStoredValue(AppUpdaterPlatform.getUpdateChannel())
+    private val singleChannel = AppUpdaterPlatform.hasSingleUpdateChannel
+    private val defaultChannel = if (singleChannel) {
+        UpdateChannel.ALL_RELEASES
+    } else {
+        storedChannel?.takeUnless { it == UpdateChannel.ALL_RELEASES } ?: UpdateChannel.defaultForVersion(versionName)
+    }
+    private val _channel = MutableStateFlow(defaultChannel)
+    val channel = _channel.asStateFlow()
 
-internal fun isReleaseInUpdateChannel(channel: UpdateChannel, draft: Boolean, prerelease: Boolean, tag: String): Boolean {
-    if (draft) return false
-    val previewTag = Regex("(?i)(alpha|beta|preview|(?:^|[.\\-_])rc(?:[.\\-_0-9]|$))").containsMatchIn(tag)
-    return channel == UpdateChannel.BETA || (!prerelease && !previewTag)
-}
+    init {
+        if (AppUpdaterPlatform.isSupported && (storedChannel == null || storedChannel != defaultChannel)) {
+            AppUpdaterPlatform.setUpdateChannel(_channel.value.storedValue)
+        }
+    }
 
-internal object UpdatePreferences {
-    val shared get() = this
-    private val state = MutableStateFlow(
-        AppUpdaterPlatform.getUpdateChannel()?.let { runCatching { UpdateChannel.valueOf(it) }.getOrNull() }
-            ?: if (AppVersionConfig.VERSION_NAME.contains("beta", true) || AppVersionConfig.VERSION_NAME.contains("alpha", true)) UpdateChannel.BETA else UpdateChannel.STABLE
-    )
-    val channel = state.asStateFlow()
-    fun setChannel(value: UpdateChannel) {
-        AppUpdaterPlatform.setUpdateChannel(value.name)
+    fun setChannel(channel: UpdateChannel) {
+        val selectedChannel = if (singleChannel) UpdateChannel.ALL_RELEASES else channel
+        if (_channel.value == selectedChannel) return
+        AppUpdaterPlatform.setUpdateChannel(selectedChannel.storedValue)
         AppUpdaterPlatform.setIgnoredTag(null)
-        state.value = value
+        _channel.value = selectedChannel
+    }
+
+    companion object {
+        val shared by lazy { UpdatePreferences() }
     }
 }

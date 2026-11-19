@@ -9,6 +9,7 @@ enum class WatchProgressSource {
     LOCAL,
     ANILIST,
     MAL,
+    MDBLIST,
 
     /**
      * AniList decides *which* shows are in progress; the device decides *where* in the episode you
@@ -25,6 +26,7 @@ enum class WatchProgressSource {
             LOCAL -> null
             ANILIST, ANILIST_LOCAL -> TrackingProviderId.ANILIST
             MAL -> TrackingProviderId.MAL
+            MDBLIST -> TrackingProviderId.MDBLIST
         }
 
     /** True when on-device positions are layered over the provider's episode counts. */
@@ -50,6 +52,7 @@ val LibrarySourceMode.providerId: TrackingProviderId?
         LibrarySourceMode.LOCAL -> null
         LibrarySourceMode.ANILIST -> TrackingProviderId.ANILIST
         LibrarySourceMode.MAL -> TrackingProviderId.MAL
+        LibrarySourceMode.MDBLIST -> TrackingProviderId.MDBLIST
     }
 
 fun effectiveWatchProgressSource(

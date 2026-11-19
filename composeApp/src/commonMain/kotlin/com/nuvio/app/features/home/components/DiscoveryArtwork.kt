@@ -17,7 +17,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.nuvio.app.features.anilist.AniListHeroArtwork
-import com.nuvio.app.features.home.HomeRepository
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.home.stableKey
 import com.nuvio.app.features.home.withResolvedDiscoveryArtwork
@@ -27,14 +26,12 @@ import kotlinx.coroutines.withContext
 /** Resolve only the displayed pick, sharing the hero cache and its miss/retry window. */
 @Composable
 internal fun rememberDiscoveryArtwork(item: MetaPreview): MetaPreview {
-    if (item.type.equals("manga", ignoreCase = true)) return item
     val key = item.stableKey()
     var artwork by remember(key) { mutableStateOf(AniListHeroArtwork.snapshot()[key]) }
     LaunchedEffect(key, item.poster, item.banner, item.logo) {
         artwork = withContext(Dispatchers.Default) {
             if (AniListHeroArtwork.hasUnresolved(listOf(item))) {
                 AniListHeroArtwork.resolve(listOf(item.withResolvedDiscoveryArtwork(AniListHeroArtwork.snapshot()[key])))
-                HomeRepository.persistResolvedArtwork()
             }
             AniListHeroArtwork.snapshot()[key]
         }

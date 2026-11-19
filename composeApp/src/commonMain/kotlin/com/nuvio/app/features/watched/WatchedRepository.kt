@@ -1,19 +1,20 @@
 package com.nuvio.app.features.watched
 
 import co.touchlab.kermit.Logger
+import com.nuvio.app.features.settings.IncognitoModeRepository
 import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
 import com.nuvio.app.core.tracking.ensureTrackingProvidersRegistered
 import com.nuvio.app.features.details.MetaDetails
 import com.nuvio.app.features.details.MetaVideo
 import com.nuvio.app.features.profiles.ProfileRepository
-import com.nuvio.app.features.settings.IncognitoModeRepository
 import com.nuvio.app.features.tracking.TrackingProviderId
 import com.nuvio.app.features.tracking.TrackingProviderRegistry
 import com.nuvio.app.features.tracking.TrackingSettingsRepository
 import com.nuvio.app.features.tracking.WatchProgressSource
 import com.nuvio.app.features.tracking.effectiveWatchProgressSource
 import com.nuvio.app.features.tracking.providerId
+import com.nuvio.app.features.watching.domain.isSeriesLikeWatchingContentType
 import com.nuvio.app.features.watching.sync.SupabaseWatchedSyncAdapter
 import com.nuvio.app.features.watching.sync.WatchedDeltaEvent
 import com.nuvio.app.features.watching.sync.WatchedSyncAdapter
@@ -157,7 +158,6 @@ object WatchedRepository {
     private var extraKeysObserverJob: Job? = null
 
     fun ensureLoaded() {
-        IncognitoModeRepository.ensureLoaded()
         ensureTrackingProvidersRegistered()
         TrackingProviderRegistry.ensureLoaded()
         TrackingSettingsRepository.ensureLoaded()
@@ -233,11 +233,6 @@ object WatchedRepository {
         loadedProviders.clear()
         nuvioHasLoadedRemote = false
         providersLoadedFromRemote.clear()
-
-        if (IncognitoModeRepository.enabled.value) {
-            publish()
-            return
-        }
 
         val payload = WatchedStorage.loadPayload(profileId).orEmpty().trim()
         if (payload.isNotEmpty()) {
@@ -340,8 +335,6 @@ object WatchedRepository {
             )
 
     suspend fun pullFromServer(profileId: Int) {
-        IncognitoModeRepository.ensureLoaded()
-        if (IncognitoModeRepository.enabled.value) return
         TrackingProviderRegistry.ensureLoaded()
         TrackingSettingsRepository.ensureLoaded()
         refreshForSource(
@@ -355,8 +348,6 @@ object WatchedRepository {
     }
 
     suspend fun forceSnapshotRefreshFromServer(profileId: Int) {
-        IncognitoModeRepository.ensureLoaded()
-        if (IncognitoModeRepository.enabled.value) return
         TrackingProviderRegistry.ensureLoaded()
         TrackingSettingsRepository.ensureLoaded()
         refreshForSource(
@@ -376,7 +367,6 @@ object WatchedRepository {
     ): Boolean {
         TrackingProviderRegistry.ensureLoaded()
         TrackingSettingsRepository.ensureLoaded()
-        if (IncognitoModeRepository.enabled.value) return false
         if (ProfileRepository.activeProfileId != profileId) {
             log.d { "Skipping watched refresh for inactive profile $profileId" }
             return false
@@ -708,7 +698,7 @@ object WatchedRepository {
 
     private fun watchedDeleteTypesCompatible(remoteType: String, localType: String): Boolean {
         if (remoteType.equals(localType, ignoreCase = true)) return true
-        return remoteType.isSeriesLikeWatchedType() && localType.isSeriesLikeWatchedType()
+        return remoteType.isSeriesLikeWatchingContentType() && localType.isSeriesLikeWatchingContentType()
     }
 
     private fun itemsForSourceSnapshot(source: WatchProgressSource): List<WatchedItem> =
@@ -781,8 +771,8 @@ object WatchedRepository {
         trackerHistorySync: WatchedTrackerHistorySync,
         syncRemote: Boolean = true,
     ) {
+        if (IncognitoModeRepository.isEnabled()) return
         ensureLoaded()
-        if (IncognitoModeRepository.enabled.value) return
         if (items.isEmpty()) return
         val source = activeSource
         val markedAt = WatchedClock.nowEpochMs()
@@ -839,7 +829,6 @@ object WatchedRepository {
 
     fun unmarkWatched(items: Collection<WatchedItem>) {
         ensureLoaded()
-        if (IncognitoModeRepository.enabled.value) return
         if (items.isEmpty()) return
         val source = activeSource
         val (removedItems, removedExtraKeys) = itemsStore.update { nuvioItems, providerItems, dirtyNuvioKeys, dirtyProviderKeys ->
@@ -919,7 +908,7 @@ object WatchedRepository {
         todayIsoDate: String,
         isEpisodeCompleted: (com.nuvio.app.features.details.MetaVideo) -> Boolean = { false },
     ) {
-        if (!meta.type.isSeriesLikeWatchedType()) return
+        if (!meta.type.isSeriesLikeWatchingContentType()) return
 
         ensureLoaded()
         val shouldMarkSeriesWatched = reconcileFullyWatchedSeriesState(
@@ -953,7 +942,7 @@ object WatchedRepository {
         },
         isEpisodeCompleted: (MetaVideo) -> Boolean = { false },
     ): Boolean {
-        if (!meta.type.isSeriesLikeWatchedType()) return false
+        if (!meta.type.isSeriesLikeWatchingContentType()) return false
 
         val shouldMarkSeriesWatched = calculateFullyWatchedSeriesState(
             meta = meta,
@@ -973,7 +962,7 @@ object WatchedRepository {
         isEpisodeWatched: (MetaVideo) -> Boolean,
         isEpisodeCompleted: (MetaVideo) -> Boolean,
     ): Boolean {
-        if (!meta.type.isSeriesLikeWatchedType()) return false
+        if (!meta.type.isSeriesLikeWatchingContentType()) return false
 
         ensureLoaded()
         return meta.hasWatchedAllMainSeasonEpisodes(todayIsoDate) { episode ->
@@ -986,7 +975,7 @@ object WatchedRepository {
         type: String,
         isFullyWatched: Boolean,
     ) {
-        if (!type.isSeriesLikeWatchedType()) return
+        if (!type.isSeriesLikeWatchingContentType()) return
         ensureLoaded()
         updateFullyWatchedSeriesKey(
             key = watchedItemKey(type, id),
@@ -1024,6 +1013,8 @@ object WatchedRepository {
         persist()
     }
 
+    fun currentExpandedSiblingKeys(): Set<String> = expandedSiblingKeys
+
     /**
      * Returns the fully-watched series keys the active source reported, without any keys the badge
      * resolver expanded on top of them.
@@ -1035,7 +1026,6 @@ object WatchedRepository {
         trackerHistorySync: WatchedTrackerHistorySync,
         source: WatchProgressSource,
     ) {
-        if (IncognitoModeRepository.enabled.value) return
         val profileId = currentProfileId
         val operationGeneration = profileGeneration
         accountScopeSnapshot().launch {
@@ -1064,7 +1054,6 @@ object WatchedRepository {
         items: Collection<WatchedItem>,
         source: WatchProgressSource,
     ) {
-        if (IncognitoModeRepository.enabled.value) return
         val profileId = currentProfileId
         accountScopeSnapshot().launch {
             runCatching {
@@ -1188,7 +1177,6 @@ object WatchedRepository {
     }
 
     private fun persist() {
-        if (IncognitoModeRepository.enabled.value) return
         val storedPayload = itemsStore.read { nuvioItems, providerItems, dirtyNuvioKeys, dirtyProviderKeys ->
             val providerIds = buildSet {
                 addAll(providerItems.keys)
@@ -1404,6 +1392,3 @@ internal fun effectiveWatchedSource(
     requestedSource = requestedSource,
     isProviderAuthenticated = { providerId -> providerId in connectedProviderIds },
 )
-
-private fun String.isSeriesLikeWatchedType(): Boolean =
-    trim().lowercase() in setOf("series", "show", "tv", "tvshow")

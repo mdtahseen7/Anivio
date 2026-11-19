@@ -8,6 +8,8 @@ class SameServerAutoPlayTest {
     private fun server(number: Int, addon: String = "plugin:anime") = StreamItem(
         addonId = addon, addonName = "Anime", name = "Server $number", url = "https://example.com/episode/$number.m3u8",
     )
+    private fun StreamItem.serverPreferenceKey() = streamServerKey(addonId, streamLabel)
+
     private fun select(streams: List<StreamItem>, key: String?) = StreamAutoPlaySelector.selectAutoPlayStream(
         streams = streams, mode = StreamAutoPlayMode.FIRST_STREAM, regexPattern = "",
         source = StreamAutoPlaySource.ALL_SOURCES, installedAddonNames = emptySet(),

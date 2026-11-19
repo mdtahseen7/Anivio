@@ -109,17 +109,8 @@ fun AniZipResponse.artworkUrl(coverType: String): String? =
         ?.url
         ?.takeIf { it.isNotBlank() }
 
-/** Transparent title art, accepting the common TVDB/Fanart spelling variants. */
-fun AniZipResponse.logoUrl(): String? = listOf(
-    "Clearlogo",
-    "HDTVLogo",
-    "Logo",
-    "HDMovieLogo",
-    "MovieLogo",
-).asSequence().mapNotNull(::artworkUrl).firstOrNull()
-
-/** TVDB clear logo — kept as a compatibility alias for existing callers. */
-fun AniZipResponse.clearLogoUrl(): String? = logoUrl()
+/** TVDB clear logo — transparent title art, which is what the hero and details header want. */
+fun AniZipResponse.clearLogoUrl(): String? = artworkUrl("Clearlogo")
 
 fun AniZipResponse.fanartUrl(): String? = artworkUrl("Fanart")
 

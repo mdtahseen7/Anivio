@@ -44,6 +44,7 @@ import kotlinx.coroutines.launch
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.action_retry
 import nuvio.composeapp.generated.resources.anilist_source_name
+import nuvio.composeapp.generated.resources.library_mdblist_title
 import nuvio.composeapp.generated.resources.settings_tracking_anilist_library_description
 import nuvio.composeapp.generated.resources.settings_tracking_anilist_local_progress_description
 import nuvio.composeapp.generated.resources.settings_tracking_anilist_progress_description
@@ -52,17 +53,13 @@ import nuvio.composeapp.generated.resources.settings_tracking_connect_first
 import nuvio.composeapp.generated.resources.settings_tracking_continue_watching_days_all
 import nuvio.composeapp.generated.resources.settings_tracking_continue_watching_days_value
 import nuvio.composeapp.generated.resources.settings_tracking_data_sources
-import nuvio.composeapp.generated.resources.settings_tracking_anivio_api
-import nuvio.composeapp.generated.resources.settings_tracking_anivio_assets
-import nuvio.composeapp.generated.resources.settings_tracking_anivio_assets_description
-import nuvio.composeapp.generated.resources.settings_tracking_anivio_metadata_fallback
-import nuvio.composeapp.generated.resources.settings_tracking_anivio_metadata_fallback_description
 import nuvio.composeapp.generated.resources.settings_tracking_local_library_description
 import nuvio.composeapp.generated.resources.settings_tracking_local_progress_description
 import nuvio.composeapp.generated.resources.settings_tracking_mal_source_description
 import nuvio.composeapp.generated.resources.settings_tracking_progress_refresh_failed
 import nuvio.composeapp.generated.resources.settings_tracking_services
 import nuvio.composeapp.generated.resources.settings_tracking_source_fallback
+import nuvio.composeapp.generated.resources.settings_tracking_trakt_progress_required
 import nuvio.composeapp.generated.resources.settings_tracking_viewing_discovery
 import nuvio.composeapp.generated.resources.tracking_source_local
 import nuvio.composeapp.generated.resources.tracking_source_mal
@@ -86,31 +83,6 @@ internal fun LazyListScope.trackingSettingsContent(
     malUiState: MalAuthUiState,
     settingsUiState: TrackingSettingsUiState,
 ) {
-    item {
-        SettingsSection(
-            title = stringResource(Res.string.settings_tracking_anivio_api),
-            isTablet = isTablet,
-        ) {
-            SettingsGroup(isTablet = isTablet) {
-                SettingsSwitchRow(
-                    title = stringResource(Res.string.settings_tracking_anivio_assets),
-                    description = stringResource(Res.string.settings_tracking_anivio_assets_description),
-                    checked = settingsUiState.anivioAssetsEnabled,
-                    isTablet = isTablet,
-                    onCheckedChange = TrackingSettingsRepository::setAnivioAssetsEnabled,
-                )
-                SettingsGroupDivider(isTablet = isTablet)
-                SettingsSwitchRow(
-                    title = stringResource(Res.string.settings_tracking_anivio_metadata_fallback),
-                    description = stringResource(Res.string.settings_tracking_anivio_metadata_fallback_description),
-                    checked = settingsUiState.anivioMetadataFallbackEnabled,
-                    isTablet = isTablet,
-                    onCheckedChange = TrackingSettingsRepository::setAnivioMetadataFallbackEnabled,
-                )
-            }
-        }
-    }
-
     item {
         SettingsSection(
             title = stringResource(Res.string.settings_tracking_services),
@@ -280,12 +252,17 @@ private fun TrackingViewingPreferences(
     settingsUiState: TrackingSettingsUiState,
 ) {
     var showContinueWatchingPicker by rememberSaveable { mutableStateOf(false) }
+    val progressFromTracker = settingsUiState.watchProgressSource != WatchProgressSource.LOCAL
 
     SettingsGroup(isTablet = isTablet) {
         TrackingPreferenceActionRow(
             title = stringResource(Res.string.trakt_continue_watching_window),
-            description = stringResource(Res.string.trakt_continue_watching_subtitle),
+            description = stringResource(
+                if (progressFromTracker) Res.string.trakt_continue_watching_subtitle
+                else Res.string.settings_tracking_trakt_progress_required,
+            ),
             value = continueWatchingDaysCapLabel(settingsUiState.continueWatchingDaysCap),
+            enabled = progressFromTracker,
             isTablet = isTablet,
             onClick = { showContinueWatchingPicker = true },
         )
@@ -313,6 +290,7 @@ private fun TrackingPreferenceActionRow(
     onClick: () -> Unit,
     supportingMessage: String? = null,
     isLoading: Boolean = false,
+    enabled: Boolean = true,
 ) {
     val tokens = MaterialTheme.nuvio
     SettingsNavigationRow(
@@ -321,6 +299,7 @@ private fun TrackingPreferenceActionRow(
             description,
             supportingMessage?.takeIf(String::isNotBlank),
         ).joinToString("\n"),
+        enabled = enabled,
         isTablet = isTablet,
         trailingContent = {
             Row(
@@ -329,7 +308,6 @@ private fun TrackingPreferenceActionRow(
             ) {
                 if (isLoading) {
                     NuvioLoadingIndicator(
-                        color = tokens.colors.accent,
                         modifier = Modifier.size(16.dp),
                     )
                 }
@@ -463,6 +441,7 @@ private fun librarySourceModeLabel(source: LibrarySourceMode): String = when (so
     LibrarySourceMode.LOCAL -> stringResource(Res.string.tracking_source_local)
     LibrarySourceMode.ANILIST -> stringResource(Res.string.anilist_source_name)
     LibrarySourceMode.MAL -> stringResource(Res.string.tracking_source_mal)
+    LibrarySourceMode.MDBLIST -> stringResource(Res.string.library_mdblist_title)
 }
 
 @Composable
@@ -471,6 +450,7 @@ private fun watchProgressSourceLabel(source: WatchProgressSource): String = when
     WatchProgressSource.ANILIST -> stringResource(Res.string.anilist_source_name)
     WatchProgressSource.ANILIST_LOCAL -> stringResource(Res.string.tracking_source_anilist_local)
     WatchProgressSource.MAL -> stringResource(Res.string.tracking_source_mal)
+    WatchProgressSource.MDBLIST -> stringResource(Res.string.library_mdblist_title)
 }
 
 @Composable
@@ -481,3 +461,4 @@ private fun continueWatchingDaysCapLabel(days: Int): String =
         else ->
             stringResource(Res.string.settings_tracking_continue_watching_days_value, normalized)
     }
+

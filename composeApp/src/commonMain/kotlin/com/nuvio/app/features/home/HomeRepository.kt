@@ -5,20 +5,21 @@ import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.enabledAddons
 import com.nuvio.app.features.anime.PublicAnimeSource
 import com.nuvio.app.features.anilist.AniListHeroArtwork
-import com.nuvio.app.features.anilist.AniListCatalogSource
-import com.nuvio.app.features.content.ContentMode
-import com.nuvio.app.features.content.ContentModeRepository
 import com.nuvio.app.features.catalog.CatalogPage
 import com.nuvio.app.features.catalog.CatalogTarget
 import com.nuvio.app.features.catalog.fetchCatalogPage
+import com.nuvio.app.features.catalog.mergeCatalogItems
+import com.nuvio.app.core.poster.CustomPosterUrlRepository
+import com.nuvio.app.core.poster.reapplyCustomPosterUrls
+import com.nuvio.app.core.poster.withCustomPosterUrls
 import com.nuvio.app.features.collection.Collection
 import com.nuvio.app.features.collection.CollectionRepository
 import com.nuvio.app.features.collection.CollectionSource
 import com.nuvio.app.features.collection.TmdbCollectionSourceResolver
 import com.nuvio.app.features.collection.catalogRouteKey
 import com.nuvio.app.features.collection.findCollectionCatalog
-import com.nuvio.app.core.time.EpisodeReleaseDatePlatform
 import com.nuvio.app.features.watchprogress.CurrentDateProvider
+import com.nuvio.app.isDesktop
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,11 +32,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.absoluteValue
 import kotlin.random.Random
 
 object HomeRepository {
-    private const val TOP_TODAY_LIMIT = 10
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
@@ -53,7 +54,6 @@ object HomeRepository {
     val reloadGeneration: StateFlow<Int> = _reloadGeneration.asStateFlow()
 
     private var activeJob: Job? = null
-    private var mangaWarmJob: Job? = null
     private var activeRequestKey: String? = null
     private var currentRequestKey: String? = null
     private var currentDefinitions: List<HomeCatalogDefinition> = emptyList()
@@ -66,23 +66,11 @@ object HomeRepository {
     private var lastErrorMessage: String? = null
     private var hydratedFromCache: Boolean = false
 
-    /**
-     * How long a disk cache written by the last successful refresh stands in for a network
-     * refresh. Matches the cache's volatile-row cap: a recency row older than this is already
-     * dropped by the cache read, so the coverage check below forces a refresh past this age
-     * whenever such a row is on screen. Forced refreshes ignore this entirely.
-     */
-    private const val HOME_CATALOG_FRESH_MS = 60L * 60 * 1000
-
     fun refresh(addons: List<ManagedAddon>, force: Boolean = false) {
         val activeAddons = addons.enabledAddons()
         val requests = buildAllHomeCatalogDefinitions(activeAddons)
         currentDefinitions = requests
         val requestCacheKeys = requests.mapTo(mutableSetOf(), HomeCatalogDefinition::cacheKey)
-        // Keep the other mode's rows in memory too: toggling Anime <-> Manga must find
-        // warm rows instead of re-fetching them on every switch.
-        val idleMode = if (ContentModeRepository.mode.value == ContentMode.Manga) ContentMode.Anime else ContentMode.Manga
-        requestCacheKeys += buildAllHomeCatalogDefinitions(activeAddons, idleMode).map(HomeCatalogDefinition::cacheKey)
         cachedSections = cachedSections.filterKeys(requestCacheKeys::contains)
         val requestKey = requests.joinToString(separator = "|", transform = HomeCatalogDefinition::cacheKey)
         currentRequestKey = requestKey
@@ -110,36 +98,11 @@ object HomeRepository {
         }
 
         activeJob?.cancel()
-        // Stale-while-revalidate: paint matching in-memory rows synchronously so a toggle
-        // back to warm rows shows content instantly; the network job below then refreshes
-        // behind it instead of behind skeletons. No-op when nothing is cached.
-        publishCurrentState(
-            isLoading = true,
-            requestKey = requestKey,
-        )
         _uiState.update { it.copy(isLoading = true, errorMessage = null) }
         activeJob = scope.launch {
             // Paint last session's rows first: the network refresh below then happens behind
             // content the user can already read instead of behind skeletons.
-            val snapshot = hydrateFromCache(requestKey = requestKey)
-            if (!force && snapshot != null && isCacheFreshFor(snapshot, requests)) {
-                // The last successful refresh wrote this cache recently and it covers every
-                // current definition, so serve it instead of paying a full network refresh on
-                // every app open. Forced refreshes (pull-to-refresh, coming back online,
-                // collections changing) still always hit the network.
-                activeRequestKey = null
-                publishCurrentState(
-                    isLoading = false,
-                    requestKey = requestKey,
-                )
-                ensureCollectionHeroFallback(
-                    addons = activeAddons,
-                    forceRefresh = false,
-                    refreshSources = false,
-                    requestKey = requestKey,
-                )
-                return@launch
-            }
+            hydrateFromCache(requestKey = requestKey)
             val prioritizedRequests = prioritizeDefinitions(
                 definitions = requests,
                 snapshot = HomeCatalogSettingsRepository.snapshot(),
@@ -208,62 +171,6 @@ object HomeRepository {
                 requestKey = requestKey,
             )
             persistCache()
-            if (ContentModeRepository.mode.value == ContentMode.Anime) {
-                prefetchMangaRows(activeAddons)
-            }
-        }
-    }
-
-    /**
-     * Background-warms the manga home rows while the user browses anime, so the first
-     * Anime → Manga toggle paints instantly instead of paying a cold fetch plus a
-     * hero-artwork storm. Never touches [_uiState], jobs or request keys: it only fills
-     * [cachedSections], the hero-artwork cache and the disk cache. No-op once warm.
-     */
-    fun prefetchMangaRows(addons: List<ManagedAddon>) {
-        if (ContentModeRepository.mode.value != ContentMode.Anime) return
-        val mangaDefinitions = buildAllHomeCatalogDefinitions(addons.enabledAddons(), ContentMode.Manga)
-        val missing = mangaDefinitions.filter { !cachedSections.containsKey(it.cacheKey) }
-        if (missing.isEmpty()) return
-        mangaWarmJob?.cancel()
-        mangaWarmJob = scope.launch {
-            val pages = try {
-                AniListCatalogSource.resolveHomeRows(
-                    missing.map(HomeCatalogDefinition::catalogId),
-                    HOME_CATALOG_PREVIEW_FETCH_LIMIT,
-                    false,
-                )
-            } catch (_: Throwable) {
-                return@launch
-            }
-            val warmedItems = mutableListOf<MetaPreview>()
-            missing.forEach { definition ->
-                val page = pages[definition.catalogId] ?: return@forEach
-                if (page.items.isEmpty()) return@forEach
-                warmedItems += page.items
-                cachedSections = cachedSections + (definition.cacheKey to HomeCatalogSection(
-                    key = definition.key,
-                    title = definition.defaultTitle,
-                    subtitle = definition.addonName,
-                    addonName = definition.addonName,
-                    target = CatalogTarget.AniList(
-                        catalogId = definition.catalogId,
-                        contentType = definition.type,
-                        supportsPagination = definition.supportsPagination,
-                    ),
-                    items = page.items,
-                    availableItemCount = page.rawItemCount.takeIf { it > 0 } ?: page.items.size,
-                    hasMore = page.items.isNotEmpty() && definition.supportsPagination && page.nextSkip != null,
-                ))
-            }
-            if (warmedItems.isEmpty()) return@launch
-            // Move the toggle-time artwork storm earlier. Misses are only timestamped, so a
-            // failed lookup is retried on the next launch instead of being cached for a week.
-            try {
-                AniListHeroArtwork.resolve(warmedItems)
-            } catch (_: Throwable) {
-            }
-            persistCache()
         }
     }
 
@@ -283,8 +190,6 @@ object HomeRepository {
     fun clear() {
         activeJob?.cancel()
         activeJob = null
-        mangaWarmJob?.cancel()
-        mangaWarmJob = null
         activeRequestKey = null
         currentRequestKey = null
         currentDefinitions = emptyList()
@@ -307,13 +212,12 @@ object HomeRepository {
      * Rows already in memory are left alone, and a cached row whose definition is gone — uninstalled
      * addon, changed manifest — has no matching cache key, so it cannot come back.
      */
-    private fun hydrateFromCache(requestKey: String): HomeCatalogCacheSnapshot? {
-        if (hydratedFromCache) return null
+    private fun hydrateFromCache(requestKey: String) {
+        if (hydratedFromCache) return
         hydratedFromCache = true
 
-        val snapshot = HomeCatalogCache.load() ?: return null
+        val snapshot = HomeCatalogCache.load() ?: return
         AniListHeroArtwork.hydrate(snapshot.heroArtwork)
-        AniListHeroArtwork.hydrateAttempts(snapshot.attemptedArtwork)
 
         val restored = currentDefinitions.mapNotNull { definition ->
             if (cachedSections.containsKey(definition.cacheKey)) return@mapNotNull null
@@ -321,41 +225,21 @@ object HomeRepository {
                 ?: return@mapNotNull null
             definition.cacheKey to definition.toSection(row)
         }
-        if (restored.isEmpty() && snapshot.heroArtwork.isEmpty()) return snapshot
+        if (restored.isEmpty() && snapshot.heroArtwork.isEmpty()) return
 
         cachedSections = cachedSections + restored
-        if (activeRequestKey != requestKey) return snapshot
+        if (activeRequestKey != requestKey) return
         publishCurrentState(
             isLoading = true,
             requestKey = requestKey,
         )
-        return snapshot
-    }
-
-    /**
-     * True when the disk cache was written by a recent successful refresh and covers every row
-     * the home screen is about to show. A snapshot missing any current definition must not
-     * stand in for a refresh — otherwise a recency row would go stale while the rest looks fresh.
-     */
-    private fun isCacheFreshFor(
-        snapshot: HomeCatalogCacheSnapshot,
-        requests: List<HomeCatalogDefinition>,
-    ): Boolean {
-        if (snapshot.storedAtEpochMs <= 0L) return false
-        val age = EpisodeReleaseDatePlatform.nowEpochMs() - snapshot.storedAtEpochMs
-        if (age < 0L || age > HOME_CATALOG_FRESH_MS) return false
-        val keys = requests.mapTo(mutableSetOf(), HomeCatalogDefinition::cacheKey)
-        return keys.all { key -> snapshot.rows.containsKey(key) }
     }
 
     /** Writes the rows currently on screen, plus any hero artwork resolved for them, to disk. */
-    internal fun persistResolvedArtwork() = persistCache()
-
     private fun persistCache() {
         HomeCatalogCache.save(
             sections = cachedSections,
             heroArtwork = AniListHeroArtwork.snapshot(),
-            attemptedArtwork = AniListHeroArtwork.attemptsSnapshot(),
             // Recorded per row rather than inferred at read time: the cache holds only keys and items,
             // and a key cannot say whether the row it belongs to is about recency.
             volatileCacheKeys = currentDefinitions
@@ -371,8 +255,12 @@ object HomeRepository {
         val snapshot = HomeCatalogSettingsRepository.snapshot()
         val preferences = snapshot.preferences
         val todayIsoDate = if (snapshot.hideUnreleasedContent) CurrentDateProvider.todayIsoDate() else null
+        CustomPosterUrlRepository.ensureLoaded()
+        val posterPattern = CustomPosterUrlRepository.patternForScreen(com.nuvio.app.core.poster.CustomPosterScreen.HOME)
         fun HomeCatalogSection.withReleaseFilter(): HomeCatalogSection =
             if (todayIsoDate == null) this else filterReleasedItems(todayIsoDate)
+        fun HomeCatalogSection.withPosterOverlay(): HomeCatalogSection =
+            copy(items = items.reapplyCustomPosterUrls(posterPattern))
 
         val sections = currentDefinitions
             .sortedBy { definition -> preferences[definition.key]?.order ?: Int.MAX_VALUE }
@@ -380,7 +268,10 @@ object HomeRepository {
                 val preference = preferences[definition.key]
                 if (preference?.enabled == false) return@mapNotNull null
 
-                val section = cachedSections[definition.cacheKey]?.withReleaseFilter() ?: return@mapNotNull null
+                val section = cachedSections[definition.cacheKey]
+                    ?.withPosterOverlay()
+                    ?.withReleaseFilter()
+                    ?: return@mapNotNull null
                 if (section.items.isEmpty()) return@mapNotNull null
                 val customTitle = preference?.customTitle.orEmpty()
                 section.copy(
@@ -388,17 +279,13 @@ object HomeRepository {
                 )
             }
 
-        val heroMode = ContentModeRepository.mode.value
         val catalogHeroItems = if (snapshot.heroEnabled) {
             val heroRandom = Random((requestKey?.hashCode() ?: 0).absoluteValue + 1)
             currentDefinitions
                 .filter { definition -> preferences[definition.key]?.heroSourceEnabled != false }
                 .mapNotNull { definition -> cachedSections[definition.cacheKey] }
-                .map { section -> section.withReleaseFilter() }
+                .map { section -> section.withPosterOverlay().withReleaseFilter() }
                 .flatMap { section -> section.items }
-                // Never show the other mode's heroes while its rows load: without this the
-                // hero sits on stale anime art for the whole manga fetch.
-                .filter { item -> if (heroMode == ContentMode.Manga) item.type == "manga" else item.type != "manga" }
                 .distinctBy { item -> "${item.type}:${item.id}" }
                 .shuffled(heroRandom)
                 .take(HOME_HERO_ITEM_LIMIT)
@@ -407,28 +294,22 @@ object HomeRepository {
         }
         lastPublishedCatalogHeroEmpty = snapshot.heroEnabled && catalogHeroItems.isEmpty()
         val heroItems = if (snapshot.heroEnabled) {
-            catalogHeroItems.ifEmpty {
-                // Collection heroes are anime-only; in manga mode an empty hero beats a
-                // stale anime one while the rows load.
-                cachedCollectionHeroItems.takeIf { heroMode == ContentMode.Anime }.orEmpty()
-            }
+            catalogHeroItems.ifEmpty { cachedCollectionHeroItems }
         } else {
             emptyList()
         }
-        // AniList only has a ~460px cover, so swap in TVDB's 680x1000 portrait and its clear logo
-        // (falling back to Anivio / TMDB / fanart) once the enrichment lands.
+        // AniList only has portrait covers and a patchy banner, so swap in the wide backdrop and
+        // title logo resolved from TMDB / fanart.tv / ani.zip once they land.
         val heroArtwork = AniListHeroArtwork.snapshot()
-        val decoratedHeroItems = heroItems.map { item -> heroArtwork[item.stableKey()] ?: item }
+        val decoratedHeroItems = heroItems.map { it.withResolvedDiscoveryArtwork(heroArtwork[it.stableKey()]) }
 
-        _uiState.value = HomeUiState(
+        val nextState = HomeUiState(
             isLoading = isLoading,
             heroItems = decoratedHeroItems,
-            sections = sections,
-            discoverySourceSections = currentDefinitions.mapNotNull { definition ->
-                cachedSections[definition.cacheKey]?.withReleaseFilter()?.takeIf { it.items.isNotEmpty() }
-            },
+            sections = sections.map { section -> section.copy(items = section.items.map { it.withResolvedDiscoveryArtwork(heroArtwork[it.stableKey()]) }) },
             errorMessage = if (sections.isEmpty()) lastErrorMessage else null,
         )
+        if (_uiState.value != nextState) _uiState.value = nextState
 
         ensureHeroArtwork(items = decoratedHeroItems, requestKey = requestKey)
     }
@@ -442,8 +323,7 @@ object HomeRepository {
 
         heroArtworkJob = scope.launch {
             AniListHeroArtwork.resolve(items)
-            // Everything passed in is either cached or timestamped, so this republish cannot
-            // re-trigger itself inside the retry window.
+            // Everything passed in is cached now, so this republish cannot re-trigger itself.
             publishCurrentState(
                 isLoading = _uiState.value.isLoading,
                 requestKey = requestKey,
@@ -457,36 +337,33 @@ object HomeRepository {
         forceRefresh: Boolean,
         aniListPages: Map<String, CatalogPage>,
     ): HomeCatalogSection {
+        CustomPosterUrlRepository.ensureLoaded()
+        val pattern = CustomPosterUrlRepository.patternForScreen(com.nuvio.app.core.poster.CustomPosterScreen.HOME)
         val page = when (source) {
             // Normally already resolved by the batched query; falls back to a single-row
             // request if that call failed.
             HomeCatalogSource.ANILIST -> aniListPages[catalogId]
-                ?: if (ContentModeRepository.mode.value == ContentMode.Manga) {
-                    AniListCatalogSource.resolve(catalogId, 1, HOME_CATALOG_PREVIEW_FETCH_LIMIT, forceRefresh)
-                } else {
-                    PublicAnimeSource.catalog(
-                        catalogId = catalogId,
-                        contentType = type,
-                        page = 1,
-                        maxItems = HOME_CATALOG_PREVIEW_FETCH_LIMIT,
-                        forceRefresh = forceRefresh,
-                    )
-                }
+                ?: PublicAnimeSource.catalog(
+                    catalogId = catalogId,
+                    contentType = type,
+                    page = 1,
+                    maxItems = HOME_CATALOG_PREVIEW_FETCH_LIMIT,
+                    forceRefresh = forceRefresh,
+                )
 
-            HomeCatalogSource.ADDON -> fetchCatalogPage(
-                manifestUrl = manifestUrl,
-                type = type,
-                catalogId = catalogId,
-                maxItems = HOME_CATALOG_PREVIEW_FETCH_LIMIT,
-                forceRefresh = forceRefresh,
-            )
-
-            HomeCatalogSource.DAILY_RANKING -> fetchCurrentTopToday(
-                trendingPage = aniListPages["trending"],
-                forceRefresh = forceRefresh,
-            )
+            HomeCatalogSource.ADDON -> if (isDesktop) {
+                fetchDesktopHomePreview(forceRefresh)
+            } else {
+                fetchCatalogPage(
+                    manifestUrl = manifestUrl,
+                    type = type,
+                    catalogId = catalogId,
+                    maxItems = HOME_CATALOG_PREVIEW_FETCH_LIMIT,
+                    forceRefresh = forceRefresh,
+                )
+            }
         }
-        val items = page.items
+        val items = if (pattern.isNotBlank()) page.items.withCustomPosterUrls(pattern) else page.items
 
         return HomeCatalogSection(
             key = key,
@@ -497,7 +374,6 @@ object HomeRepository {
             items = items,
             availableItemCount = if (items.isEmpty()) 0 else page.rawItemCount,
             hasMore = items.isNotEmpty() && supportsPagination && page.nextSkip != null,
-            isRanked = isRanked,
         )
     }
 
@@ -512,7 +388,6 @@ object HomeRepository {
             items = row.items,
             availableItemCount = row.availableItemCount.takeIf { it > 0 } ?: row.items.size,
             hasMore = row.hasMore && supportsPagination,
-            isRanked = isRanked,
         )
 
     private fun HomeCatalogDefinition.catalogTarget(): CatalogTarget =
@@ -529,36 +404,7 @@ object HomeRepository {
                 catalogId = catalogId,
                 supportsPagination = supportsPagination,
             )
-
-            HomeCatalogSource.DAILY_RANKING -> CatalogTarget.AniList(
-                catalogId = "trending",
-                contentType = type,
-                supportsPagination = false,
-            )
         }
-
-    private suspend fun fetchCurrentTopToday(
-        trendingPage: CatalogPage?,
-        forceRefresh: Boolean,
-    ): CatalogPage {
-        // The former external "daily" endpoint currently returns accumulated historical counts
-        // (daily, weekly, monthly and yearly values are identical), which puts long-finished anime
-        // in this row. Use the active anime provider's live trending feed instead. For AniList that
-        // feed is constrained to RELEASING titles; the MAL fallback uses Kitsu's editorial trend.
-        val current = trendingPage ?: PublicAnimeSource.catalog(
-            catalogId = "trending",
-            contentType = "series",
-            page = 1,
-            maxItems = TOP_TODAY_LIMIT,
-            forceRefresh = forceRefresh,
-        )
-        val items = current.items.take(TOP_TODAY_LIMIT)
-        return CatalogPage(
-            items = items,
-            rawItemCount = items.size,
-            nextSkip = null,
-        )
-    }
 
     private suspend fun fetchAniListHomePages(
         definitions: List<HomeCatalogDefinition>,
@@ -570,9 +416,7 @@ object HomeRepository {
         if (catalogIds.isEmpty()) return emptyMap()
 
         return try {
-            if (ContentModeRepository.mode.value == ContentMode.Manga) {
-                AniListCatalogSource.resolveHomeRows(catalogIds, HOME_CATALOG_PREVIEW_FETCH_LIMIT, forceRefresh)
-            } else PublicAnimeSource.homeRows(
+            PublicAnimeSource.homeRows(
                 catalogIds = catalogIds,
                 maxItems = HOME_CATALOG_PREVIEW_FETCH_LIMIT,
                 forceRefresh = forceRefresh,
@@ -583,6 +427,38 @@ object HomeRepository {
             // Not fatal — toSection() retries each row individually and surfaces the error there.
             emptyMap()
         }
+    }
+
+    private suspend fun HomeCatalogDefinition.fetchDesktopHomePreview(forceRefresh: Boolean): CatalogPage {
+        var items = emptyList<MetaPreview>()
+        var rawItemCount = 0
+        var nextSkip: Int? = null
+        var pagesFetched = 0
+        // One stalled addon must not hold its whole batch: keep what arrived in 20s.
+        withTimeoutOrNull(20_000) {
+            do {
+                val page = fetchCatalogPage(
+                    manifestUrl = manifestUrl,
+                    type = type,
+                    catalogId = catalogId,
+                    skip = nextSkip,
+                    maxItems = DESKTOP_HOME_CATALOG_PREVIEW_FETCH_LIMIT - items.size,
+                    forceRefresh = forceRefresh,
+                )
+                items = mergeCatalogItems(items, page.items)
+                rawItemCount += page.rawItemCount
+                nextSkip = page.nextSkip
+                pagesFetched++
+            } while (
+                supportsPagination && nextSkip != null && items.size < DESKTOP_HOME_CATALOG_PREVIEW_FETCH_LIMIT &&
+                pagesFetched < DESKTOP_HOME_CATALOG_PREVIEW_MAX_PAGES
+            )
+        }
+        return CatalogPage(
+            items = items.take(DESKTOP_HOME_CATALOG_PREVIEW_FETCH_LIMIT),
+            rawItemCount = rawItemCount,
+            nextSkip = nextSkip,
+        )
     }
 
     private fun ensureCollectionHeroFallback(
@@ -750,6 +626,8 @@ private const val HOME_COLLECTION_HERO_SOURCE_LIMIT = 6
 private const val HOME_COLLECTION_HERO_SOURCE_ITEM_LIMIT = 8
 private const val HOME_CATALOG_FETCH_BATCH_SIZE = 4
 private const val HOME_CATALOG_PREVIEW_FETCH_LIMIT = 18
+private const val DESKTOP_HOME_CATALOG_PREVIEW_FETCH_LIMIT = 64
+private const val DESKTOP_HOME_CATALOG_PREVIEW_MAX_PAGES = 4
 private const val HOME_CATALOG_PUBLISH_INTERVAL = 2
 
 private fun prioritizeDefinitions(

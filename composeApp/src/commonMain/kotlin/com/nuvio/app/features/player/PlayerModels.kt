@@ -60,6 +60,11 @@ object PlayerLaunchStore {
 
     fun get(launchId: Long): PlayerLaunch? = launches[launchId]
 
+    fun update(launchId: Long, transform: (PlayerLaunch) -> PlayerLaunch) {
+        val launch = launches[launchId] ?: return
+        launches[launchId] = transform(launch)
+    }
+
     fun remove(launchId: Long) {
         launches.remove(launchId)
     }
@@ -74,6 +79,7 @@ enum class PlayerResizeMode {
     Fit,
     Fill,
     Zoom,
+    Stretch,
 }
 
 enum class AndroidPlaybackEngine(
@@ -83,14 +89,6 @@ enum class AndroidPlaybackEngine(
     ExoPlayer("ExoPlayer"),
     Libmpv("libmpv"),
 }
-
-internal data class PlaybackKey(
-    val sourceIdentity: String,
-    val videoId: String?,
-    val seasonNumber: Int?,
-    val episodeNumber: Int?,
-    val playbackEngine: AndroidPlaybackEngine? = null,
-)
 
 enum class AndroidLibmpvVideoOutput(
     val mpvValue: String,
@@ -217,8 +215,14 @@ fun IosHardwareDecoderMode.localizedLabel(): String = when (this) {
     else -> label
 }
 
+internal data class PlaybackKey(
+    val sourceIdentity: String,
+    val videoId: String?,
+    val seasonNumber: Int?,
+    val episodeNumber: Int?,
+)
+
 data class PlayerPlaybackSnapshot(
-    val chapters: List<PlayerChapter> = emptyList(),
     val isLoading: Boolean = true,
     val isPlaying: Boolean = false,
     val isEnded: Boolean = false,

@@ -73,30 +73,33 @@ class HomeCatalogParserTest {
     }
 
     @Test
-    fun `parse catalog response keeps hero rating metadata`() {
-        val item = HomeCatalogParser.parseCatalog(
-            """
+    fun `parse catalog response reads addon landscape poster`() {
+        val result = HomeCatalogParser.parseCatalogResponse(
+            payload = """
                 {
                   "metas": [
                     {
                       "id": "tt1",
                       "type": "movie",
-                      "name": "Rated Movie",
-                      "imdbRating": "8.2",
-                      "runtime": "118 min",
-                      "status": "Released",
-                      "ageRating": "PG-13",
-                      "language": "en"
+                      "name": "One",
+                      "background": "https://img/background.jpg",
+                      "landscapePoster": "https://img/landscape-1.jpg"
+                    },
+                    {
+                      "id": "tt2",
+                      "type": "movie",
+                      "name": "Two",
+                      "landscapePoster": "https://img/landscape-2.jpg"
                     }
                   ]
                 }
             """.trimIndent(),
-        ).single()
+        )
 
-        assertEquals("8.2", item.imdbRating)
-        assertEquals("118 min", item.runtime)
-        assertEquals("Released", item.status)
-        assertEquals("PG-13", item.ageRating)
-        assertEquals("en", item.language)
+        val (withBackground, withoutBackground) = result.items
+        assertEquals("https://img/landscape-1.jpg", withBackground.landscapePoster)
+        assertEquals("https://img/background.jpg", withBackground.banner)
+        assertEquals("https://img/landscape-2.jpg", withoutBackground.landscapePoster)
+        assertEquals("https://img/landscape-2.jpg", withoutBackground.banner)
     }
 }

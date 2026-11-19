@@ -66,7 +66,6 @@ internal fun PlayerScreenRuntime.lockPlayerControls() {
     showAudioModal = false
     showSubtitleModal = false
     showVideoSettingsModal = false
-    showStreamInfo = false
     showSourcesPanel = false
     showEpisodesPanel = false
     episodeStreamsPanelState = EpisodeStreamsPanelState()
@@ -154,7 +153,6 @@ internal fun PlayerScreenRuntime.showVolumeFeedback(level: PlayerAudioLevel) {
 
 internal fun PlayerScreenRuntime.togglePlayback() {
     if (partyBlocksControl()) return
-    val restarting = !playbackSnapshot.isPlaying && playbackSnapshot.isEnded
     if (playbackSnapshot.isPlaying) {
         shouldPlay = false
         playerController?.pause()
@@ -165,20 +163,42 @@ internal fun PlayerScreenRuntime.togglePlayback() {
         shouldPlay = true
         playerController?.play()
     }
-    publishPartyPlayback(positionMs = if (restarting) 0L else currentPlaybackPositionMs())
     controlsVisible = true
+    publishPartyPlayback()
+}
+
+internal fun PlayerScreenRuntime.prepareTogglePlaybackForNativeFallback(revealControls: Boolean = true) {
+    shouldPlay = !playbackSnapshot.isPlaying
+    if (revealControls) {
+        controlsVisible = true
+    }
 }
 
 internal fun PlayerScreenRuntime.seekBy(offsetMs: Long) {
-    val targetPositionMs = (playbackSnapshot.positionMs + offsetMs)
-        .coerceAtLeast(0L)
-        .let { target ->
-            playbackSnapshot.durationMs.takeIf { it > 0L }?.let(target::coerceAtMost) ?: target
-        }
-    val syncedTarget = ownSeekTarget(targetPositionMs) ?: return
-    playerController?.seekTo(syncedTarget)
+    val fromMs = playbackSnapshot.positionMs
+    val targetMs = (fromMs + offsetMs).coerceAtLeast(0L)
+        .let { if (playbackSnapshot.durationMs > 0L) it.coerceAtMost(playbackSnapshot.durationMs) else it }
+    val allowedTarget = ownSeekTarget(targetMs) ?: return
+    lastManualSkipSeekPositions = fromMs to allowedTarget
+    playerController?.seekTo(allowedTarget)
+    applySeekByControlFeedback(offsetMs)
+}
+
+internal fun PlayerScreenRuntime.prepareSeekByForNativeFallback(
+    offsetMs: Long,
+    revealControls: Boolean = true,
+) {
+    applySeekByControlFeedback(offsetMs, revealControls)
+}
+
+private fun PlayerScreenRuntime.applySeekByControlFeedback(
+    offsetMs: Long,
+    revealControls: Boolean = true,
+) {
     scheduleProgressSyncAfterSeek()
-    controlsVisible = true
+    if (revealControls) {
+        controlsVisible = true
+    }
     when {
         offsetMs > 0L -> showSeekFeedback(PlayerSeekDirection.Forward, offsetMs)
         offsetMs < 0L -> showSeekFeedback(PlayerSeekDirection.Backward, abs(offsetMs))
@@ -186,6 +206,17 @@ internal fun PlayerScreenRuntime.seekBy(offsetMs: Long) {
 }
 
 internal fun PlayerScreenRuntime.handleDoubleTapSeek(direction: PlayerSeekDirection) {
+    handleDoubleTapSeek(direction, sendToController = true)
+}
+
+internal fun PlayerScreenRuntime.prepareDoubleTapSeekForNativeFallback(direction: PlayerSeekDirection) {
+    handleDoubleTapSeek(direction, sendToController = false)
+}
+
+private fun PlayerScreenRuntime.handleDoubleTapSeek(
+    direction: PlayerSeekDirection,
+    sendToController: Boolean,
+) {
     val currentPositionMs = playbackSnapshot.positionMs.coerceAtLeast(0L)
     val currentSeekState = accumulatedSeekState
     val nextState = if (currentSeekState?.direction == direction) {
@@ -209,8 +240,10 @@ internal fun PlayerScreenRuntime.handleDoubleTapSeek(direction: PlayerSeekDirect
             maxDurationMs?.let { unclamped.coerceAtMost(it) } ?: unclamped
         }
     }
-    val syncedTarget = ownSeekTarget(targetPositionMs) ?: return
-    playerController?.seekTo(syncedTarget)
+    lastManualSkipSeekPositions = currentPositionMs to targetPositionMs
+    if (sendToController) {
+        playerController?.seekTo(targetPositionMs)
+    }
     scheduleProgressSyncAfterSeek()
     showSeekFeedback(direction, nextState.amountMs)
 
@@ -231,6 +264,7 @@ internal fun PlayerScreenRuntime.cycleResizeMode() {
             PlayerResizeMode.Fit -> resizeModeFitLabel
             PlayerResizeMode.Fill -> resizeModeFillLabel
             PlayerResizeMode.Zoom -> resizeModeZoomLabel
+            PlayerResizeMode.Stretch -> resizeModeStretchLabel
         },
     )
     controlsVisible = true
@@ -324,8 +358,8 @@ internal fun PlayerScreenRuntime.rememberSurfaceGestureCallbacks(): PlayerSurfac
         currentPositionMs = rememberUpdatedState(playbackSnapshot.positionMs.coerceAtLeast(0L)),
         currentDurationMs = rememberUpdatedState(playbackSnapshot.durationMs),
         commitHorizontalSeek = rememberUpdatedState { targetPositionMs: Long ->
-            val syncedTarget = ownSeekTarget(targetPositionMs) ?: return@rememberUpdatedState
-            playerController?.seekTo(syncedTarget)
+            lastManualSkipSeekPositions = playbackSnapshot.positionMs to targetPositionMs
+            playerController?.seekTo(targetPositionMs)
             scheduleProgressSyncAfterSeek()
         },
     )

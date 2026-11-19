@@ -71,6 +71,12 @@ data class SettingsPageRoute(
 ) : SettingsDestinationRoute
 
 @Serializable
+data class PartyRoute(
+    val code: String = "",
+    override val title: String = "",
+) : SettingsDestinationRoute
+
+@Serializable
 data class HomescreenSettingsRoute(override val title: String = "") : SettingsDestinationRoute
 
 @Serializable
@@ -80,13 +86,10 @@ data class MetaScreenSettingsRoute(override val title: String = "") : SettingsDe
 data class ContinueWatchingSettingsRoute(override val title: String = "") : SettingsDestinationRoute
 
 @Serializable
-data class PartyRoute(
-    val code: String = "",
-    override val title: String = "",
-) : SettingsDestinationRoute
-
-@Serializable
-data class DownloadsSettingsRoute(override val title: String = "") : SettingsDestinationRoute
+data class DownloadsRoute(override val title: String = "") : AppRoute {
+    override val preferredTabName: String
+        get() = "Library"
+}
 
 @Serializable
 data class DownloadShowRoute(

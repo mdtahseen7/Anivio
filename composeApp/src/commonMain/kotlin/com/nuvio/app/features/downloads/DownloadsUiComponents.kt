@@ -8,7 +8,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.automirrored.rounded.MenuBook
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -60,36 +59,6 @@ internal fun DownloadsHeader(title: String, onBack: () -> Unit, onOpenFolder: ()
 }
 
 @Composable
-internal fun DownloadsMediaTabs(selectedIndex: Int, onSelected: (Int) -> Unit) {
-    val colors = MaterialTheme.nuvio.colors
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(50)).background(colors.surface).padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        listOf(
-            stringResource(Res.string.downloads_tab_anime) to Icons.Rounded.PlayArrow,
-            stringResource(Res.string.downloads_tab_manga) to Icons.AutoMirrored.Rounded.MenuBook,
-        ).forEachIndexed { index, (label, icon) ->
-            val background by animateColorAsState(if (selectedIndex == index) colors.accent else Color.Transparent)
-            Surface(
-                onClick = { onSelected(index) }, modifier = Modifier.weight(1f),
-                shape = CircleShape, color = background,
-            ) {
-                Row(
-                    Modifier.heightIn(min = 48.dp).padding(horizontal = 12.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    val foreground = if (selectedIndex == index) MaterialTheme.colorScheme.onPrimary else colors.textSecondary
-                    Icon(icon, null, Modifier.size(20.dp), tint = foreground)
-                    Text(label, color = foreground, style = MaterialTheme.typography.titleSmall, maxLines = 1)
-                }
-            }
-        }
-    }
-}
-
-@Composable
 internal fun DownloadsOverview(
     summary: DownloadsStorageSummary,
     size: String,
@@ -115,7 +84,7 @@ internal fun DownloadsOverview(
                     Text(size, style = MaterialTheme.typography.headlineLarge, color = colors.textPrimary)
                     Text(stringResource(Res.string.downloads_size_label), style = MaterialTheme.typography.bodySmall, color = colors.textSecondary)
                 }
-                val pending = summary.activeCount + summary.queuedCount + summary.pausedCount + summary.failedCount
+                val pending = summary.activeCount + summary.pausedCount + summary.failedCount
                 if (pending > 0) {
                     Surface(shape = CircleShape, color = colors.accent.copy(alpha = 0.1f)) {
                         Text(
@@ -126,9 +95,9 @@ internal fun DownloadsOverview(
                     }
                 }
             }
-            if (summary.activeCount + summary.queuedCount + summary.pausedCount + summary.failedCount > 0) {
+            if (summary.activeCount + summary.pausedCount + summary.failedCount > 0) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (summary.activeCount + summary.queuedCount > 0) {
+                    if (summary.activeCount > 0) {
                         DownloadBulkAction(Icons.Rounded.Pause, stringResource(Res.string.downloads_pause_all), onPauseAll)
                     }
                     if (summary.pausedCount > 0) {
@@ -183,14 +152,14 @@ internal fun SectionTitle(title: String, count: Int? = null) {
 }
 
 @Composable
-internal fun DownloadEmptyState(title: String, subtitle: String, manga: Boolean = false) {
+internal fun DownloadEmptyState(title: String, subtitle: String) {
     val colors = MaterialTheme.nuvio.colors
     Column(
         Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 36.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(Modifier.size(80.dp).background(colors.surface, RoundedCornerShape(28.dp)), contentAlignment = Alignment.Center) {
-            Icon(if (manga) Icons.AutoMirrored.Rounded.MenuBook else Icons.Rounded.Download,
+            Icon(Icons.Rounded.Download,
                 null, Modifier.size(34.dp), tint = colors.accent)
         }
         Text(title, style = MaterialTheme.typography.titleMedium, color = colors.textPrimary, textAlign = TextAlign.Center)
@@ -203,7 +172,7 @@ internal fun DownloadedSeriesCard(title: String, poster: String?, subtitle: Stri
     val colors = MaterialTheme.nuvio.colors
     Surface(onClick = onClick, color = colors.surface, shape = RoundedCornerShape(24.dp)) {
         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            DownloadArtwork(poster, portrait = true, manga = false)
+            DownloadArtwork(poster, portrait = true)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(title, style = MaterialTheme.typography.titleMedium, color = colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(subtitle, style = MaterialTheme.typography.bodySmall, color = colors.textSecondary)
@@ -232,7 +201,7 @@ internal fun DownloadMediaCard(
     Surface(onClick = onOpen, enabled = playable, shape = RoundedCornerShape(24.dp), color = colors.surface) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
-                DownloadArtwork(artwork, portrait, manga = portrait)
+                DownloadArtwork(artwork, portrait)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Row(verticalAlignment = Alignment.Top) {
                         Text(title, Modifier.weight(1f).padding(top = 3.dp), style = MaterialTheme.typography.titleMedium,
@@ -262,19 +231,19 @@ internal fun DownloadMediaCard(
                     Text("${(progress * 100).toInt().coerceIn(0, 100)}%", style = MaterialTheme.typography.labelMedium, color = colors.textPrimary)
                 }
                 val icon = when (status) {
-                    DownloadStatus.Downloading, DownloadStatus.Queued -> Icons.Rounded.Pause
+                    DownloadStatus.Downloading -> Icons.Rounded.Pause
                     DownloadStatus.Failed -> Icons.Rounded.Refresh
-                    else -> if (portrait && playable) Icons.AutoMirrored.Rounded.MenuBook else Icons.Rounded.PlayArrow
+                    else -> Icons.Rounded.PlayArrow
                 }
                 val label = when (status) {
-                    DownloadStatus.Downloading, DownloadStatus.Queued -> stringResource(Res.string.compose_action_pause)
+                    DownloadStatus.Downloading -> stringResource(Res.string.compose_action_pause)
                     DownloadStatus.Paused -> stringResource(Res.string.action_resume)
                     DownloadStatus.Failed -> stringResource(Res.string.action_retry)
-                    else -> stringResource(if (portrait) Res.string.downloads_read else Res.string.action_play)
+                    else -> stringResource(Res.string.action_play)
                 }
                 Surface(
                     onClick = when (status) {
-                        DownloadStatus.Downloading, DownloadStatus.Queued -> onPause
+                        DownloadStatus.Downloading -> onPause
                         DownloadStatus.Paused -> onResume
                         DownloadStatus.Failed -> onRetry
                         else -> onOpen
@@ -288,7 +257,7 @@ internal fun DownloadMediaCard(
                     }
                 }
             }
-            if (status in listOf(DownloadStatus.Downloading, DownloadStatus.Paused, DownloadStatus.Queued)) {
+            if (status in listOf(DownloadStatus.Downloading, DownloadStatus.Paused)) {
                 val track = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape)
                 if (knownProgress || status != DownloadStatus.Downloading) {
                     LinearProgressIndicator(progress = { progressValue }, modifier = track,
@@ -303,14 +272,14 @@ internal fun DownloadMediaCard(
 }
 
 @Composable
-private fun DownloadArtwork(url: String?, portrait: Boolean, manga: Boolean) {
+private fun DownloadArtwork(url: String?, portrait: Boolean) {
     val colors = MaterialTheme.nuvio.colors
     Box(
         Modifier.size(width = if (portrait) 64.dp else 88.dp, height = if (portrait) 90.dp else 72.dp)
             .clip(RoundedCornerShape(12.dp)).background(colors.surfaceElevated),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(if (manga) Icons.AutoMirrored.Rounded.MenuBook else Icons.Rounded.PlayArrow, null, tint = colors.textMuted)
+        Icon(Icons.Rounded.PlayArrow, null, tint = colors.textMuted)
         if (!url.isNullOrBlank()) AsyncImage(model = url, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
     }
 }

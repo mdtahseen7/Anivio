@@ -42,7 +42,6 @@ interface NuvioPlayerBridge {
         gamma: Int,
     )
     fun configureAudioOutput(audioOutput: String)
-    fun configureAudioProcessing(delayMs: Int, gainDb: Float, channels: String, normalize: Boolean, centerLevel: Float)
     fun setPlaybackSpeed(speed: Float)
     fun setMuted(muted: Boolean)
     fun setResizeMode(mode: Int) // 0=Fit, 1=Fill, 2=Zoom
@@ -60,6 +59,7 @@ interface NuvioPlayerBridge {
     fun getSubtitleTrackLang(at: Int): String
     fun isSubtitleTrackSelected(at: Int): Boolean
     fun selectAudioTrack(trackId: Int)
+    fun applyAudioLanguagePreferences(languages: List<String>)
     fun selectSubtitleTrack(trackId: Int)
     fun setSubtitleUrl(url: String)
     fun clearExternalSubtitle()
@@ -71,7 +71,6 @@ interface NuvioPlayerBridge {
         outlineColor: String,
         outlineSize: Float,
         bold: Boolean,
-        fontFamily: String,
         fontSize: Float,
         subPos: Int,
         stripSdh: Boolean,

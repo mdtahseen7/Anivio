@@ -1,34 +1,57 @@
 package com.nuvio.app.features.downloads
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Dns
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil3.compose.AsyncImage
 import com.nuvio.app.core.i18n.localizedByteUnit
 import com.nuvio.app.core.ui.NuvioBottomSheetActionRow
 import com.nuvio.app.core.ui.NuvioModalBottomSheet
 import com.nuvio.app.core.ui.NuvioScreen
+import com.nuvio.app.core.ui.NuvioScreenHeader
 import com.nuvio.app.core.ui.NuvioStatusModal
 import com.nuvio.app.core.ui.NuvioToastController
 import com.nuvio.app.core.ui.dismissNuvioBottomSheet
@@ -36,13 +59,13 @@ import com.nuvio.app.core.ui.nuvio
 import com.nuvio.app.features.plugins.PluginRepository
 import kotlinx.coroutines.launch
 import nuvio.composeapp.generated.resources.*
+
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
 fun DownloadsScreen(
     onBack: () -> Unit,
     onOpenDownload: (DownloadItem) -> Unit,
-    onOpenMangaDownload: (MangaDownloadItem) -> Unit,
     initialShowId: String? = null,
     onNavigateToShow: ((showId: String, title: String) -> Unit)? = null,
     onBackFromShow: (() -> Unit)? = null,
@@ -51,11 +74,12 @@ fun DownloadsScreen(
         DownloadsRepository.ensureLoaded()
         DownloadsRepository.uiState
     }.collectAsStateWithLifecycle()
+    LaunchedEffect(uiState.completedItems.size) {
+        DownloadsRepository.markCompletedSeen()
+    }
 
     var selectedShowId by rememberSaveable(initialShowId) { mutableStateOf(initialShowId) }
     var downloadPendingDeletionId by rememberSaveable { mutableStateOf<String?>(null) }
-    var mangaPendingDeletionId by rememberSaveable { mutableStateOf<String?>(null) }
-    var selectedMediaTab by rememberSaveable { mutableStateOf(0) }
     var showServerPicker by rememberSaveable { mutableStateOf(false) }
     val openDownloadsDirectoryFailedText = stringResource(Res.string.downloads_open_directory_failed)
 
@@ -65,11 +89,6 @@ fun DownloadsScreen(
         // screen has not been opened this session.
         PluginRepository.initialize()
         DownloadSettingsRepository.uiState
-    }.collectAsStateWithLifecycle()
-
-    val mangaUiState by remember {
-        MangaDownloadsRepository.ensureLoaded()
-        MangaDownloadsRepository.uiState
     }.collectAsStateWithLifecycle()
 
     val completedEpisodes = remember(uiState.items) {
@@ -108,32 +127,16 @@ fun DownloadsScreen(
         }
 
         if (selectedShowId == null) {
-            item {
-                DownloadsMediaTabs(
-                    selectedIndex = selectedMediaTab,
-                    onSelected = { selectedMediaTab = it },
-                )
-            }
-            if (selectedMediaTab == 0) {
-                downloadsRootContent(
-                    uiState = uiState,
-                    mangaUiState = mangaUiState,
-                    defaultServerName = downloadSettings.defaultServerAddonName,
-                    onPickDefaultServer = { showServerPicker = true },
-                    onOpenDownload = onOpenDownload,
-                    onOpenShow = { showId, title ->
-                        onNavigateToShow?.invoke(showId, title) ?: run { selectedShowId = showId }
-                    },
-                    onDeleteDownload = { downloadPendingDeletionId = it },
-                )
-            } else {
-                downloadsMangaContent(
-                    uiState = mangaUiState,
-                    animeUiState = uiState,
-                    onOpenDownload = onOpenMangaDownload,
-                    onDeleteDownload = { mangaPendingDeletionId = it },
-                )
-            }
+            downloadsRootContent(
+                uiState = uiState,
+                defaultServerName = downloadSettings.defaultServerAddonName,
+                onPickDefaultServer = { showServerPicker = true },
+                onOpenDownload = onOpenDownload,
+                onOpenShow = { showId, title ->
+                    onNavigateToShow?.invoke(showId, title) ?: run { selectedShowId = showId }
+                },
+                onDeleteDownload = { downloadPendingDeletionId = it },
+            )
         } else {
             downloadsShowContent(
                 showId = selectedShowId.orEmpty(),
@@ -150,6 +153,7 @@ fun DownloadsScreen(
             title = stringResource(Res.string.action_delete_confirm_title),
             message = stringResource(Res.string.action_delete_confirm_message),
             isVisible = true,
+            destructive = true,
             confirmText = stringResource(Res.string.action_yes),
             dismissText = stringResource(Res.string.action_no),
             onConfirm = {
@@ -157,22 +161,6 @@ fun DownloadsScreen(
                 downloadPendingDeletionId = null
             },
             onDismiss = { downloadPendingDeletionId = null },
-        )
-    }
-
-    val pendingMangaDeletionId = mangaPendingDeletionId
-    if (pendingMangaDeletionId != null) {
-        NuvioStatusModal(
-            title = stringResource(Res.string.action_delete_confirm_title),
-            message = stringResource(Res.string.action_delete_confirm_message),
-            isVisible = true,
-            confirmText = stringResource(Res.string.action_yes),
-            dismissText = stringResource(Res.string.action_no),
-            onConfirm = {
-                MangaDownloadsRepository.cancelDownload(pendingMangaDeletionId)
-                mangaPendingDeletionId = null
-            },
-            onDismiss = { mangaPendingDeletionId = null },
         )
     }
 
@@ -246,9 +234,24 @@ private fun DefaultDownloadServerSheet(
     }
 }
 
+@Composable
+private fun DownloadsManagementBar(
+    summary: DownloadsStorageSummary,
+    onPauseAll: () -> Unit,
+    onResumeAll: () -> Unit,
+    onRetryAll: () -> Unit,
+) {
+    DownloadsOverview(
+        summary = summary,
+        size = formatBytes(summary.bytes),
+        onPauseAll = onPauseAll,
+        onResumeAll = onResumeAll,
+        onRetryAll = onRetryAll,
+    )
+}
+
 private fun LazyListScope.downloadsRootContent(
     uiState: DownloadsUiState,
-    mangaUiState: MangaDownloadsUiState,
     defaultServerName: String?,
     onPickDefaultServer: () -> Unit,
     onOpenDownload: (DownloadItem) -> Unit,
@@ -257,18 +260,15 @@ private fun LazyListScope.downloadsRootContent(
 ) {
     item {
         DownloadsManagementBar(
-            summary = mergeStorageSummaries(uiState.storageSummary(), mangaUiState.storageSummary()),
+            summary = uiState.storageSummary(),
             onPauseAll = {
                 DownloadsRepository.pauseActiveDownloads()
-                MangaDownloadsRepository.pauseActiveDownloads()
             },
             onResumeAll = {
-                DownloadsRepository.resumePausedDownloads()
-                MangaDownloadsRepository.resumePausedDownloads()
+                uiState.items.filter { it.status == DownloadStatus.Paused }.forEach { DownloadsRepository.resumeDownload(it.id) }
             },
             onRetryAll = {
-                DownloadsRepository.retryFailedDownloads()
-                MangaDownloadsRepository.retryFailedDownloads()
+                uiState.items.filter { it.status == DownloadStatus.Failed }.forEach { DownloadsRepository.retryDownload(it.id) }
             },
         )
     }
@@ -359,125 +359,6 @@ private fun LazyListScope.downloadsRootContent(
     }
 }
 
-private fun LazyListScope.downloadsMangaContent(
-    uiState: MangaDownloadsUiState,
-    animeUiState: DownloadsUiState,
-    onOpenDownload: (MangaDownloadItem) -> Unit,
-    onDeleteDownload: (String) -> Unit,
-) {
-    item {
-        DownloadsManagementBar(
-            summary = mergeStorageSummaries(animeUiState.storageSummary(), uiState.storageSummary()),
-            onPauseAll = {
-                DownloadsRepository.pauseActiveDownloads()
-                MangaDownloadsRepository.pauseActiveDownloads()
-            },
-            onResumeAll = {
-                DownloadsRepository.resumePausedDownloads()
-                MangaDownloadsRepository.resumePausedDownloads()
-            },
-            onRetryAll = {
-                DownloadsRepository.retryFailedDownloads()
-                MangaDownloadsRepository.retryFailedDownloads()
-            },
-        )
-    }
-    val chapterOrder = compareBy<MangaDownloadItem> { it.title.lowercase() }
-        .thenBy { it.chapterNumber.toDoubleOrNull() ?: Double.MAX_VALUE }
-        .thenBy { it.chapterNumber }
-    val groups = listOf(
-        Res.string.downloads_section_active to uiState.activeItems.sortedWith(chapterOrder),
-        Res.string.downloads_manga_saved to uiState.completedItems.sortedWith(chapterOrder),
-    )
-    groups.forEach { (title, chapters) ->
-        if (chapters.isNotEmpty()) {
-            item { SectionTitle(stringResource(title), chapters.size) }
-            items(items = chapters, key = { it.id }) { chapter ->
-                MangaDownloadRow(
-                    item = chapter,
-                    onOpen = { onOpenDownload(chapter) },
-                    onPause = { MangaDownloadsRepository.pauseDownload(chapter.id) },
-                    onResume = { MangaDownloadsRepository.resumeDownload(chapter.id) },
-                    onRetry = { MangaDownloadsRepository.retryDownload(chapter.id) },
-                    onDelete = { onDeleteDownload(chapter.id) },
-                )
-            }
-        }
-    }
-    if (uiState.items.isEmpty()) {
-        item {
-            DownloadEmptyState(
-                title = stringResource(Res.string.downloads_manga_empty_title),
-                subtitle = stringResource(Res.string.downloads_manga_empty_hint),
-                manga = true,
-            )
-        }
-    }
-}
-
-private fun mergeStorageSummaries(
-    anime: DownloadsStorageSummary,
-    manga: DownloadsStorageSummary,
-): DownloadsStorageSummary = DownloadsStorageSummary(
-    queuedCount = anime.queuedCount + manga.queuedCount,
-    activeCount = anime.activeCount + manga.activeCount,
-    pausedCount = anime.pausedCount + manga.pausedCount,
-    completedCount = anime.completedCount + manga.completedCount,
-    failedCount = anime.failedCount + manga.failedCount,
-    bytes = anime.bytes + manga.bytes,
-)
-
-@Composable
-private fun DownloadsManagementBar(
-    summary: DownloadsStorageSummary,
-    onPauseAll: () -> Unit,
-    onResumeAll: () -> Unit,
-    onRetryAll: () -> Unit,
-) {
-    DownloadsOverview(
-        summary = summary,
-        size = formatBytes(summary.bytes),
-        onPauseAll = onPauseAll,
-        onResumeAll = onResumeAll,
-        onRetryAll = onRetryAll,
-    )
-}
-
-@Composable
-private fun MangaDownloadRow(
-    item: MangaDownloadItem,
-    onOpen: () -> Unit,
-    onPause: () -> Unit,
-    onResume: () -> Unit,
-    onRetry: () -> Unit,
-    onDelete: () -> Unit,
-) {
-    DownloadMediaCard(
-        title = item.title,
-        subtitle = "Chapter ${item.chapterNumber}${item.chapterTitle?.let { " • $it" }.orEmpty()}",
-        artwork = item.poster,
-        portrait = true,
-        status = item.status,
-        statusText = mangaDownloadStatusText(item),
-        progress = item.progressFraction,
-        knownProgress = item.totalPages > 0,
-        playable = item.isPlayable,
-        onOpen = onOpen,
-        onPause = onPause,
-        onResume = onResume,
-        onRetry = onRetry,
-        onDelete = onDelete,
-    )
-}
-
-private fun mangaDownloadStatusText(item: MangaDownloadItem): String = when (item.status) {
-    DownloadStatus.Queued -> "Queued • ${item.downloadedPages}/${item.totalPages} pages"
-    DownloadStatus.Downloading -> "Downloading pages ${item.downloadedPages}/${item.totalPages}"
-    DownloadStatus.Paused -> "Paused • ${item.downloadedPages}/${item.totalPages} pages"
-    DownloadStatus.Completed -> "Downloaded ${item.totalPages} pages"
-    DownloadStatus.Failed -> item.errorMessage ?: "Download failed"
-}
-
 private fun LazyListScope.downloadsShowContent(
     showId: String,
     episodes: List<DownloadItem>,
@@ -499,10 +380,18 @@ private fun LazyListScope.downloadsShowContent(
 
     if (seasons.isEmpty()) {
         item {
-            DownloadEmptyState(
-                title = stringResource(Res.string.downloads_empty_episodes),
-                subtitle = stringResource(Res.string.downloads_empty_hint),
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 40.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = stringResource(Res.string.downloads_empty_episodes),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         return
     }
@@ -515,7 +404,6 @@ private fun LazyListScope.downloadsShowContent(
                 } else {
                     stringResource(Res.string.episodes_season, seasonNumber)
                 },
-                count = entries.size,
             )
         }
 
@@ -604,7 +492,6 @@ private fun statusText(item: DownloadItem): String {
     }
 
     return when (item.status) {
-        DownloadStatus.Queued -> "Queued • ${formatBytes(item.downloadedBytes)}"
         DownloadStatus.Downloading -> stringResource(Res.string.downloads_status_downloading, size)
         DownloadStatus.Paused -> stringResource(Res.string.downloads_status_paused, size)
         DownloadStatus.Completed -> stringResource(

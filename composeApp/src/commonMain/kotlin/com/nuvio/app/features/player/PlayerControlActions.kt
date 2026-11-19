@@ -19,13 +19,10 @@ import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.Flag
-import androidx.compose.material.icons.rounded.Groups
-import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.LockOpen
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.Speed
-import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -62,28 +59,10 @@ internal fun PlayerToolbar(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     titleContent: (@Composable () -> Unit)? = null,
-    onSwitchEngineClick: (() -> Unit)? = null,
-    onPartyClick: (() -> Unit)? = null,
-    partyActive: Boolean = false,
 ) {
     Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.weight(1f)) {
             titleContent?.invoke()
-        }
-        if (onSwitchEngineClick != null) {
-            PlayerAction(
-                description = stringResource(Res.string.cd_switch_player_engine),
-                icon = Icons.Rounded.SwapHoriz,
-                onClick = onSwitchEngineClick,
-            )
-        }
-        if (onPartyClick != null) {
-            PlayerAction(
-                description = stringResource(Res.string.party_title),
-                icon = Icons.Rounded.Groups,
-                onClick = onPartyClick,
-                tint = if (partyActive) MaterialTheme.colorScheme.primary else Color.White,
-            )
         }
         PlayerAction(
             description = stringResource(
@@ -119,7 +98,6 @@ internal fun PlayerControlActions(
     onSpeedClick: () -> Unit,
     onResizeModeClick: () -> Unit,
     onVideoSettingsClick: (() -> Unit)?,
-    onStreamInfoClick: () -> Unit,
     onOpenInExternalPlayer: (() -> Unit)?,
     onSubmitIntroClick: (() -> Unit)?,
     onInteraction: () -> Unit,
@@ -171,11 +149,6 @@ internal fun PlayerControlActions(
                 icon = Icons.Rounded.Build,
             )
         },
-        PlayerControlAction(
-            stringResource(Res.string.cd_stream_info),
-            onStreamInfoClick,
-            icon = Icons.Rounded.Info,
-        ),
         onSubmitIntroClick?.let {
             PlayerControlAction(
                 stringResource(Res.string.submit_intro_action), it,
@@ -256,13 +229,12 @@ private fun PlayerAction(
     icon: ImageVector? = null,
     painter: Painter? = null,
     iconSize: Dp = 24.dp,
-    tint: Color = Color.White,
 ) {
     IconButton(onClick = onClick, modifier = Modifier.size(48.dp)) {
         if (painter != null) {
-            Icon(painter, description, tint = tint, modifier = Modifier.size(iconSize))
+            Icon(painter, description, tint = Color.White, modifier = Modifier.size(iconSize))
         } else if (icon != null) {
-            Icon(icon, description, tint = tint, modifier = Modifier.size(iconSize))
+            Icon(icon, description, tint = Color.White, modifier = Modifier.size(iconSize))
         }
     }
 }

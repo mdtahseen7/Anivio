@@ -5,13 +5,7 @@ internal expect object AddonStorage {
     fun saveInstalledAddonUrls(profileId: Int, urls: List<String>)
     fun loadAddonEnabledStates(profileId: Int): Map<String, Boolean>
     fun saveAddonEnabledStates(profileId: Int, states: Map<String, Boolean>)
-    fun loadAddonFailureReasons(profileId: Int): Map<String, String>
-    fun saveAddonFailureReasons(profileId: Int, reasons: Map<String, String>)
-    fun loadPreferredAddonUrls(profileId: Int): Map<String, List<String>>
-    fun savePreferredAddonUrls(profileId: Int, preferences: Map<String, List<String>>)
 }
-
-internal expect fun clearAddonHttpCache()
 
 data class RawHttpResponse(
     val status: Int,
@@ -19,6 +13,8 @@ data class RawHttpResponse(
     val url: String,
     val body: String,
     val headers: Map<String, String>,
+    /** The response body before charset decoding. */
+    val bodyBytes: ByteArray = body.encodeToByteArray(),
 )
 
 /** Default safety limit for generic and plugin-provided HTTP responses. */
@@ -46,4 +42,6 @@ expect suspend fun httpRequestRaw(
     body: String,
     followRedirects: Boolean = true,
     maxResponseBodyBytes: Int = DefaultRawHttpResponseMaxBytes,
+    /** When present, sends these bytes verbatim instead of UTF-8 encoding [body]. */
+    bodyBytes: ByteArray? = null,
 ): RawHttpResponse

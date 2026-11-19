@@ -4,11 +4,11 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -28,7 +28,6 @@ import coil3.compose.AsyncImage
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Animation
 import androidx.compose.material.icons.rounded.Sync
-import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -51,9 +50,18 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import com.nuvio.app.core.ui.DialogButton
+import com.nuvio.app.core.ui.DialogButtons
+import com.nuvio.app.core.ui.DialogButtonStyle
+import com.nuvio.app.core.ui.DialogSurface
+import kotlinx.coroutines.launch
 import com.nuvio.app.core.ui.NuvioLoadingIndicator
 import com.nuvio.app.core.ui.NuvioTokens
 import com.nuvio.app.core.ui.nuvio
@@ -264,7 +272,7 @@ private fun MalProviderCard(
 }
 
 @Composable
-private fun TrackingProviderCard(
+internal fun TrackingProviderCard(
     brand: TrackingBrand,
     mode: TrackingConnectionCardMode,
     credentialsConfigured: Boolean,
@@ -278,22 +286,30 @@ private fun TrackingProviderCard(
     openLoginLabel: String,
     disconnectLabel: String,
     missingCredentialsMessage: String,
+    approvalCode: String? = null,
+    authorizationCode: String? = null,
+    approvalUrl: String? = null,
+    approvalCodeCopiedMessage: String? = null,
     modifier: Modifier = Modifier,
     avatarUrl: String? = null,
     statusMessage: String? = null,
     errorMessage: String? = null,
     websiteLabel: String? = null,
     websiteUrl: String? = null,
-    onConnectRequested: () -> String?,
-    onResumeAuthorization: () -> String?,
+    onConnectRequested: suspend () -> String?,
+    onResumeAuthorization: suspend () -> String?,
     onCancelAuthorization: () -> Unit,
     onDisconnect: () -> Unit,
 ) {
     val tokens = MaterialTheme.nuvio
+    val clipboardManager = LocalClipboardManager.current
     val uriHandler = LocalUriHandler.current
+    val actionScope = rememberCoroutineScope()
+    val displayedApprovalCode = authorizationCode ?: approvalCode
     val failedOpenBrowserMessage = stringResource(Res.string.settings_tracking_failed_open_browser)
     var browserError by rememberSaveable { mutableStateOf(false) }
     var showDisconnectDialog by rememberSaveable { mutableStateOf(false) }
+    var localStatusMessage by rememberSaveable(displayedApprovalCode) { mutableStateOf<String?>(null) }
 
     fun openUrl(url: String?) {
         if (url.isNullOrBlank()) return
@@ -354,11 +370,23 @@ private fun TrackingProviderCard(
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color.White.copy(alpha = 0.78f),
                     )
+                    displayedApprovalCode?.takeIf(String::isNotBlank)?.let { code ->
+                        TrackingApprovalCode(
+                            code = code,
+                            url = approvalUrl,
+                            onCopy = {
+                                clipboardManager.setText(AnnotatedString(code))
+                                localStatusMessage = approvalCodeCopiedMessage
+                            },
+                        )
+                    }
                     TrackingBrandPrimaryButton(
                         label = openLoginLabel,
                         loading = isLoading,
                         enabled = !isLoading,
-                        onClick = { openUrl(onResumeAuthorization()) },
+                        onClick = {
+                            actionScope.launch { openUrl(onResumeAuthorization()) }
+                        },
                     )
                     OutlinedButton(
                         onClick = onCancelAuthorization,
@@ -386,7 +414,9 @@ private fun TrackingProviderCard(
                         label = connectLabel,
                         loading = isLoading,
                         enabled = credentialsConfigured && !isLoading,
-                        onClick = { openUrl(onConnectRequested()) },
+                        onClick = {
+                            actionScope.launch { openUrl(onConnectRequested()) }
+                        },
                     )
                     if (!credentialsConfigured) {
                         TrackingBrandMessage(
@@ -397,7 +427,7 @@ private fun TrackingProviderCard(
                 }
             }
 
-            statusMessage?.takeIf(String::isNotBlank)?.let { message ->
+            (localStatusMessage ?: statusMessage)?.takeIf(String::isNotBlank)?.let { message ->
                 TrackingBrandMessage(text = message, isError = false)
             }
             errorMessage?.takeIf(String::isNotBlank)?.let { message ->
@@ -465,6 +495,40 @@ private fun TrackingProviderCard(
             },
             onDismiss = { showDisconnectDialog = false },
         )
+    }
+}
+
+@Composable
+private fun TrackingApprovalCode(
+    code: String,
+    url: String?,
+    onCopy: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onCopy),
+        shape = RoundedCornerShape(NuvioTokens.Radius.md),
+        color = Color.White.copy(alpha = 0.12f),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = code,
+                style = MaterialTheme.typography.headlineSmall,
+                color = Color.White,
+                fontWeight = FontWeight.SemiBold,
+            )
+            url?.takeIf(String::isNotBlank)?.let { value ->
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.8f),
+                )
+            }
+        }
     }
 }
 
@@ -571,51 +635,28 @@ private fun TrackingDisconnectDialog(
     onDismiss: () -> Unit,
 ) {
     val tokens = MaterialTheme.nuvio
-    BasicAlertDialog(onDismissRequest = onDismiss) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .widthIn(max = tokens.components.dialogMaxWidth),
-            shape = tokens.shapes.dialog,
-            color = tokens.colors.surfaceDialog,
-        ) {
-            Column(
-                modifier = Modifier.padding(tokens.spacing.dialogPadding),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Text(
-                    text = stringResource(Res.string.settings_tracking_disconnect_title, brand.displayName),
-                    style = MaterialTheme.typography.titleLarge,
-                    color = tokens.colors.textPrimary,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = stringResource(
-                        Res.string.settings_tracking_disconnect_description,
-                        brand.displayName,
-                    ),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = tokens.colors.textMuted,
-                )
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text(stringResource(Res.string.action_cancel))
-                    }
-                    Button(
-                        onClick = onConfirm,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error,
-                            contentColor = MaterialTheme.colorScheme.onError,
-                        ),
-                    ) {
-                        Text(disconnectLabel)
-                    }
-                }
-            }
+    DialogSurface(
+        onDismissRequest = onDismiss,
+        title = stringResource(Res.string.settings_tracking_disconnect_title, brand.displayName),
+    ) {
+        Text(
+            text = stringResource(
+                Res.string.settings_tracking_disconnect_description,
+                brand.displayName,
+            ),
+            style = MaterialTheme.typography.bodyMedium,
+            color = tokens.colors.textMuted,
+        )
+        DialogButtons {
+            DialogButton(
+                text = stringResource(Res.string.action_cancel),
+                onClick = onDismiss,
+            )
+            DialogButton(
+                text = disconnectLabel,
+                onClick = onConfirm,
+                style = DialogButtonStyle.Destructive,
+            )
         }
     }
 }

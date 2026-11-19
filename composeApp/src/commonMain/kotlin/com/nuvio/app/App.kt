@@ -1,14 +1,15 @@
 package com.nuvio.app
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.foundation.layout.Box
-import com.nuvio.app.core.ui.AvSplash
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.ImageLoader
@@ -16,9 +17,14 @@ import coil3.annotation.ExperimentalCoilApi
 import coil3.compose.setSingletonImageLoaderFactory
 import coil3.request.CachePolicy
 import coil3.request.crossfade
+import coil3.svg.SvgDecoder
+import com.nuvio.app.core.poster.CustomPosterFallbackInterceptor
+import com.nuvio.app.core.ui.AvSplash
 import com.nuvio.app.core.ui.NativeProfileSwitcherController
 import com.nuvio.app.core.ui.NuvioTheme
 import com.nuvio.app.core.ui.configurePlatformImageLoader
+import com.nuvio.app.core.ui.desktopUiScaleForWindow
+import com.nuvio.app.core.ui.platformProvidesImageLoader
 import com.nuvio.app.features.settings.ThemeSettingsRepository
 import com.nuvio.app.navigation.AppRoute
 import com.nuvio.app.navigation.TabsRoute
@@ -48,51 +54,53 @@ fun App(
     appGateController: AppGateController? = null,
 ) {
     AppEnvironment {
-        var splashComplete by rememberSaveable { mutableStateOf(!ownsAppRuntime || bypassAppGate) }
-        var gateReady by remember { mutableStateOf(false) }
-        LaunchedEffect(gateReady, splashComplete) { onAppReady?.invoke(gateReady && splashComplete) }
-        Box {
-        AppGate(
-            initialTab = initialTab,
-            initialRoute = initialRoute,
-            useNativeNavigation = useNativeNavigation,
-            useNativeTabBar = useNativeTabBar,
-            useTabletFloatingTabBar = useTabletFloatingTabBar,
-            ownsAppRuntime = ownsAppRuntime,
-            bypassAppGate = bypassAppGate,
-            renderMainContent = true,
-            onNavigate = onNavigate,
-            onGoBack = onGoBack,
-            onReplace = onReplace,
-            onActivate = onActivate,
-            onAppReady = { gateReady = it },
-            onMainContentMountChanged = null,
-            onMainContentVisibleChanged = null,
-            onTabTitles = onTabTitles,
-            nativeProfileSwitcherController = nativeProfileSwitcherController,
-            appGateController = appGateController,
-        )
-        if (!splashComplete) AvSplash(onFinished = { splashComplete = true })
+        var splashComplete by rememberSaveable { mutableStateOf(!isWindows || !ownsAppRuntime || bypassAppGate) }
+        Box(Modifier.fillMaxSize()) {
+            AppGate(
+                initialTab = initialTab,
+                initialRoute = initialRoute,
+                useNativeNavigation = useNativeNavigation,
+                useNativeTabBar = useNativeTabBar,
+                useTabletFloatingTabBar = useTabletFloatingTabBar,
+                ownsAppRuntime = ownsAppRuntime,
+                bypassAppGate = bypassAppGate,
+                renderMainContent = true,
+                onNavigate = onNavigate,
+                onGoBack = onGoBack,
+                onReplace = onReplace,
+                onActivate = onActivate,
+                onAppReady = onAppReady,
+                onMainContentMountChanged = null,
+                onMainContentVisibleChanged = null,
+                onTabTitles = onTabTitles,
+                nativeProfileSwitcherController = nativeProfileSwitcherController,
+                appGateController = appGateController,
+            )
+            if (!splashComplete) AvSplash { splashComplete = true }
         }
     }
 }
 
 @Composable
 internal fun AppEnvironment(content: @Composable () -> Unit) {
-    setSingletonImageLoaderFactory { context ->
-        ImageLoader.Builder(context)
-            .crossfade(true)
-            .diskCachePolicy(CachePolicy.ENABLED)
-            .memoryCachePolicy(CachePolicy.ENABLED)
-            .components {
-                add(
-                    coil3.network.ktor3.KtorNetworkFetcherFactory(
-                        cacheStrategy = { coil3.network.cachecontrol.CacheControlCacheStrategy() },
-                    ),
-                )
-            }
-            .configurePlatformImageLoader()
-            .build()
+    if (!platformProvidesImageLoader) {
+        setSingletonImageLoaderFactory { context ->
+            ImageLoader.Builder(context)
+                .crossfade(true)
+                .diskCachePolicy(CachePolicy.ENABLED)
+                .memoryCachePolicy(CachePolicy.ENABLED)
+                .components {
+                    add(CustomPosterFallbackInterceptor())
+                    add(SvgDecoder.Factory())
+                    add(
+                        coil3.network.ktor3.KtorNetworkFetcherFactory(
+                            cacheStrategy = { coil3.network.cachecontrol.CacheControlCacheStrategy() },
+                        ),
+                    )
+                }
+                .configurePlatformImageLoader()
+                .build()
+        }
     }
     val selectedTheme by remember {
         ThemeSettingsRepository.ensureLoaded()
@@ -104,7 +112,14 @@ internal fun AppEnvironment(content: @Composable () -> Unit) {
 
     val customThemeColors by ThemeSettingsRepository.customThemeColors.collectAsStateWithLifecycle()
 
-    NuvioTheme(appTheme = selectedTheme, amoled = amoledEnabled, customThemeColors = customThemeColors) {
-        content()
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        NuvioTheme(
+            appTheme = selectedTheme,
+            amoled = amoledEnabled,
+            customThemeColors = customThemeColors,
+            desktopUiScale = desktopUiScaleForWindow(maxWidth.value, maxHeight.value),
+        ) {
+            content()
+        }
     }
 }

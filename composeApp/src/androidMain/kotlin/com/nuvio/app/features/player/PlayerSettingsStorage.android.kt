@@ -18,31 +18,19 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 actual object PlayerSettingsStorage {
-    actual fun loadAudioDelayForDevice(key: String): Int? = preferences?.let {
-        val scoped = ProfileScopedKey.of("audio_device_delay:$key")
-        if (it.contains(scoped)) it.getInt(scoped, 0) else null
-    }
-    actual fun saveAudioDelayForDevice(key: String, value: Int) { preferences?.edit()?.putInt(ProfileScopedKey.of("audio_device_delay:$key"), value)?.apply() }
     private const val preferencesName = "nuvio_player_settings"
-    private const val autoSwitchPlaybackEngineOnErrorKey = "auto_switch_playback_engine_on_error"
-    private const val showDetailedLoadingStatusKey = "show_detailed_loading_status"
-    private const val showPauseOverlayKey = "show_pause_overlay"
-    private const val enhancementResolutionKey = "enhancement_resolution"
+    private const val pendingExternalPlaybackKey = "pending_external_playback"
+    private const val playbackBrightnessKey = "playback_brightness"
+    private const val useLegacyPlayerLayoutKey = "use_legacy_player_layout"
+    private const val audioDelayMsKey = "audio_delay_ms"
+    private const val audioAmplificationDbKey = "audio_amplification_db"
     private const val videoEnhancementKey = "video_enhancement"
-    private const val exoChaptersEnabledKey = "exo_chapters_enabled"
+    private const val enhancementResolutionKey = "enhancement_resolution"
     private const val preloadNextEpisodeKey = "preload_next_episode"
     private const val preferSameServerKey = "prefer_same_server"
-    private const val defaultServerKeyKey = "default_server_key"
-    private const val rememberAudioDelayKey = "remember_audio_delay"
-    private const val audioDelayMsKey = "audio_delay_ms"
-    private const val persistAudioAmplificationKey = "persist_audio_amplification"
-    private const val audioAmplificationDbKey = "audio_amplification_db"
-    private const val audioDownmixKey = "audio_downmix"
-    private const val audioChannelsKey = "audio_channels"
-    private const val audioMaintainVolumeKey = "audio_maintain_volume"
-    private const val audioCenterMixLevelKey = "audio_center_mix_level"
     private const val showLoadingOverlayKey = "show_loading_overlay"
-    private const val useLegacyPlayerLayoutKey = "use_legacy_player_layout"
+    private const val showPlayerLoadingStatusKey = "show_player_loading_status"
+    private const val pauseOverlayEnabledKey = "pause_overlay_enabled"
     private const val playerTitleAtTopKey = "player_title_at_top"
     private const val showParentalGuideKey = "show_parental_guide"
     private const val resizeModeKey = "resize_mode"
@@ -86,6 +74,9 @@ actual object PlayerSettingsStorage {
     private const val streamAutoPlayRegexKey = "stream_auto_play_regex"
     private const val streamAutoPlayTimeoutSecondsKey = "stream_auto_play_timeout_seconds"
     private const val skipIntroEnabledKey = "skip_intro_enabled"
+    private const val autoSkipMovieCreditsKey = "auto_skip_movie_credits"
+    private const val autoSkipSegmentTypesKey = "auto_skip_segment_types"
+    private const val autoSkipPostCreditsKey = "auto_skip_post_credits"
     private const val animeSkipEnabledKey = "animeskip_enabled"
     private const val animeSkipClientIdKey = "animeskip_client_id"
     private const val seekForwardSecondsKey = "seek_forward_seconds"
@@ -116,29 +107,23 @@ actual object PlayerSettingsStorage {
     private const val iosContrastKey = "ios_contrast"
     private const val iosSaturationKey = "ios_saturation"
     private const val iosGammaKey = "ios_gamma"
+    private const val nvidiaRtxSuperResolutionEnabledKey = "nvidia_rtx_super_resolution_enabled"
     private val syncKeys = listOf(
-        autoSwitchPlaybackEngineOnErrorKey,
-        showDetailedLoadingStatusKey,
-        showPauseOverlayKey,
-        exoChaptersEnabledKey,
+        audioDelayMsKey,
+        audioAmplificationDbKey,
         videoEnhancementKey,
         enhancementResolutionKey,
         preloadNextEpisodeKey,
         preferSameServerKey,
-        defaultServerKeyKey,
-        rememberAudioDelayKey,
-        audioDelayMsKey,
-        persistAudioAmplificationKey,
-        audioAmplificationDbKey,
-        audioDownmixKey,
-        audioChannelsKey,
-        audioMaintainVolumeKey,
-        audioCenterMixLevelKey,
         showLoadingOverlayKey,
+        showPlayerLoadingStatusKey,
+        pauseOverlayEnabledKey,
         showParentalGuideKey,
         resizeModeKey,
         holdToSpeedEnabledKey,
         holdToSpeedValueKey,
+        nvidiaRtxSuperResolutionEnabledKey,
+
         touchGesturesEnabledKey,
         externalPlayerEnabledKey,
         externalPlayerForwardSubtitlesKey,
@@ -177,6 +162,9 @@ actual object PlayerSettingsStorage {
         streamAutoPlayRegexKey,
         streamAutoPlayTimeoutSecondsKey,
         skipIntroEnabledKey,
+        autoSkipMovieCreditsKey,
+        autoSkipSegmentTypesKey,
+        autoSkipPostCreditsKey,
         animeSkipEnabledKey,
         animeSkipClientIdKey,
         streamAutoPlayNextEpisodeEnabledKey,
@@ -211,44 +199,46 @@ actual object PlayerSettingsStorage {
         preferences = context.getSharedPreferences(preferencesName, Context.MODE_PRIVATE)
     }
 
-    actual fun loadAutoSwitchPlaybackEngineOnError(): Boolean? = preferences?.let { prefs ->
-        val key = ProfileScopedKey.of(autoSwitchPlaybackEngineOnErrorKey)
-        if (prefs.contains(key)) prefs.getBoolean(key, false) else null
-    }
-    actual fun saveAutoSwitchPlaybackEngineOnError(value: Boolean) {
-        preferences?.edit()?.putBoolean(ProfileScopedKey.of(autoSwitchPlaybackEngineOnErrorKey), value)?.apply()
+    actual fun loadPendingExternalPlayback(): String? = preferences?.getString(pendingExternalPlaybackKey, null)
+
+    actual fun savePendingExternalPlayback(value: String?) {
+        preferences?.edit()?.putString(pendingExternalPlaybackKey, value)?.apply()
     }
 
-    actual fun loadShowDetailedLoadingStatus(): Boolean? = preferences?.let { prefs ->
-        val key = ProfileScopedKey.of(showDetailedLoadingStatusKey)
-        if (prefs.contains(key)) prefs.getBoolean(key, false) else null
-    }
-    actual fun saveShowDetailedLoadingStatus(value: Boolean) {
-        preferences?.edit()?.putBoolean(ProfileScopedKey.of(showDetailedLoadingStatusKey), value)?.apply()
+    actual fun loadPlaybackBrightness(): Float? =
+        preferences?.let { sharedPreferences ->
+            val key = ProfileScopedKey.of(playbackBrightnessKey)
+            if (sharedPreferences.contains(key)) sharedPreferences.getFloat(key, 0f) else null
+        }
+
+    actual fun savePlaybackBrightness(level: Float) {
+        preferences?.edit()?.putFloat(ProfileScopedKey.of(playbackBrightnessKey), level)?.apply()
     }
 
-    actual fun loadShowPauseOverlay(): Boolean? = preferences?.let { prefs ->
-        val key = ProfileScopedKey.of(showPauseOverlayKey)
-        if (prefs.contains(key)) prefs.getBoolean(key, true) else null
+    actual fun loadAudioDelayMs(): Int? = preferences?.let { prefs ->
+        val key = ProfileScopedKey.of(audioDelayMsKey)
+        if (prefs.contains(key)) prefs.getInt(key, 0) else null
     }
-    actual fun saveShowPauseOverlay(value: Boolean) {
-        preferences?.edit()?.putBoolean(ProfileScopedKey.of(showPauseOverlayKey), value)?.apply()
+    actual fun saveAudioDelayMs(value: Int) {
+        preferences?.edit()?.putInt(ProfileScopedKey.of(audioDelayMsKey), value)?.apply()
     }
 
-    actual fun loadEnhancementResolution(): String? = preferences?.getString(ProfileScopedKey.of(enhancementResolutionKey), null)
-    actual fun saveEnhancementResolution(value: String) { preferences?.edit()?.putString(ProfileScopedKey.of(enhancementResolutionKey), value)?.apply() }
+    actual fun loadAudioAmplificationDb(): Float? = preferences?.let { prefs ->
+        val key = ProfileScopedKey.of(audioAmplificationDbKey)
+        if (prefs.contains(key)) prefs.getFloat(key, 0f) else null
+    }
+    actual fun saveAudioAmplificationDb(value: Float) {
+        preferences?.edit()?.putFloat(ProfileScopedKey.of(audioAmplificationDbKey), value)?.apply()
+    }
 
     actual fun loadVideoEnhancement(): String? = preferences?.getString(ProfileScopedKey.of(videoEnhancementKey), null)
     actual fun saveVideoEnhancement(value: String) {
         preferences?.edit()?.putString(ProfileScopedKey.of(videoEnhancementKey), value)?.apply()
     }
 
-    actual fun loadExoChaptersEnabled(): Boolean? = preferences?.let { prefs ->
-        val key = ProfileScopedKey.of(exoChaptersEnabledKey)
-        if (prefs.contains(key)) prefs.getBoolean(key, true) else null
-    }
-    actual fun saveExoChaptersEnabled(value: Boolean) {
-        preferences?.edit()?.putBoolean(ProfileScopedKey.of(exoChaptersEnabledKey), value)?.apply()
+    actual fun loadEnhancementResolution(): String? = preferences?.getString(ProfileScopedKey.of(enhancementResolutionKey), null)
+    actual fun saveEnhancementResolution(value: String) {
+        preferences?.edit()?.putString(ProfileScopedKey.of(enhancementResolutionKey), value)?.apply()
     }
 
     actual fun loadPreloadNextEpisode(): Boolean? = preferences?.let { prefs ->
@@ -267,78 +257,6 @@ actual object PlayerSettingsStorage {
         preferences?.edit()?.putBoolean(ProfileScopedKey.of(preferSameServerKey), value)?.apply()
     }
 
-    actual fun loadDefaultServerKey(): String? = preferences?.let { prefs ->
-        val key = ProfileScopedKey.of(defaultServerKeyKey)
-        if (prefs.contains(key)) prefs.getString(key, "") else null
-    }
-    actual fun saveDefaultServerKey(value: String) {
-        preferences?.edit()?.putString(ProfileScopedKey.of(defaultServerKeyKey), value)?.apply()
-    }
-
-    actual fun loadRememberAudioDelay(): Boolean? = preferences?.let { prefs ->
-        val key = ProfileScopedKey.of(rememberAudioDelayKey)
-        if (prefs.contains(key)) prefs.getBoolean(key, false) else null
-    }
-    actual fun saveRememberAudioDelay(value: Boolean) {
-        preferences?.edit()?.putBoolean(ProfileScopedKey.of(rememberAudioDelayKey), value)?.apply()
-    }
-
-    actual fun loadAudioDelayMs(): Int? = preferences?.let { prefs ->
-        val key = ProfileScopedKey.of(audioDelayMsKey)
-        if (prefs.contains(key)) prefs.getInt(key, 0) else null
-    }
-    actual fun saveAudioDelayMs(value: Int) {
-        preferences?.edit()?.putInt(ProfileScopedKey.of(audioDelayMsKey), value)?.apply()
-    }
-
-    actual fun loadPersistAudioAmplification(): Boolean? = preferences?.let { prefs ->
-        val key = ProfileScopedKey.of(persistAudioAmplificationKey)
-        if (prefs.contains(key)) prefs.getBoolean(key, false) else null
-    }
-    actual fun savePersistAudioAmplification(value: Boolean) {
-        preferences?.edit()?.putBoolean(ProfileScopedKey.of(persistAudioAmplificationKey), value)?.apply()
-    }
-
-    actual fun loadAudioAmplificationDb(): Float? = preferences?.let { prefs ->
-        val key = ProfileScopedKey.of(audioAmplificationDbKey)
-        if (prefs.contains(key)) prefs.getFloat(key, 0f) else null
-    }
-    actual fun saveAudioAmplificationDb(value: Float) {
-        preferences?.edit()?.putFloat(ProfileScopedKey.of(audioAmplificationDbKey), value)?.apply()
-    }
-
-    actual fun loadAudioDownmix(): Boolean? = preferences?.let { prefs ->
-        val key = ProfileScopedKey.of(audioDownmixKey)
-        if (prefs.contains(key)) prefs.getBoolean(key, false) else null
-    }
-    actual fun saveAudioDownmix(value: Boolean) {
-        preferences?.edit()?.putBoolean(ProfileScopedKey.of(audioDownmixKey), value)?.apply()
-    }
-
-    actual fun loadAudioChannels(): String? = preferences?.let { prefs ->
-        val key = ProfileScopedKey.of(audioChannelsKey)
-        if (prefs.contains(key)) prefs.getString(key, "auto") else null
-    }
-    actual fun saveAudioChannels(value: String) {
-        preferences?.edit()?.putString(ProfileScopedKey.of(audioChannelsKey), value)?.apply()
-    }
-
-    actual fun loadAudioMaintainVolume(): Boolean? = preferences?.let { prefs ->
-        val key = ProfileScopedKey.of(audioMaintainVolumeKey)
-        if (prefs.contains(key)) prefs.getBoolean(key, true) else null
-    }
-    actual fun saveAudioMaintainVolume(value: Boolean) {
-        preferences?.edit()?.putBoolean(ProfileScopedKey.of(audioMaintainVolumeKey), value)?.apply()
-    }
-
-    actual fun loadAudioCenterMixLevel(): Float? = preferences?.let { prefs ->
-        val key = ProfileScopedKey.of(audioCenterMixLevelKey)
-        if (prefs.contains(key)) prefs.getFloat(key, 0.707f) else null
-    }
-    actual fun saveAudioCenterMixLevel(value: Float) {
-        preferences?.edit()?.putFloat(ProfileScopedKey.of(audioCenterMixLevelKey), value)?.apply()
-    }
-
     actual fun loadShowLoadingOverlay(): Boolean? =
         preferences?.let { sharedPreferences ->
             val key = ProfileScopedKey.of(showLoadingOverlayKey)
@@ -353,6 +271,33 @@ actual object PlayerSettingsStorage {
         preferences
             ?.edit()
             ?.putBoolean(ProfileScopedKey.of(showLoadingOverlayKey), enabled)
+            ?.apply()
+    }
+
+    actual fun loadShowPlayerLoadingStatus(): Boolean? =
+        preferences?.let { sharedPreferences ->
+            val key = ProfileScopedKey.of(showPlayerLoadingStatusKey)
+            if (sharedPreferences.contains(key)) sharedPreferences.getBoolean(key, true) else null
+        }
+
+    actual fun saveShowPlayerLoadingStatus(enabled: Boolean) {
+        preferences?.edit()?.putBoolean(ProfileScopedKey.of(showPlayerLoadingStatusKey), enabled)?.apply()
+    }
+
+    actual fun loadPauseOverlayEnabled(): Boolean? =
+        preferences?.let { sharedPreferences ->
+            val key = ProfileScopedKey.of(pauseOverlayEnabledKey)
+            if (sharedPreferences.contains(key)) {
+                sharedPreferences.getBoolean(key, true)
+            } else {
+                null
+            }
+        }
+
+    actual fun savePauseOverlayEnabled(enabled: Boolean) {
+        preferences
+            ?.edit()
+            ?.putBoolean(ProfileScopedKey.of(pauseOverlayEnabledKey), enabled)
             ?.apply()
     }
 
@@ -671,6 +616,12 @@ actual object PlayerSettingsStorage {
             ?.apply()
     }
 
+    actual fun loadSubtitleFontFamily(): String? = preferences?.getString(ProfileScopedKey.of(subtitleFontFamilyKey), null)
+
+    actual fun saveSubtitleFontFamily(family: String) {
+        preferences?.edit()?.putString(ProfileScopedKey.of(subtitleFontFamilyKey), family)?.apply()
+    }
+
     actual fun loadSubtitleFontSizeSp(): Int? =
         preferences?.let { sharedPreferences ->
             val key = ProfileScopedKey.of(subtitleFontSizeSpKey)
@@ -685,16 +636,6 @@ actual object PlayerSettingsStorage {
         preferences
             ?.edit()
             ?.putInt(ProfileScopedKey.of(subtitleFontSizeSpKey), fontSizeSp)
-            ?.apply()
-    }
-
-    actual fun loadSubtitleFontFamily(): String? =
-        preferences?.getString(ProfileScopedKey.of(subtitleFontFamilyKey), null)
-
-    actual fun saveSubtitleFontFamily(fontFamily: String) {
-        preferences
-            ?.edit()
-            ?.putString(ProfileScopedKey.of(subtitleFontFamilyKey), fontFamily)
             ?.apply()
     }
 
@@ -1013,10 +954,48 @@ actual object PlayerSettingsStorage {
             }
         }
 
+    actual fun loadAutoSkipMovieCredits(): Boolean? =
+        preferences?.let { sharedPreferences ->
+            val key = ProfileScopedKey.of(autoSkipMovieCreditsKey)
+            if (sharedPreferences.contains(key)) sharedPreferences.getBoolean(key, false) else null
+        }
+
+    actual fun saveAutoSkipMovieCredits(enabled: Boolean) {
+        preferences?.edit()?.putBoolean(ProfileScopedKey.of(autoSkipMovieCreditsKey), enabled)?.apply()
+    }
+
+    actual fun loadAutoSkipPostCredits(): Boolean? =
+        preferences?.let { sharedPreferences ->
+            val key = ProfileScopedKey.of(autoSkipPostCreditsKey)
+            if (sharedPreferences.contains(key)) sharedPreferences.getBoolean(key, false) else null
+        }
+
+    actual fun saveAutoSkipPostCredits(enabled: Boolean) {
+        preferences?.edit()?.putBoolean(ProfileScopedKey.of(autoSkipPostCreditsKey), enabled)?.apply()
+    }
+
+
     actual fun saveSkipIntroEnabled(enabled: Boolean) {
         preferences
             ?.edit()
             ?.putBoolean(ProfileScopedKey.of(skipIntroEnabledKey), enabled)
+            ?.apply()
+    }
+
+    actual fun loadAutoSkipSegmentTypes(): Set<String>? =
+        preferences?.let { sharedPreferences ->
+            val key = ProfileScopedKey.of(autoSkipSegmentTypesKey)
+            if (sharedPreferences.contains(key)) {
+                sharedPreferences.getStringSet(key, emptySet()) ?: emptySet()
+            } else {
+                null
+            }
+        }
+
+    actual fun saveAutoSkipSegmentTypes(segmentTypes: Set<String>) {
+        preferences
+            ?.edit()
+            ?.putStringSet(ProfileScopedKey.of(autoSkipSegmentTypesKey), segmentTypes)
             ?.apply()
     }
 
@@ -1156,7 +1135,7 @@ actual object PlayerSettingsStorage {
         preferences?.let { sharedPreferences ->
             val key = ProfileScopedKey.of(streamAutoPlayReuseBingeGroupKey)
             if (sharedPreferences.contains(key)) {
-                sharedPreferences.getBoolean(key, true)
+                sharedPreferences.getBoolean(key, false)
             } else {
                 null
             }
@@ -1361,25 +1340,34 @@ actual object PlayerSettingsStorage {
         saveIosInt(iosGammaKey, value)
     }
 
+    actual fun loadNvidiaRtxSuperResolutionEnabled(): Boolean? =
+        preferences?.let { sharedPreferences ->
+            val key = ProfileScopedKey.of(nvidiaRtxSuperResolutionEnabledKey)
+            if (sharedPreferences.contains(key)) {
+                sharedPreferences.getBoolean(key, false)
+            } else {
+                null
+            }
+        }
+
+    actual fun saveNvidiaRtxSuperResolutionEnabled(enabled: Boolean) {
+        preferences
+            ?.edit()
+            ?.putBoolean(ProfileScopedKey.of(nvidiaRtxSuperResolutionEnabledKey), enabled)
+            ?.apply()
+    }
+
+
     actual fun exportToSyncPayload(): JsonObject = buildJsonObject {
-        loadAutoSwitchPlaybackEngineOnError()?.let { put(autoSwitchPlaybackEngineOnErrorKey, encodeSyncBoolean(it)) }
-        loadShowDetailedLoadingStatus()?.let { put(showDetailedLoadingStatusKey, encodeSyncBoolean(it)) }
-        loadShowPauseOverlay()?.let { put(showPauseOverlayKey, encodeSyncBoolean(it)) }
-        loadEnhancementResolution()?.let { put(enhancementResolutionKey, encodeSyncString(it)) }
+        loadAudioDelayMs()?.let { put(audioDelayMsKey, encodeSyncInt(it)) }
+        loadAudioAmplificationDb()?.let { put(audioAmplificationDbKey, encodeSyncFloat(it)) }
         loadVideoEnhancement()?.let { put(videoEnhancementKey, encodeSyncString(it)) }
-        loadExoChaptersEnabled()?.let { put(exoChaptersEnabledKey, encodeSyncBoolean(it)) }
+        loadEnhancementResolution()?.let { put(enhancementResolutionKey, encodeSyncString(it)) }
         loadPreloadNextEpisode()?.let { put(preloadNextEpisodeKey, encodeSyncBoolean(it)) }
         loadPreferSameServer()?.let { put(preferSameServerKey, encodeSyncBoolean(it)) }
-        loadDefaultServerKey()?.let { put(defaultServerKeyKey, encodeSyncString(it)) }
-        loadRememberAudioDelay()?.let { put(rememberAudioDelayKey, encodeSyncBoolean(it)) }
-        loadAudioDelayMs()?.let { put(audioDelayMsKey, encodeSyncInt(it)) }
-        loadPersistAudioAmplification()?.let { put(persistAudioAmplificationKey, encodeSyncBoolean(it)) }
-        loadAudioAmplificationDb()?.let { put(audioAmplificationDbKey, encodeSyncFloat(it)) }
-        loadAudioDownmix()?.let { put(audioDownmixKey, encodeSyncBoolean(it)) }
-        loadAudioChannels()?.let { put(audioChannelsKey, encodeSyncString(it)) }
-        loadAudioMaintainVolume()?.let { put(audioMaintainVolumeKey, encodeSyncBoolean(it)) }
-        loadAudioCenterMixLevel()?.let { put(audioCenterMixLevelKey, encodeSyncFloat(it)) }
         loadShowLoadingOverlay()?.let { put(showLoadingOverlayKey, encodeSyncBoolean(it)) }
+        loadShowPlayerLoadingStatus()?.let { put(showPlayerLoadingStatusKey, encodeSyncBoolean(it)) }
+        loadPauseOverlayEnabled()?.let { put(pauseOverlayEnabledKey, encodeSyncBoolean(it)) }
         loadShowParentalGuide()?.let { put(showParentalGuideKey, encodeSyncBoolean(it)) }
         loadResizeMode()?.let { put(resizeModeKey, encodeSyncString(it)) }
         loadHoldToSpeedEnabled()?.let { put(holdToSpeedEnabledKey, encodeSyncBoolean(it)) }
@@ -1424,6 +1412,9 @@ actual object PlayerSettingsStorage {
         loadStreamAutoPlayRegex()?.let { put(streamAutoPlayRegexKey, encodeSyncString(it)) }
         loadStreamAutoPlayTimeoutSeconds()?.let { put(streamAutoPlayTimeoutSecondsKey, encodeSyncInt(it)) }
         loadSkipIntroEnabled()?.let { put(skipIntroEnabledKey, encodeSyncBoolean(it)) }
+        loadAutoSkipMovieCredits()?.let { put(autoSkipMovieCreditsKey, encodeSyncBoolean(it)) }
+        loadAutoSkipSegmentTypes()?.let { put(autoSkipSegmentTypesKey, encodeSyncStringSet(it)) }
+        loadAutoSkipPostCredits()?.let { put(autoSkipPostCreditsKey, encodeSyncBoolean(it)) }
         loadAnimeSkipEnabled()?.let { put(animeSkipEnabledKey, encodeSyncBoolean(it)) }
         loadAnimeSkipClientId()?.let { put(animeSkipClientIdKey, encodeSyncString(it)) }
         loadTheIntroDbApiKey()?.let { put(theIntroDbApiKeyKey, encodeSyncString(it)) }
@@ -1451,6 +1442,7 @@ actual object PlayerSettingsStorage {
         loadIosContrast()?.let { put(iosContrastKey, encodeSyncInt(it)) }
         loadIosSaturation()?.let { put(iosSaturationKey, encodeSyncInt(it)) }
         loadIosGamma()?.let { put(iosGammaKey, encodeSyncInt(it)) }
+        loadNvidiaRtxSuperResolutionEnabled()?.let { put(nvidiaRtxSuperResolutionEnabledKey, encodeSyncBoolean(it)) }
     }
 
     actual fun replaceFromSyncPayload(payload: JsonObject) {
@@ -1458,24 +1450,15 @@ actual object PlayerSettingsStorage {
             syncKeys.forEach { remove(ProfileScopedKey.of(it)) }
         }?.apply()
 
-        payload.decodeSyncBoolean(autoSwitchPlaybackEngineOnErrorKey)?.let(::saveAutoSwitchPlaybackEngineOnError)
-        payload.decodeSyncBoolean(showDetailedLoadingStatusKey)?.let(::saveShowDetailedLoadingStatus)
-        payload.decodeSyncBoolean(showPauseOverlayKey)?.let(::saveShowPauseOverlay)
-        payload.decodeSyncString(enhancementResolutionKey)?.let(::saveEnhancementResolution)
+        payload.decodeSyncInt(audioDelayMsKey)?.let(::saveAudioDelayMs)
+        payload.decodeSyncFloat(audioAmplificationDbKey)?.let(::saveAudioAmplificationDb)
         payload.decodeSyncString(videoEnhancementKey)?.let(::saveVideoEnhancement)
-        payload.decodeSyncBoolean(exoChaptersEnabledKey)?.let(::saveExoChaptersEnabled)
+        payload.decodeSyncString(enhancementResolutionKey)?.let(::saveEnhancementResolution)
         payload.decodeSyncBoolean(preloadNextEpisodeKey)?.let(::savePreloadNextEpisode)
         payload.decodeSyncBoolean(preferSameServerKey)?.let(::savePreferSameServer)
-        payload.decodeSyncString(defaultServerKeyKey)?.let(::saveDefaultServerKey)
-        payload.decodeSyncBoolean(rememberAudioDelayKey)?.let(::saveRememberAudioDelay)
-        payload.decodeSyncInt(audioDelayMsKey)?.let(::saveAudioDelayMs)
-        payload.decodeSyncBoolean(persistAudioAmplificationKey)?.let(::savePersistAudioAmplification)
-        payload.decodeSyncFloat(audioAmplificationDbKey)?.let(::saveAudioAmplificationDb)
-        payload.decodeSyncBoolean(audioDownmixKey)?.let(::saveAudioDownmix)
-        payload.decodeSyncString(audioChannelsKey)?.let(::saveAudioChannels)
-        payload.decodeSyncBoolean(audioMaintainVolumeKey)?.let(::saveAudioMaintainVolume)
-        payload.decodeSyncFloat(audioCenterMixLevelKey)?.let(::saveAudioCenterMixLevel)
         payload.decodeSyncBoolean(showLoadingOverlayKey)?.let(::saveShowLoadingOverlay)
+        payload.decodeSyncBoolean(showPlayerLoadingStatusKey)?.let(::saveShowPlayerLoadingStatus)
+        payload.decodeSyncBoolean(pauseOverlayEnabledKey)?.let(::savePauseOverlayEnabled)
         payload.decodeSyncBoolean(showParentalGuideKey)?.let(::saveShowParentalGuide)
         payload.decodeSyncString(resizeModeKey)?.let(::saveResizeMode)
         payload.decodeSyncBoolean(holdToSpeedEnabledKey)?.let(::saveHoldToSpeedEnabled)
@@ -1515,10 +1498,13 @@ actual object PlayerSettingsStorage {
         payload.decodeSyncString(streamAutoPlayModeKey)?.let(::saveStreamAutoPlayMode)
         payload.decodeSyncString(streamAutoPlaySourceKey)?.let(::saveStreamAutoPlaySource)
         payload.decodeSyncStringSet(streamAutoPlaySelectedAddonsKey)?.let(::saveStreamAutoPlaySelectedAddons)
-        payload.decodeSyncStringSet(streamAutoPlaySelectedPluginsKey)?.let(::saveStreamAutoPlaySelectedPlugins)
+        payload.decodeSyncStringSet(streamAutoPlaySelectedPluginsKey)?.let(::saveStreamAutoPlaySelectedAddons)
         payload.decodeSyncString(streamAutoPlayRegexKey)?.let(::saveStreamAutoPlayRegex)
         payload.decodeSyncInt(streamAutoPlayTimeoutSecondsKey)?.let(::saveStreamAutoPlayTimeoutSeconds)
         payload.decodeSyncBoolean(skipIntroEnabledKey)?.let(::saveSkipIntroEnabled)
+        payload.decodeSyncBoolean(autoSkipMovieCreditsKey)?.let(::saveAutoSkipMovieCredits)
+        payload.decodeSyncStringSet(autoSkipSegmentTypesKey)?.let(::saveAutoSkipSegmentTypes)
+        payload.decodeSyncBoolean(autoSkipPostCreditsKey)?.let(::saveAutoSkipPostCredits)
         payload.decodeSyncBoolean(animeSkipEnabledKey)?.let(::saveAnimeSkipEnabled)
         payload.decodeSyncString(animeSkipClientIdKey)?.let(::saveAnimeSkipClientId)
         payload.decodeSyncString(introDbApiKeyKey)?.let(::saveIntroDbApiKey)
@@ -1548,5 +1534,6 @@ actual object PlayerSettingsStorage {
         payload.decodeSyncInt(iosContrastKey)?.let(::saveIosContrast)
         payload.decodeSyncInt(iosSaturationKey)?.let(::saveIosSaturation)
         payload.decodeSyncInt(iosGammaKey)?.let(::saveIosGamma)
+        payload.decodeSyncBoolean(nvidiaRtxSuperResolutionEnabledKey)?.let(::saveNvidiaRtxSuperResolutionEnabled)
     }
 }

@@ -11,29 +11,21 @@ import com.nuvio.app.features.collection.CollectionManagementScreen
 import com.nuvio.app.features.collection.CollectionRepository
 import com.nuvio.app.features.collection.FolderDetailRepository
 import com.nuvio.app.features.collection.FolderDetailScreen
-import com.nuvio.app.features.downloads.DownloadItem
-import com.nuvio.app.features.downloads.MangaDownloadsRepository
-import com.nuvio.app.features.details.components.MangaReaderOverlay
-import com.nuvio.app.features.plugins.MangaPluginChapter
-import com.nuvio.app.features.party.PartyScreen
-import com.nuvio.app.features.downloads.DownloadsScreen
 import com.nuvio.app.features.home.HomeCatalogSection
 import com.nuvio.app.features.home.MetaPreview
+import com.nuvio.app.features.party.PartyMedia
+import com.nuvio.app.features.party.PartyScreen
 import com.nuvio.app.features.settings.SettingsScreen
+import com.nuvio.app.navigation.PartyRoute
 import com.nuvio.app.navigation.AppRoute
 import com.nuvio.app.navigation.CollectionEditorPageRoute
 import com.nuvio.app.navigation.CollectionEditorRoute
 import com.nuvio.app.navigation.CollectionsRoute
 import com.nuvio.app.navigation.DetailRoute
-import com.nuvio.app.navigation.DownloadShowRoute
-import com.nuvio.app.navigation.DownloadsSettingsRoute
+import com.nuvio.app.rememberOpenMeta
 import com.nuvio.app.navigation.FolderDetailRoute
 import com.nuvio.app.navigation.NuvioNavigator
-import com.nuvio.app.navigation.PartyRoute
 import com.nuvio.app.navigation.SettingsPageRoute
-import nuvio.composeapp.generated.resources.Res
-import nuvio.composeapp.generated.resources.party_title
-import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun SettingsDestination(
@@ -50,29 +42,19 @@ internal fun SettingsRootDestination(
     route: SettingsPageRoute,
     navController: NuvioNavigator,
     useNativeNavigation: Boolean,
-    downloadsTitle: String,
     collectionsTitle: String,
     onCheckForUpdates: (() -> Unit)?,
     onTestUpdateBanner: (() -> Unit)?,
 ) {
-    val onBack = rememberGuardedPopBackStack(navController, route)
-    val partyTitle = stringResource(Res.string.party_title)
     SettingsScreen(
         modifier = Modifier.fillMaxSize(),
         initialPageName = route.pageName,
+        requestedPageName = route.pageName,
+        onRequestedPageConsumed = {},
         rootActionsEnabled = false,
-        onNavigatePage = { pageName, title ->
-            navController.navigate(SettingsPageRoute(pageName, title))
-        },
-        onExternalBack = onBack,
-        showInternalHeader = !useNativeNavigation,
-        onDownloadsClick = {
-            navController.navigate(DownloadsSettingsRoute(downloadsTitle))
-        },
         onCollectionsClick = {
             navController.navigate(CollectionsRoute(collectionsTitle))
         },
-        onWatchPartyClick = { navController.navigate(PartyRoute(title = partyTitle)) },
         onCheckForUpdatesClick = onCheckForUpdates,
         onTestUpdateBannerClick = onTestUpdateBanner,
     )
@@ -82,61 +64,13 @@ internal fun SettingsRootDestination(
 internal fun PartyDestination(
     route: PartyRoute,
     navController: NuvioNavigator,
+    onWatch: (PartyMedia) -> Unit,
 ) {
     val onBack = rememberGuardedPopBackStack(navController, route)
     PartyScreen(
         initialCode = route.code,
         onBack = onBack,
-        onWatch = { /* The player opens the party media from inside an active party. */ },
-    )
-}
-
-@Composable
-internal fun DownloadsDestination(
-    route: DownloadsSettingsRoute,
-    navController: NuvioNavigator,
-    useNativeNavigation: Boolean,
-    onOpenDownload: (DownloadItem) -> Unit,
-) {
-    val onBack = rememberGuardedPopBackStack(navController, route)
-    DownloadsScreen(
-        onBack = onBack,
-        onOpenDownload = onOpenDownload,
-        onOpenMangaDownload = { item ->
-            MangaReaderOverlay.openLocal(
-                title = item.title,
-                metaId = item.parentMetaId,
-                providerId = item.providerId,
-                chapter = MangaPluginChapter(
-                    id = item.chapterId,
-                    number = item.chapterNumber,
-                    title = item.chapterTitle,
-                ),
-                localPageUris = MangaDownloadsRepository.localPageUris(item),
-            )
-            navController.navigate(DetailRoute(type = "manga", id = item.parentMetaId, title = item.title))
-        },
-        onNavigateToShow = if (useNativeNavigation) {
-            { showId, title -> navController.navigate(DownloadShowRoute(showId, title)) }
-        } else {
-            null
-        },
-    )
-}
-
-@Composable
-internal fun DownloadShowDestination(
-    route: DownloadShowRoute,
-    navController: NuvioNavigator,
-    onOpenDownload: (DownloadItem) -> Unit,
-) {
-    val onBack = rememberGuardedPopBackStack(navController, route)
-    DownloadsScreen(
-        onBack = onBack,
-        onOpenDownload = onOpenDownload,
-        onOpenMangaDownload = {},
-        initialShowId = route.showId,
-        onBackFromShow = onBack,
+        onWatch = onWatch,
     )
 }
 
@@ -235,8 +169,6 @@ internal fun FolderDestination(
     FolderDetailScreen(
         onBack = onBack,
         onCatalogClick = onCatalogClick,
-        onPosterClick = { meta: MetaPreview ->
-            navController.navigate(DetailRoute(type = meta.type, id = meta.id, title = meta.name))
-        },
+        onPosterClick = rememberOpenMeta(navController),
     )
 }

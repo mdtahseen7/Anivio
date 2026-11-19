@@ -1,5 +1,7 @@
 package com.nuvio.app.features.downloads
 
+import com.nuvio.app.features.player.SubtitleAddonRequest
+import com.nuvio.app.features.streams.StreamSubtitle
 import kotlinx.serialization.Serializable
 import kotlinx.coroutines.runBlocking
 import nuvio.composeapp.generated.resources.Res
@@ -11,20 +13,11 @@ import org.jetbrains.compose.resources.getString
 
 @Serializable
 enum class DownloadStatus {
-    Queued,
     Downloading,
     Paused,
     Completed,
     Failed,
 }
-
-/** A subtitle track downloaded alongside a video and stored locally for offline playback. */
-@Serializable
-data class DownloadedSubtitle(
-    val localFileUri: String,
-    val language: String,
-    val name: String? = null,
-)
 
 @Serializable
 data class DownloadItem(
@@ -43,12 +36,13 @@ data class DownloadItem(
     val episodeThumbnail: String? = null,
     val streamTitle: String,
     val streamSubtitle: String? = null,
-    val subtitles: List<DownloadedSubtitle> = emptyList(),
     val providerName: String,
     val providerAddonId: String? = null,
     val sourceUrl: String,
     val sourceHeaders: Map<String, String> = emptyMap(),
     val sourceResponseHeaders: Map<String, String> = emptyMap(),
+    val subtitleRequests: List<SubtitleAddonRequest> = emptyList(),
+    val sourceSubtitles: List<StreamSubtitle> = emptyList(),
     val localFileUri: String? = null,
     val fileName: String,
     val status: DownloadStatus,
@@ -94,7 +88,6 @@ data class DownloadsUiState(
 }
 
 data class DownloadsStorageSummary(
-    val queuedCount: Int,
     val activeCount: Int,
     val pausedCount: Int,
     val completedCount: Int,
@@ -103,7 +96,6 @@ data class DownloadsStorageSummary(
 )
 
 internal fun DownloadsUiState.storageSummary(): DownloadsStorageSummary = DownloadsStorageSummary(
-    queuedCount = items.count { it.status == DownloadStatus.Queued },
     activeCount = items.count { it.status == DownloadStatus.Downloading },
     pausedCount = items.count { it.status == DownloadStatus.Paused },
     completedCount = items.count { it.status == DownloadStatus.Completed },

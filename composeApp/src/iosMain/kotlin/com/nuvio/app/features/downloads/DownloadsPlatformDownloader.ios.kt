@@ -79,6 +79,7 @@ internal actual object DownloadsPlatformDownloader {
         onProgress: (downloadedBytes: Long, totalBytes: Long?) -> Unit,
         onSuccess: (localFileUri: String, totalBytes: Long?) -> Unit,
         onFailure: (message: String) -> Unit,
+        onPaused: () -> Unit,
     ): DownloadsTaskHandle {
         val job = SupervisorJob()
         val scope = CoroutineScope(job + Dispatchers.Default)
@@ -91,44 +92,7 @@ internal actual object DownloadsPlatformDownloader {
             val effectiveHeaders = request.sourceHeaders.withDefaultDownloadHeaders()
 
             try {
-                // HLS playlists are downloaded by segment and concatenated into a playable file.
-                if (request.sourceUrl.isHlsPlaylistUrl()) {
-                    try {
-                        removePathIfExists(tempPath)
-                        DownloadsHlsPipeline.run(
-                            playlistUrl = request.sourceUrl,
-                            headers = effectiveHeaders,
-                            onProgress = onProgress,
-                            appendChunk = { chunk ->
-                                fopen(tempPath, "ab")?.let { file ->
-                                    fwrite(chunk.refTo(0), 1u, chunk.size.toULong(), file)
-                                    fclose(file)
-                                } ?: error(runBlocking { getString(Res.string.downloads_error_write_partial_file_failed) })
-                            },
-                            isCancelled = { !job.isActive },
-                        )
-                        if ((fileSizeOrNull(tempPath) ?: 0L) <= 0L) {
-                            error(runBlocking { getString(Res.string.network_empty_response_body) })
-                        }
-                        removePathIfExists(destinationPath)
-                        val moved = NSFileManager.defaultManager.moveItemAtPath(
-                            srcPath = tempPath,
-                            toPath = destinationPath,
-                            error = null,
-                        )
-                        if (!moved) {
-                            error(runBlocking { getString(Res.string.downloads_error_finalize_file_failed) })
-                        }
-                        val localFileUri = NSURL.fileURLWithPath(destinationPath).absoluteString ?: "file://$destinationPath"
-                        onSuccess(localFileUri, fileSizeOrNull(destinationPath))
-                    } catch (error: Throwable) {
-                        if (error is CancellationException) throw error
-                        removePathIfExists(tempPath)
-                        onFailure(error.message ?: runBlocking { getString(Res.string.download_failed) })
-                    }
-                    return@launch
-                }
-
+                DownloadSubtitles.prepare(request.item, NSURL.fileURLWithPath(destinationPath).absoluteString!!)
                 var resumeFromBytes = fileSizeOrNull(tempPath)?.coerceAtLeast(0L) ?: 0L
 
                 var attemptedRangeRequest = resumeFromBytes > 0L
@@ -209,6 +173,13 @@ internal actual object DownloadsPlatformDownloader {
         return handle
     }
 
+    actual fun restoreItem(item: DownloadItem): DownloadItem =
+        if (item.status == DownloadStatus.Downloading) {
+            item.copy(status = DownloadStatus.Paused, errorMessage = null)
+        } else {
+            item
+        }
+
     actual fun removeFile(localFileUri: String?): Boolean {
         if (localFileUri.isNullOrBlank()) return false
         val path = localFileUri.toLocalPath() ?: return false
@@ -221,29 +192,15 @@ internal actual object DownloadsPlatformDownloader {
     }
 
     actual fun removePartialFile(destinationFileName: String): Boolean {
-        val tempPath = "${downloadsDirectoryPath()}/$destinationFileName.part"
-        return removePathIfExists(tempPath)
+        val destinationPath = "${downloadsDirectoryPath()}/$destinationFileName"
+        DownloadSubtitleStorage(NSURL.fileURLWithPath(destinationPath).absoluteString!!).remove()
+        return removePathIfExists("$destinationPath.part")
     }
 
     actual fun saveAuxiliaryFile(destinationFileName: String, bytes: ByteArray): String? {
-        val path = "${downloadsDirectoryPath()}/$destinationFileName"
-        val file = fopen(path, "wb") ?: return null
-        return try {
-            val written = if (bytes.isEmpty()) {
-                0L
-            } else {
-                bytes.usePinned { pinned ->
-                    fwrite(pinned.addressOf(0), 1.convert(), bytes.size.convert(), file).toLong()
-                }
-            }
-            if (written == bytes.size.toLong()) {
-                NSURL.fileURLWithPath(path).absoluteString ?: "file://$path"
-            } else {
-                null
-            }
-        } finally {
-            fclose(file)
-        }
+        // ponytail: iOS offline-subtitle saving not wired (Android-focused). Return null so callers
+        // simply skip attaching downloaded subtitles here; implement with NSData.writeToFile if iOS needs it.
+        return null
     }
 
     actual fun resolveLocalFileUri(localFileUri: String?, destinationFileName: String): String? {

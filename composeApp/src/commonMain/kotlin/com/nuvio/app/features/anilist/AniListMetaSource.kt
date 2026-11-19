@@ -10,7 +10,6 @@ import com.nuvio.app.core.anilist.AniListMediaDetail
 import com.nuvio.app.core.anilist.AniListStaffEdge
 import com.nuvio.app.core.anilist.AniZipClient
 import com.nuvio.app.core.anilist.AniZipResponse
-import com.nuvio.app.core.anilist.FanartClient
 import com.nuvio.app.core.anilist.clearLogoUrl
 import com.nuvio.app.core.anilist.fanartUrl
 import com.nuvio.app.core.anilist.imdbId
@@ -24,14 +23,8 @@ import com.nuvio.app.core.anilist.mappedSeasonNumber
 import com.nuvio.app.core.anilist.stripAniListMarkup
 import com.nuvio.app.core.anilist.tmdbId
 import com.nuvio.app.core.anilist.toMetaPreview
-import com.nuvio.app.core.anilist.logoUrl as aniZipLogoUrl
 import com.nuvio.app.core.time.EpisodeReleaseDatePlatform
 import com.nuvio.app.core.anilist.airingScheduleByEpisode
-import com.nuvio.app.core.anivio.AnivioClient
-import com.nuvio.app.core.anivio.AnivioMedia
-import com.nuvio.app.core.anivio.backgroundUrl
-import com.nuvio.app.core.anivio.logoUrl
-import com.nuvio.app.core.anivio.posterUrl
 import com.nuvio.app.features.anime.AnimeEnrichment
 import com.nuvio.app.features.anime.buildEnrichedEpisodes
 import com.nuvio.app.features.anime.loadAnimeEnrichment
@@ -39,7 +32,6 @@ import com.nuvio.app.features.details.MetaCompany
 import com.nuvio.app.features.details.AnimeReview
 import com.nuvio.app.features.details.MetaDetails
 import com.nuvio.app.features.details.MetaLink
-import com.nuvio.app.features.details.MangaInfo
 import com.nuvio.app.features.details.MetaPerson
 import com.nuvio.app.features.details.MoreLikeThisSource
 import com.nuvio.app.features.home.MetaPreview
@@ -50,7 +42,6 @@ import com.nuvio.app.features.tmdb.TmdbArtworkSource
 import com.nuvio.app.features.tmdb.TmdbMetadataService
 import com.nuvio.app.features.tmdb.TmdbSettings
 import com.nuvio.app.features.tmdb.TmdbSettingsRepository
-import com.nuvio.app.features.tracking.TrackingSettingsRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -58,13 +49,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonObject
-import nuvio.composeapp.generated.resources.Res
-import nuvio.composeapp.generated.resources.anilist_episode_fallback_title
-import org.jetbrains.compose.resources.getString
 
 const val ANILIST_ID_PREFIX = "anilist:"
 
@@ -74,33 +61,15 @@ const val ANILIST_SEASON = 1
 fun isAniListId(id: String): Boolean =
     id.trim().startsWith(ANILIST_ID_PREFIX, ignoreCase = true)
 
-/** Manga records deliberately use a separate prefix so they retain their media kind through routes. */
-fun isAniListMangaId(id: String): Boolean =
-    id.trim().startsWith(ANILIST_MANGA_ID_PREFIX, ignoreCase = true)
-
-/** Identifies either AniList media route without treating every Manga record as an anime. */
-fun isAniListMediaId(id: String): Boolean = isAniListId(id) || isAniListMangaId(id)
-
-/** Resolves an AniList media id from anime, episode, or manga route forms. */
+/** Both `anilist:21` and the episode form `anilist:21:1:5` resolve to media 21. */
 fun parseAniListMediaId(id: String): Int? {
     val trimmed = id.trim()
-    val value = when {
-        isAniListId(trimmed) -> trimmed.substring(ANILIST_ID_PREFIX.length)
-        isAniListMangaId(trimmed) -> trimmed.substring(ANILIST_MANGA_ID_PREFIX.length)
-        else -> return null
-    }
-    return value
+    if (!isAniListId(trimmed)) return null
+    return trimmed.substring(ANILIST_ID_PREFIX.length)
         .substringBefore(':')
         .toIntOrNull()
         ?.takeIf { it > 0 }
 }
-
-/**
- * Keeps ani.zip enrichment scoped to the AniList entry currently being opened.
- *
- * A related entry belongs to another cour, so its mapping must never be used as fallback.
- */
-internal fun currentEntryAniZipMapping(direct: AniZipResponse?): AniZipResponse? = direct
 
 data class AniListMetaResult(
     val meta: MetaDetails,
@@ -135,6 +104,14 @@ object AniListMetaSource {
      * short enough to be under the threshold where a blank screen starts to feel broken.
      */
     private const val PARTIAL_PAINT_BUDGET_MS = 220L
+
+    /**
+     * Hard caps for the two phases of [fetchMeta]. Every backend call underneath already has its
+     * own HTTP timeout, but they stack (Kitsu pages, TVDB login + episodes + artwork), so without
+     * these the details screen could spin for minutes on a degraded network.
+     */
+    private const val FIRST_PHASE_TIMEOUT_MS = 20_000L
+    private const val ENRICHMENT_TIMEOUT_MS = 10_000L
 
     private val log = Logger.withTag("AniListMetaSource")
 
@@ -179,42 +156,24 @@ object AniListMetaSource {
     ): AniListMetaResult? = withContext(Dispatchers.Default) {
         val mediaId = parseAniListMediaId(id) ?: return@withContext null
 
-        val isManga = type.equals("manga", ignoreCase = true)
-        if (isManga) {
-            val (media, mangaBaka) = coroutineScope {
-                val mediaDeferred = async { fetchMediaDetail(mediaId, isManga = true, forceRefresh = forceRefresh) }
-                val mangaBakaDeferred = async { MangaBakaClient.findByAniListId(mediaId) }
-                mediaDeferred.await() to mangaBakaDeferred.await()
-            }
-            val resolvedMedia = media ?: return@withContext null
-            return@withContext AniListMetaResult(
-                meta = resolvedMedia
-                    .toMangaMetaDetails(itemId = id, itemType = type)
-                    .enrichWithMangaBaka(mangaBaka),
-                externalFallbackId = null,
-            )
+        // Both halves are bounded: a stalled backend must not hold the details screen past
+        // this budget. Launched in the detached revalidation scope so the timeout actually
+        // releases the caller instead of joining the stalled work.
+        val mediaDeferred = revalidationScope.async { fetchMediaDetail(mediaId, forceRefresh) }
+        // Best-effort: a null here just means fewer episode stills and no TMDB hop.
+        val aniZipDeferred = revalidationScope.async { AniZipClient.mappings(mediaId, forceRefresh) }
+        val firstPhase = withTimeoutOrNull(FIRST_PHASE_TIMEOUT_MS) {
+            mediaDeferred.await() to aniZipDeferred.await()
         }
-        TrackingSettingsRepository.ensureLoaded()
-        val anivioSettings = TrackingSettingsRepository.uiState.value
-        val (media, directAniZip, anivioMedia) = coroutineScope {
-            val mediaDeferred = async { fetchMediaDetail(mediaId, isManga = false, forceRefresh = forceRefresh) }
-            // Best-effort: a null here just means fewer episode stills and no TMDB hop. Manga never
-            // reaches this request because its details are wholly keyed by its AniList media id.
-            val aniZipDeferred = async { AniZipClient.mappings(mediaId, forceRefresh) }
-            val anivioDeferred = async {
-                if (anivioSettings.anivioAssetsEnabled) {
-                    AnivioClient.mediaByAniListIdOrNull(mediaId, forceRefresh)
-                } else {
-                    null
-                }
-            }
-            Triple(mediaDeferred.await(), aniZipDeferred.await(), anivioDeferred.await())
+        if (firstPhase == null) {
+            log.w { "Details first phase timed out for Media $mediaId; falling back to addons" }
+            mediaDeferred.cancel()
+            aniZipDeferred.cancel()
+            return@withContext null
         }
-        val resolvedMedia = media ?: return@withContext null
-        // AniList creates a separate media entry for every cour, while related entries can point
-        // to a different season of the same franchise. Never borrow a prequel's ani.zip mapping:
-        // its external ids and episode data would make an unmapped sequel render as that prequel.
-        val aniZip = currentEntryAniZipMapping(directAniZip)
+        val (detail, aniZip) = firstPhase
+
+        val media = detail ?: return@withContext null
         val isMovie = type.equals("movie", ignoreCase = true)
         val mappedSeason = aniZip?.mappedSeasonNumber()
         val externalFallbackId = aniZip?.imdbId()
@@ -222,29 +181,19 @@ object AniListMetaSource {
         coroutineScope {
             // Everything past this point needs ids from ani.zip, so it cannot start any earlier —
             // but it is all optional polish. Shared with the MAL provider so the two cannot drift.
-            val enrichedDeferred = async {
+            val enrichedDeferred = revalidationScope.async {
                 val enrichment = loadAnimeEnrichment(
                     aniZip = aniZip,
-                    anivioMedia = anivioMedia,
                     isMovie = isMovie,
-                    expectedEpisodeCount = resolvedMedia.episodes,
-                    nextAiringEpisodeNumber = resolvedMedia.nextAiringEpisode?.episode,
-                ).copy(airingScheduleByEpisode = resolvedMedia.airingScheduleByEpisode())
-                val fanartLogo = if (!isMovie && aniZip?.tvdbId() == null && aniZip?.tmdbId() == null) {
-                    TvdbClient.searchSeriesId(resolvedMedia.preferredTitle().orEmpty())
-                        ?.let { tvdbId -> FanartClient.tvArtwork(tvdbId).logoUrl }
-                } else {
-                    null
-                }
-                val base = resolvedMedia.toMetaDetails(
+                    expectedEpisodeCount = media.episodes,
+                ).copy(airingScheduleByEpisode = media.airingScheduleByEpisode())
+                val base = media.toMetaDetails(
                     itemId = id,
                     itemType = type,
                     aniZip = aniZip,
                     kitsuEpisodes = enrichment.kitsuEpisodes,
                     tvdbEpisodes = enrichment.tvdbEpisodes,
                     tvdbArtwork = enrichment.tvdbArtwork,
-                    anivioMedia = anivioMedia,
-                    fanartLogo = fanartLogo,
                     mappedSeason = mappedSeason,
                 )
                 enrichWithTmdb(meta = base, aniZip = aniZip)
@@ -261,22 +210,28 @@ object AniListMetaSource {
                 return@coroutineScope AniListMetaResult(settled, externalFallbackId)
             }
 
-            onPartialMeta?.invoke(
-                resolvedMedia.toMetaDetails(
-                    itemId = id,
-                    itemType = type,
-                    aniZip = aniZip,
-                    kitsuEpisodes = emptyMap(),
-                    tvdbEpisodes = emptyMap(),
-                    tvdbArtwork = TvdbArtwork(),
-                    anivioMedia = anivioMedia,
-                    fanartLogo = null,
-                    mappedSeason = mappedSeason,
-                ),
+            val partial = media.toMetaDetails(
+                itemId = id,
+                itemType = type,
+                aniZip = aniZip,
+                kitsuEpisodes = emptyMap(),
+                tvdbEpisodes = emptyMap(),
+                tvdbArtwork = TvdbArtwork(),
+                mappedSeason = mappedSeason,
             )
+            onPartialMeta?.invoke(partial)
 
+            // Enrichment is optional polish (Kitsu/TVDB/TMDB). It used to be awaited without a
+            // bound, so one stalled backend held the page on a spinner for minutes. Cap it and
+            // render the partial meta instead — the page is fully usable without it.
+            val enriched = withTimeoutOrNull(ENRICHMENT_TIMEOUT_MS) { enrichedDeferred.await() }
+            if (enriched != null) {
+                return@coroutineScope AniListMetaResult(enriched, externalFallbackId)
+            }
+            log.w { "Enrichment timed out for $id; rendering partial meta" }
+            enrichedDeferred.cancel()
             AniListMetaResult(
-                meta = enrichedDeferred.await(),
+                meta = partial,
                 externalFallbackId = externalFallbackId,
             )
         }
@@ -291,7 +246,7 @@ object AniListMetaSource {
      * difference between a details screen that renders slightly old scores and one that shows an
      * error and has to be retried.
      */
-    private suspend fun fetchMediaDetail(mediaId: Int, isManga: Boolean, forceRefresh: Boolean): AniListMediaDetail? {
+    private suspend fun fetchMediaDetail(mediaId: Int, forceRefresh: Boolean): AniListMediaDetail? {
         val now = EpisodeReleaseDatePlatform.nowEpochMs()
         if (!forceRefresh) {
             val cached = AniListMediaDetailDiskCache.peek(mediaId, now)
@@ -303,7 +258,7 @@ object AniListMetaSource {
                 // when the request may be the one that trips the rate limit.
                 revalidationScope.launch {
                     try {
-                        requestMediaDetail(mediaId, isManga, forceRefresh = true)
+                        requestMediaDetail(mediaId, forceRefresh = true)
                     } catch (cancellation: CancellationException) {
                         throw cancellation
                     } catch (error: Throwable) {
@@ -316,7 +271,7 @@ object AniListMetaSource {
         }
 
         return try {
-            requestMediaDetail(mediaId, isManga, forceRefresh)
+            requestMediaDetail(mediaId, forceRefresh)
         } catch (error: AniListRateLimitedException) {
             AniListMediaDetailDiskCache.getStale(mediaId)?.also {
                 log.i { "AniList throttled Media $mediaId; serving stale cached detail" }
@@ -335,9 +290,9 @@ object AniListMetaSource {
     }
 
     /** The network half of [fetchMediaDetail]: fetch, decode, persist. Throws on failure. */
-    private suspend fun requestMediaDetail(mediaId: Int, isManga: Boolean, forceRefresh: Boolean): AniListMediaDetail? {
+    private suspend fun requestMediaDetail(mediaId: Int, forceRefresh: Boolean): AniListMediaDetail? {
         val data = AniListClient.query(
-            query = "query { Media(id: $mediaId, type: ${if (isManga) "MANGA" else "ANIME"}) { $ANILIST_MEDIA_DETAIL_FIELDS } }",
+            query = "query { Media(id: $mediaId, type: ANIME) { $ANILIST_MEDIA_DETAIL_FIELDS } }",
             forceRefresh = forceRefresh,
         )
         val mediaObject = data["Media"] as? JsonObject ?: return null
@@ -359,8 +314,6 @@ object AniListMetaSource {
         kitsuEpisodes: Map<Int, KitsuEpisode>,
         tvdbEpisodes: Map<Int, TvdbEpisode>,
         tvdbArtwork: TvdbArtwork,
-        anivioMedia: AnivioMedia?,
-        fanartLogo: String?,
         mappedSeason: Int?,
     ): MetaDetails {
         val staffEdges = staff?.edges.orEmpty()
@@ -375,19 +328,15 @@ object AniListMetaSource {
             name = preferredTitle() ?: itemId,
             // TVDB's series poster is the show's, so it is only right for a first season or a film;
             // sequels get their season poster in enrichWithTmdb instead.
-            poster = anivioMedia?.posterUrl
-                ?: tvdbArtwork.posterUrl?.takeIf { mappedSeason == null || mappedSeason <= 1 }
+            poster = tvdbArtwork.posterUrl?.takeIf { mappedSeason == null || mappedSeason <= 1 }
                 ?: coverImage?.extraLarge?.takeIf { it.isNotBlank() }
                 ?: coverImage?.large?.takeIf { it.isNotBlank() },
-            // Prefer the established artwork providers first; Anivio is the final fallback.
+            // A 1920x1080 TVDB background beats AniList's thin banner behind the details header,
+            // and ani.zip's single fanart pick is the fallback when TVDB has none.
             background = tvdbArtwork.backgroundUrl
                 ?: bannerImage?.takeIf { it.isNotBlank() }
-                ?: aniZip?.fanartUrl()
-                ?: anivioMedia?.backgroundUrl,
-            logo = fanartLogo
-                ?: tvdbArtwork.clearLogoUrl
-                ?: aniZip?.aniZipLogoUrl()
-                ?: anivioMedia?.logoUrl,
+                ?: aniZip?.fanartUrl(),
+            logo = tvdbArtwork.clearLogoUrl ?: aniZip?.clearLogoUrl(),
             description = description?.stripAniListMarkup(),
             releaseInfo = (seasonYear ?: startDate?.year)?.toString(),
             lastAirDate = endDate?.toIsoDateOrNull(),
@@ -440,100 +389,12 @@ object AniListMetaSource {
                     kitsuEpisodes = kitsuEpisodes,
                     tvdbEpisodes = tvdbEpisodes,
                     airingScheduleByEpisode = airingScheduleByEpisode(),
-                    anivioMedia = anivioMedia,
                     seriesPoster = coverImage?.extraLarge ?: coverImage?.large,
                     seriesTitle = preferredTitle(),
                 )
             },
         )
     }
-
-    /** A reading-only detail record: it deliberately has no videos or playback enrichment. */
-    private fun AniListMediaDetail.toMangaMetaDetails(itemId: String, itemType: String): MetaDetails {
-        val staffEdges = staff?.edges.orEmpty()
-        val recommendedTitles = aniListMangaRecommendations()
-        return MetaDetails(
-            id = itemId,
-            type = itemType,
-            name = preferredTitle() ?: itemId,
-            poster = coverImage?.extraLarge?.takeIf { it.isNotBlank() } ?: coverImage?.large,
-            background = bannerImage?.takeIf { it.isNotBlank() },
-            description = description?.stripAniListMarkup(),
-            releaseInfo = (seasonYear ?: startDate?.year)?.toString(),
-            status = status?.humanizeAniListEnum(),
-            imdbRating = averageScore?.takeIf { it > 0 }?.let { (it / 10.0).toString() },
-            genres = genres,
-            writer = staffEdges.namesForRoles(WRITER_ROLE_HINTS),
-            productionCompanies = studios?.nodes.orEmpty().map { MetaCompany(name = it.name) },
-            country = countryOfOrigin?.takeIf { it.isNotBlank() },
-            moreLikeThis = recommendedTitles,
-            moreLikeThisSource = MoreLikeThisSource.ANILIST.takeIf { recommendedTitles.isNotEmpty() },
-            relatedTitles = aniListMangaRelations(),
-            animeReviews = aniListReviews(),
-            links = externalLinks.mapNotNull { link ->
-                val url = link.url?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                MetaLink(link.site?.takeIf { it.isNotBlank() } ?: "External link", "external", url)
-            },
-            mangaInfo = MangaInfo(format = format, chapters = chapters, volumes = volumes),
-        )
-    }
-
-    /** Keep AniList authoritative and only fill metadata it does not provide. */
-    private fun MetaDetails.enrichWithMangaBaka(mangaBaka: MangaBakaSeries?): MetaDetails {
-        mangaBaka ?: return this
-        val manga = mangaInfo ?: return this
-        val authors = mangaBaka.authors.cleanNames()
-        val artists = mangaBaka.artists.cleanNames()
-        val publishers = mangaBaka.publishers.mapNotNull { it.name?.takeIf(String::isNotBlank) }.distinct()
-        val externalLinks = mangaBaka.links.mapNotNull { link ->
-            val url = link.url?.takeIf(String::isNotBlank) ?: return@mapNotNull null
-            MetaLink(link.name?.takeIf(String::isNotBlank) ?: "Official link", link.type ?: "external", url)
-        }
-        return copy(
-            description = description ?: mangaBaka.description?.stripAniListMarkup(),
-            status = status ?: mangaBaka.status?.humanizeMangaBakaStatus(),
-            country = country ?: mangaBaka.originalLanguage?.takeIf(String::isNotBlank),
-            // Manga posters come from MangaBaka; AniList's cover stays as the fallback.
-            poster = mangaBaka.coverUrl() ?: poster,
-            writer = (writer + authors + artists).distinct(),
-            productionCompanies = (productionCompanies + publishers.map(::MetaCompany)).distinctBy { it.name.lowercase() },
-            links = (links + externalLinks).distinctBy { it.url },
-            mangaInfo = manga.copy(
-                chapters = manga.chapters ?: mangaBaka.totalChapters?.toIntOrNull(),
-                volumes = manga.volumes ?: mangaBaka.finalVolume?.toIntOrNull(),
-                authors = authors,
-                artists = artists,
-                publishers = publishers,
-            ),
-        )
-    }
-
-    private fun List<String>.cleanNames(): List<String> =
-        map { it.trim() }.filter { it.isNotBlank() }.distinct()
-
-    private fun String.humanizeMangaBakaStatus(): String =
-        replace('_', ' ').replace('-', ' ').split(' ').filter { it.isNotBlank() }
-            .joinToString(" ") { word -> word.lowercase().replaceFirstChar { it.uppercaseChar() } }
-
-    private fun AniListMediaDetail.aniListMangaRecommendations(): List<MetaPreview> =
-        recommendations?.nodes.orEmpty()
-            .filter { (it.rating ?: 0) >= 0 }
-            .mapNotNull { it.mediaRecommendation }
-            .filterNot { it.isAdult }
-            .filter { it.format?.uppercase() in MANGA_FORMATS }
-            .distinctBy { it.id }
-            .mapNotNull { it.toMetaPreview() }
-            .take(MAX_MORE_LIKE_THIS)
-
-    private fun AniListMediaDetail.aniListMangaRelations(): List<MetaPreview> =
-        relations?.edges.orEmpty()
-            .filter { it.relationType?.uppercase() in RELATION_TYPES }
-            .sortedBy { RELATION_TYPES.indexOf(it.relationType?.uppercase()) }
-            .mapNotNull { it.node }
-            .filterNot { it.isAdult }
-            .filter { it.format?.uppercase() in MANGA_FORMATS }
-            .distinctBy { it.id }
-            .mapNotNull { it.toMetaPreview() }
 
     /**
      * "More like this" from AniList's own community recommendations.
@@ -605,7 +466,6 @@ object AniListMetaSource {
         kitsuEpisodes: Map<Int, KitsuEpisode>,
         tvdbEpisodes: Map<Int, TvdbEpisode>,
         airingScheduleByEpisode: Map<Int, Long>,
-        anivioMedia: AnivioMedia?,
         seriesPoster: String?,
         seriesTitle: String?,
     ): List<MetaVideo> = buildEnrichedEpisodes(
@@ -615,7 +475,6 @@ object AniListMetaSource {
             aniZip = aniZip,
             kitsuEpisodes = kitsuEpisodes,
             tvdbEpisodes = tvdbEpisodes,
-            anivioMedia = anivioMedia,
             airingScheduleByEpisode = airingScheduleByEpisode,
         ),
         seriesPoster = seriesPoster,
@@ -664,7 +523,6 @@ object AniListMetaSource {
                         // MetaVideo.season stays 1 to keep episode ids stable for stream lookups.
                         useEpisodes = false,
                         useSeasonPosters = false,
-                        useReleaseDates = false,
                         // Show-level artwork is fine for a first season or a film, wrong for a sequel.
                         useArtwork = settings.useArtwork && !isLaterSeason,
                     ),
@@ -719,7 +577,6 @@ object AniListMetaSource {
         useArtwork = false,
         useBasicInfo = false,
         useDetails = false,
-        useReleaseDates = false,
         useCredits = false,
         useProductions = false,
         useNetworks = false,
@@ -786,5 +643,5 @@ object AniListMetaSource {
             .ifBlank { this }
 
     private fun fallbackEpisodeTitle(number: Int): String =
-        runBlocking { getString(Res.string.anilist_episode_fallback_title, number) }
+"Episode $number"  // plain literal: suspending loader in a blocking call blocks a worker
 }

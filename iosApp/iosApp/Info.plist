@@ -14,7 +14,6 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>nuvio</string>
-				<string>anivio</string>
 				<string>stremio</string>
 			</array>
 		</dict>
@@ -32,10 +31,7 @@
 		<string>open-vidhub</string>
 	</array>
 	<key>UILaunchScreen</key>
-	<dict>
-		<key>UIColorName</key>
-		<string>AvSplashBackground</string>
-	</dict>
+	<dict/>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>

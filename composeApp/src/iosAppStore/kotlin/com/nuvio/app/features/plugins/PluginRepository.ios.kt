@@ -31,27 +31,13 @@ actual object PluginRepository {
 
     actual fun toggleScraper(scraperId: String, enabled: Boolean) = Unit
 
-    actual fun moveScraper(scraperId: String, moveUp: Boolean) = Unit
-
-    actual fun moveScraperTo(scraperId: String, targetScraperId: String) = Unit
-
     actual fun setPluginsEnabled(enabled: Boolean) = Unit
 
     actual fun setGroupStreamsByRepository(enabled: Boolean) = Unit
 
-    actual fun exportSetupPayload(): String = PluginSetupBackup().let { kotlinx.serialization.json.Json.encodeToString(PluginSetupBackup.serializer(), it) }
-
-    actual fun restoreSetupPayload(payload: String): Boolean = false
+    actual fun setLocalPluginSearchPaused(paused: Boolean) = Unit
 
     actual fun getEnabledScrapersForType(type: String): List<PluginScraper> = emptyList()
-
-    actual fun getEnabledMangaScrapers(): List<PluginScraper> = emptyList()
-
-    actual suspend fun getMangaChapters(scraper: PluginScraper, mangaId: String, title: String): Result<List<MangaPluginChapter>> =
-        Result.failure(UnsupportedOperationException(getString(Res.string.plugins_error_unavailable_build)))
-
-    actual suspend fun getMangaChapterPages(scraper: PluginScraper, chapterId: String): Result<List<MangaPluginPage>> =
-        Result.failure(UnsupportedOperationException(getString(Res.string.plugins_error_unavailable_build)))
 
     actual suspend fun testScraper(scraperId: String): Result<List<PluginRuntimeResult>> =
         Result.failure(UnsupportedOperationException(getString(Res.string.plugins_error_unavailable_build)))

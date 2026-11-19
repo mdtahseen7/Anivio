@@ -63,6 +63,7 @@ import com.nuvio.app.features.party.UnreadBadge
 import com.nuvio.app.features.party.isShareableStreamUrl
 import com.nuvio.app.features.party.messageRes
 import com.nuvio.app.features.party.partyMediaKey
+import com.nuvio.app.features.party.partyStreamRequestHeaders
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
@@ -148,8 +149,7 @@ internal fun PlayerScreenRuntime.currentPartyStream(): PartyStream? {
     return PartyStream(
         mediaKey = partyKey,
         url = activeSourceUrl,
-        headers = activeSourceHeaders,
-        responseHeaders = activeSourceResponseHeaders,
+        headers = partyStreamRequestHeaders(activeSourceHeaders),
         name = activeStreamTitle,
         description = activeStreamSubtitle,
         addonName = activeProviderName,
@@ -163,12 +163,7 @@ internal fun PlayerScreenRuntime.currentPartyStream(): PartyStream? {
 internal fun PlayerScreenRuntime.partyBaseRate(): Float =
     PartyRepository.playback.value?.rate ?: playbackSnapshot.playbackSpeed
 
-internal fun PlayerScreenRuntime.currentPlaybackPositionMs(): Long {
-    val snapshot = playbackSnapshot
-    if (!snapshot.isPlaying || snapshot.isLoading) return snapshot.positionMs
-    val elapsedMs = playbackSnapshotMark?.elapsedNow()?.inWholeMilliseconds?.coerceIn(0L, 1_000L) ?: 0L
-    return snapshot.positionMs + (elapsedMs * snapshot.playbackSpeed).toLong()
-}
+internal fun PlayerScreenRuntime.currentPlaybackPositionMs(): Long = playbackSnapshot.positionMs
 
 internal fun PlayerScreenRuntime.publishPartyPlayback(
     positionMs: Long = currentPlaybackPositionMs(),
@@ -331,7 +326,12 @@ internal fun BoxScope.RenderParty(runtime: PlayerScreenRuntime, panelWidth: andr
             canStart = PartyRepository.canUse,
             onStart = { startParty() },
             onSwitchParty = { PartyRepository.publishMedia(currentPartyMedia(), playbackSnapshot.positionMs) },
-            onWatchWithParty = { party?.media?.let { showPartyPanel = false; args.onOpenPartyMedia(it) } },
+            onWatchWithParty = {
+                party?.media?.let { media ->
+                    showPartyPanel = false
+                    args.onOpenPartyMedia(media, releaseForNavigation())
+                }
+            },
             onLeave = { showPartyPanel = false; PartyRepository.leave() },
             onEnd = { showPartyPanel = false; PartyRepository.end() },
             onRemove = { PartyRepository.removeMember(it.id) },

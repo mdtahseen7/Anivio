@@ -14,8 +14,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.getValue
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
@@ -45,7 +43,6 @@ internal fun NavigationBarSettingsSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
-    val homeTopBarEnabled by ThemeSettingsRepository.homeTopBarEnabled.collectAsStateWithLifecycle()
     val dismiss: () -> Unit = {
         scope.launch { dismissNuvioBottomSheet(sheetState, onDismiss) }
     }
@@ -66,6 +63,7 @@ internal fun NavigationBarSettingsSheet(
                         NuvioBottomSheetActionRow(
                             title = stringResource(style.labelRes),
                             onClick = { onStyleSelected(style) },
+                            selected = style == selectedStyle,
                             modifier = Modifier.semantics {
                                 role = Role.RadioButton
                                 selected = style == selectedStyle
@@ -92,16 +90,6 @@ internal fun NavigationBarSettingsSheet(
                         )
                     }
                 }
-            }
-            item {
-                NuvioBottomSheetDivider()
-                SettingsSwitchRow(
-                    title = "Show home top controls",
-                    description = "Show notifications, content mode, and search controls above Home.",
-                    checked = homeTopBarEnabled,
-                    isTablet = isTablet,
-                    onCheckedChange = ThemeSettingsRepository::setHomeTopBarEnabled,
-                )
             }
             item {
                 NuvioPrimaryButton(

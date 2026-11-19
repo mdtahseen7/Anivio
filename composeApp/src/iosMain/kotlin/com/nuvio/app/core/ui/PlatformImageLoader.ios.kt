@@ -6,3 +6,5 @@ import coil3.svg.SvgDecoder
 internal actual fun ImageLoader.Builder.configurePlatformImageLoader(): ImageLoader.Builder = apply {
     components { add(SvgDecoder.Factory()) }
 }
+
+internal actual val platformProvidesImageLoader: Boolean = false

@@ -187,4 +187,3 @@ CCCryptorStatus CCCryptorGCMFinal(
 CCCryptorStatus CCCryptorRelease(
     CCCryptorRef cryptorRef
 );
-

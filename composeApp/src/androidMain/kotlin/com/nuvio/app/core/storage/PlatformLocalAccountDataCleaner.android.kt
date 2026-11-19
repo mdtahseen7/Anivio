@@ -4,6 +4,7 @@ import android.content.Context
 
 internal actual object PlatformLocalAccountDataCleaner {
     private val preferenceNames = listOf(
+        "episode_shuffle",
         "nuvio_addons",
         "nuvio_library",
         "nuvio_library_display_settings",
@@ -18,11 +19,12 @@ internal actual object PlatformLocalAccountDataCleaner {
         "nuvio_profile_cache",
         "nuvio_avatar_cache",
         "nuvio_profile_pin_cache",
-        "nuvio_profile_background_appearance",
         "nuvio_theme_settings",
         "nuvio_poster_card_style",
         "nuvio_debrid_settings",
         "nuvio_mdblist_settings",
+        "nuvio_mdblist_auth",
+        "nuvio_mdblist_sync",
         "nuvio_auth",
         "nuvio_trakt_auth",
         "nuvio_simkl_auth",

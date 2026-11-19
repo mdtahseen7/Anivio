@@ -40,6 +40,18 @@ internal val AppIconOption.previewResource: DrawableResource
 internal val AppIconOption.wordmarkResource: DrawableResource
     get() = Res.drawable.app_logo_av_wordmark
 
+
+internal val AppIconOption.transparentPreviewResource: DrawableResource
+    get() = when (this) {
+        AppIconOption.AV -> Res.drawable.app_icon_av_transparent
+        AppIconOption.ORIGINAL -> Res.drawable.app_icon_original_transparent
+        AppIconOption.ARCTIC_BLUE -> Res.drawable.app_icon_arctic_blue_transparent
+        AppIconOption.EMERALD -> Res.drawable.app_icon_emerald_transparent
+        AppIconOption.ROSE_GOLD -> Res.drawable.app_icon_rose_gold_transparent
+        AppIconOption.COPPER -> Res.drawable.app_icon_copper_transparent
+        AppIconOption.GRAPHITE -> Res.drawable.app_icon_graphite_transparent
+    }
+
 @Suppress("UnusedReceiverParameter")
 internal fun AppTheme.wordmarkResource(fallback: AppIconOption): DrawableResource =
     fallback.wordmarkResource
