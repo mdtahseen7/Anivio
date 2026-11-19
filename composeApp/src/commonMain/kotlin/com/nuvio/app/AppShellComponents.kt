@@ -127,6 +127,8 @@ internal fun AppTabHost(
     requests: AppTabRequests,
     state: AppTabState,
     actions: AppTabActions,
+    desktopSettingsOpen: Boolean = false,
+    onDesktopSettingsClosed: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val tabStateHolder = rememberSaveableStateHolder()
@@ -193,13 +195,19 @@ internal fun AppTabHost(
                     // from a button inside it. Deep-links that target a specific settings page
                     // (e.g. Debrid) still jump straight into Settings via requestedSettingsPageName.
                     var showSettings by rememberSaveable { mutableStateOf(false) }
+                    LaunchedEffect(desktopSettingsOpen) {
+                        if (isDesktop) showSettings = desktopSettingsOpen
+                    }
                     LaunchedEffect(state.requestedSettingsPageName) {
                         if (state.requestedSettingsPageName != null) showSettings = true
                     }
                     if (showSettings) {
                         SettingsScreen(
                             modifier = Modifier.fillMaxSize(),
-                            onExternalBack = { showSettings = false },
+                            onExternalBack = {
+                                showSettings = false
+                                if (isDesktop) onDesktopSettingsClosed()
+                            },
                             rootActionRequests = requests.settingsRootActionRequests,
                             requestedPageName = state.requestedSettingsPageName,
                             onRequestedPageConsumed = actions.onRequestedSettingsPageConsumed,

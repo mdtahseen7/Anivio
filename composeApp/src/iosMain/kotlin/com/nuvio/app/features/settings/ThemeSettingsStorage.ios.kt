@@ -143,6 +143,9 @@ actual object ThemeSettingsStorage {
         NSUserDefaults.standardUserDefaults.synchronize()
     }
 
+    actual fun loadDesktopNavigationLayout(): String? = null
+    actual fun saveDesktopNavigationLayout(layoutName: String) = Unit
+
     actual fun loadNavBarStyle(): String? =
         NSUserDefaults.standardUserDefaults.stringForKey(ProfileScopedKey.of(navBarStyleKey))
 

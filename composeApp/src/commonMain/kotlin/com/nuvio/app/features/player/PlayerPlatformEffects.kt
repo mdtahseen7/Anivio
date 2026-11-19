@@ -1,6 +1,8 @@
 package com.nuvio.app.features.player
 
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.IntSize
 
 interface PlayerGestureController {
@@ -32,3 +34,11 @@ expect fun rememberIsInPictureInPicture(): Boolean
 
 @Composable
 expect fun rememberPlayerGestureController(): PlayerGestureController?
+
+internal expect val playerOverlayUsesWindow: Boolean
+
+@Composable
+internal expect fun PlatformPlayerOverlay(
+    modifier: Modifier,
+    content: @Composable BoxScope.() -> Unit,
+)

@@ -129,12 +129,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi(
     }
     val gestureCallbacks = rememberSurfaceGestureCallbacks()
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(start = partyPanelInset)
-            .clipToBounds()
-            .onSizeChanged { layoutSize = it }
+    val surfaceGestures = Modifier
             .playerSurfaceTapGestures(
                 layoutSize = layoutSize,
                 playerControlsLockedState = gestureCallbacks.playerControlsLocked,
@@ -160,7 +155,15 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi(
                 clearLiveGestureFeedbackState = gestureCallbacks.clearLiveGestureFeedback,
                 revealLockedOverlayState = gestureCallbacks.revealLockedOverlay,
                 commitHorizontalSeekState = gestureCallbacks.commitHorizontalSeek,
-            ),
+            )
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(start = partyPanelInset)
+            .clipToBounds()
+            .onSizeChanged { layoutSize = it }
+            .then(if (playerOverlayUsesWindow) Modifier else surfaceGestures),
     ) {
         val playerSurfaceSourceUrl = if (isP2pPlaybackActive) p2pResolvedSourceUrl else activeSourceUrl
         val playbackKey = activePlaybackKey
@@ -232,41 +235,45 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi(
             }
         }
 
-        AnimatedVisibility(
-            visible = playerSettingsUiState.showPauseOverlay && pausedOverlayVisible && !controlsVisible && !playerControlsLocked,
-            enter = fadeIn(animationSpec = tween(durationMillis = 220)),
-            exit = fadeOut(animationSpec = tween(durationMillis = 180)),
+        PlatformPlayerOverlay(
+            modifier = if (playerOverlayUsesWindow) surfaceGestures else Modifier,
         ) {
-            PauseMetadataOverlay(
-                title = title,
-                logo = logo,
-                isEpisode = isEpisode,
-                seasonNumber = activeSeasonForDisplay,
-                episodeNumber = activeEpisodeNumber,
-                episodeTitle = activeEpisodeTitle,
-                pauseDescription = activePauseDescription ?: activeStreamSubtitle,
-                providerName = activeProviderName,
-                metrics = metrics,
-                horizontalSafePadding = horizontalSafePadding,
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
+            AnimatedVisibility(
+                visible = playerSettingsUiState.showPauseOverlay && pausedOverlayVisible && !controlsVisible && !playerControlsLocked,
+                enter = fadeIn(animationSpec = tween(durationMillis = 220)),
+                exit = fadeOut(animationSpec = tween(durationMillis = 180)),
+            ) {
+                PauseMetadataOverlay(
+                    title = title,
+                    logo = logo,
+                    isEpisode = isEpisode,
+                    seasonNumber = activeSeasonForDisplay,
+                    episodeNumber = activeEpisodeNumber,
+                    episodeTitle = activeEpisodeTitle,
+                    pauseDescription = activePauseDescription ?: activeStreamSubtitle,
+                    providerName = activeProviderName,
+                    metrics = metrics,
+                    horizontalSafePadding = horizontalSafePadding,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
 
-        RenderPlayerControls(displayedPositionMs = displayedPositionMs, isEpisode = isEpisode)
-        if (controlsVisible && !playerControlsLocked && playerSettingsUiState.exoChaptersEnabled && playbackSnapshot.chapters.isNotEmpty()) {
-            ChapterPicker(playbackSnapshot.chapters, onSeek = { playerController?.seekTo(it) })
+            RenderPlayerControls(displayedPositionMs = displayedPositionMs, isEpisode = isEpisode)
+            if (controlsVisible && !playerControlsLocked && playerSettingsUiState.exoChaptersEnabled && playbackSnapshot.chapters.isNotEmpty()) {
+                ChapterPicker(playbackSnapshot.chapters, onSeek = { playerController?.seekTo(it) })
+            }
+            RenderPlaybackOverlays(
+                runtime = runtime,
+                displayedPositionMs = displayedPositionMs,
+                currentGestureFeedback = currentGestureFeedback,
+                p2pInitialLoadingMessage = p2pInitialLoadingMessage,
+                p2pInitialLoadingProgress = p2pInitialLoadingProgress,
+                showP2pRebufferStats = showP2pRebufferStats,
+                p2pRebufferMessage = p2pRebufferMessage,
+                p2pRebufferProgress = p2pRebufferProgress,
+            )
+            RenderPlayerModals(displayedPositionMs = displayedPositionMs)
         }
-        RenderPlaybackOverlays(
-            runtime = runtime,
-            displayedPositionMs = displayedPositionMs,
-            currentGestureFeedback = currentGestureFeedback,
-            p2pInitialLoadingMessage = p2pInitialLoadingMessage,
-            p2pInitialLoadingProgress = p2pInitialLoadingProgress,
-            showP2pRebufferStats = showP2pRebufferStats,
-            p2pRebufferMessage = p2pRebufferMessage,
-            p2pRebufferProgress = p2pRebufferProgress,
-        )
-        RenderPlayerModals(displayedPositionMs = displayedPositionMs)
     }
     Box(Modifier.fillMaxSize()) {
         RenderParty(runtime = runtime, panelWidth = partyPanelWidth, modal = !dockPartyPanel, panelAllowed = partyPanelAllowed)

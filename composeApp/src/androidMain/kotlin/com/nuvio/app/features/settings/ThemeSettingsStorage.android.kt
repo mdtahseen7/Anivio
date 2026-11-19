@@ -141,6 +141,9 @@ actual object ThemeSettingsStorage {
         }
     }
 
+    actual fun loadDesktopNavigationLayout(): String? = null
+    actual fun saveDesktopNavigationLayout(layoutName: String) = Unit
+
     actual fun loadNavBarStyle(): String? =
         preferences?.getString(ProfileScopedKey.of(NAV_BAR_STYLE_KEY), null)
 

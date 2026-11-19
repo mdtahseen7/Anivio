@@ -1,5 +1,16 @@
 package com.nuvio.app.features.settings
 
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.semantics.Role
+import com.nuvio.app.isDesktop
+import nuvio.composeapp.generated.resources.settings_desktop_navigation_title
+import nuvio.composeapp.generated.resources.action_cancel
+
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -17,6 +28,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -217,8 +229,19 @@ internal fun LazyListScope.appearanceSettingsContent(
     if (layoutOnly) {
     item {
         var showNavigation by remember { mutableStateOf(false) }
+        var showDesktopNavigation by remember { mutableStateOf(false) }
+        val desktopLayout by ThemeSettingsRepository.desktopNavigationLayout.collectAsStateWithLifecycle()
         val glowEnabled by ThemeSettingsRepository.navBarGlowEnabled.collectAsStateWithLifecycle()
         SettingsGroup(isTablet = isTablet) {
+            if (isDesktop) {
+                SettingsNavigationRow(
+                    title = stringResource(Res.string.settings_desktop_navigation_title),
+                    description = stringResource(desktopLayout.labelRes),
+                    isTablet = isTablet,
+                    onClick = { showDesktopNavigation = true },
+                )
+                SettingsGroupDivider(isTablet = isTablet)
+            }
             if (!isIos) SettingsNavigationRow(
                 title = stringResource(Res.string.settings_appearance_nav_bar_style),
                 description = stringResource(selectedNavBarStyle.labelRes),
@@ -232,8 +255,39 @@ internal fun LazyListScope.appearanceSettingsContent(
                 onCheckedChange = onLiquidGlassNativeTabBarToggle,
             )
         }
+        if (showDesktopNavigation) {
+            AlertDialog(
+                onDismissRequest = { showDesktopNavigation = false },
+                title = { Text(stringResource(Res.string.settings_desktop_navigation_title)) },
+                text = {
+                    Column {
+                        DesktopNavigationLayout.entries.forEach { layout ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().selectable(
+                                    selected = desktopLayout == layout,
+                                    role = Role.RadioButton,
+                                    onClick = {
+                                        ThemeSettingsRepository.setDesktopNavigationLayout(layout)
+                                        showDesktopNavigation = false
+                                    },
+                                ).padding(vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(selected = desktopLayout == layout, onClick = null)
+                                Text(stringResource(layout.labelRes), Modifier.padding(start = 16.dp))
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showDesktopNavigation = false }) {
+                        Text(stringResource(Res.string.action_cancel))
+                    }
+                },
+            )
+        }
         if (showNavigation) NavigationBarSettingsSheet(
-            isTablet = isTablet, selectedStyle = if (isTablet) NavBarStyle.COMPACT else selectedNavBarStyle,
+            isTablet = isTablet, selectedStyle = if (isTablet && !isDesktop) NavBarStyle.COMPACT else selectedNavBarStyle,
             onStyleSelected = onNavBarStyleSelected, glowEnabled = glowEnabled,
             onGlowChanged = ThemeSettingsRepository::setNavBarGlowEnabled,
             onDismiss = { showNavigation = false },

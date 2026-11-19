@@ -1,5 +1,7 @@
 package com.nuvio.app.features.home.components
 
+import com.nuvio.app.isDesktop
+
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -84,6 +86,7 @@ internal data class HomeHeroLayout(
     val contentVerticalPadding: Dp,
     val bottomFadeHeight: Dp,
     val logoWidthFraction: Float,
+    val isDesktopLayout: Boolean = false,
 )
 
 @Composable
@@ -197,10 +200,7 @@ fun HomeHeroSection(
                 ) {
                     visiblePages.forEach { layer ->
                         AsyncImage(
-                            // Keep the hero's artwork consistent with the poster-led design: use the
-                            // sharp portrait key art first and only fall back to a wide image when a
-                            // poster is unavailable.
-                            model = homeHeroImageUrl(items[layer.page]),
+                            model = homeHeroImageUrl(items[layer.page], preferWideArtwork = layout.isDesktopLayout),
                             contentDescription = items[layer.page].name,
                             modifier = Modifier
                                 .fillMaxSize()
@@ -247,6 +247,18 @@ fun HomeHeroSection(
                         ),
                 )
 
+                if (layout.isDesktopLayout) {
+                    Box(
+                        Modifier.fillMaxSize().background(
+                            Brush.horizontalGradient(
+                                0f to MaterialTheme.colorScheme.background.copy(alpha = 0.78f),
+                                0.65f to MaterialTheme.colorScheme.background.copy(alpha = 0.12f),
+                                1f to MaterialTheme.colorScheme.background.copy(alpha = 0f),
+                            ),
+                        ),
+                    )
+                }
+
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -281,7 +293,7 @@ fun HomeHeroSection(
                         }
                     }
 
-                    if (!layout.isTablet) {
+                    if (!layout.isTablet || layout.isDesktopLayout) {
                         Spacer(modifier = Modifier.height(14.dp))
                         Surface(
                             modifier = Modifier
@@ -333,7 +345,8 @@ fun HomeHeroSection(
     }
 }
 
-internal fun homeHeroImageUrl(item: MetaPreview): String? = item.poster ?: item.banner
+internal fun homeHeroImageUrl(item: MetaPreview, preferWideArtwork: Boolean = false): String? =
+    if (preferWideArtwork) item.banner ?: item.poster else item.poster ?: item.banner
 
 private data class HeroPageLayer(
     val page: Int,
@@ -432,6 +445,23 @@ private fun HeroContentBlock(
             )
         }
 
+        if (layout.isDesktopLayout) {
+            item.description?.takeIf(String::isNotBlank)?.let { description ->
+                val synopsis = description.replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), " ")
+                    .replace(Regex("<[^>]+>"), "")
+                    .trim()
+                if (synopsis.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = synopsis,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
         Spacer(modifier = Modifier.height(12.dp))
         HomeHeroMetaRows(
             item = item,
@@ -446,8 +476,26 @@ internal fun homeHeroLayout(
     maxWidthDp: Float,
     viewportHeightDp: Float? = null,
     mobileBelowSectionHeightHintDp: Float? = null,
+    preferDesktopLayout: Boolean = isDesktop,
 ): HomeHeroLayout =
     when {
+        preferDesktopLayout && maxWidthDp >= 580f -> {
+            val baselineHeight = (maxWidthDp * 0.56f).coerceIn(460f, 640f)
+            val availableHeight = viewportHeightDp ?: baselineHeight
+            val wideFraction = ((maxWidthDp - 1280f) / 720f).coerceIn(0f, 1f)
+            val wideHeight = baselineHeight + (availableHeight - baselineHeight).coerceAtLeast(0f) * wideFraction
+            HomeHeroLayout(
+                isTablet = true,
+                heroHeight = wideHeight.coerceAtMost(availableHeight.coerceAtLeast(360f)).dp,
+                contentMaxWidth = 760.dp,
+                contentWidthFraction = if (maxWidthDp >= 1000f) 0.58f else 0.76f,
+                contentHorizontalPadding = (maxWidthDp * 0.045f).dp.coerceIn(28.dp, 72.dp),
+                contentVerticalPadding = 28.dp,
+                bottomFadeHeight = 300.dp,
+                logoWidthFraction = 0.55f,
+                isDesktopLayout = true,
+            )
+        }
         maxWidthDp >= 1200f -> HomeHeroLayout(
             isTablet = true,
             heroHeight = (maxWidthDp * 0.42f).dp.coerceIn(360.dp, 440.dp),

@@ -1,13 +1,13 @@
 package com.nuvio.app.features.profile
 
+import com.nuvio.app.core.storage.DesktopStorage
 import com.nuvio.app.core.storage.ProfileScopedKey
 
-actual object ProfileShareSettingsStorage {
-    private val payloads = mutableMapOf<String, String>()
+internal actual object ProfileShareSettingsStorage {
+    private val store = DesktopStorage.store("profile_share_settings")
 
-    actual fun loadPayload(): String? = payloads[ProfileScopedKey.of("payload")]
-
+    actual fun loadPayload(): String? = store.getString(ProfileScopedKey.of("payload"))
     actual fun savePayload(payload: String) {
-        payloads[ProfileScopedKey.of("payload")] = payload
+        store.putString(ProfileScopedKey.of("payload"), payload)
     }
 }

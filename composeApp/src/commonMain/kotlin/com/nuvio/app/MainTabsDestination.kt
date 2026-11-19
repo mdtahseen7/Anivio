@@ -1,6 +1,12 @@
 package com.nuvio.app
 
 import androidx.compose.material.icons.rounded.Explore
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import com.nuvio.app.features.settings.DesktopNavigationLayout
+import nuvio.composeapp.generated.resources.compose_settings_page_root
 import androidx.compose.animation.core.animateFloatAsState
 import nuvio.composeapp.generated.resources.compose_search_discover_title
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -32,6 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nuvio.app.core.ui.DesktopNavigationBar
 import com.nuvio.app.core.ui.FloatingNavigationBar
 import com.nuvio.app.core.ui.FloatingNavigationItem
 import com.nuvio.app.core.ui.LocalNuvioBottomNavigationOverlayPadding
@@ -75,7 +82,19 @@ internal fun MainTabsDestination(
     PlatformBackHandler(enabled = rootRouteActive, onBack = onBack)
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val isTabletLayout = useTabletFloatingTabBar || maxWidth >= 768.dp
+        val windowWidth = maxWidth
+        val isTabletLayout = isDesktop || useTabletFloatingTabBar || windowWidth >= 768.dp
+        val desktopLayout by ThemeSettingsRepository.desktopNavigationLayout.collectAsStateWithLifecycle()
+        val useDesktopSidebar = isDesktop && desktopLayout == DesktopNavigationLayout.Sidebar
+        var desktopSettingsOpen by rememberSaveable { mutableStateOf(false) }
+        fun openProfile() {
+            desktopSettingsOpen = false
+            onTabSelected(AppScreenTab.Settings)
+        }
+        fun openDesktopSettings() {
+            desktopSettingsOpen = true
+            onTabSelected(AppScreenTab.Settings)
+        }
         val useNativeBottomTabs = if (useNativeNavigation) {
             useNativeTabBar
         } else {
@@ -105,19 +124,32 @@ internal fun MainTabsDestination(
                 drawable = Res.drawable.sidebar_library,
                 label = stringResource(Res.string.compose_nav_library),
             ),
+        ) + if (isDesktop) listOf(
             FloatingNavigationItem(
-                selected = selectedTab == AppScreenTab.Settings,
-                onClick = { onTabSelected(AppScreenTab.Settings) },
+                selected = selectedTab == AppScreenTab.Discover,
+                onClick = { onTabSelected(AppScreenTab.Discover) },
+                icon = Icons.Rounded.Explore,
+                label = stringResource(Res.string.compose_search_discover_title),
+            ),
+            FloatingNavigationItem(
+                selected = selectedTab == AppScreenTab.Settings && desktopSettingsOpen,
+                onClick = ::openDesktopSettings,
+                icon = Icons.Rounded.Settings,
+                label = stringResource(Res.string.compose_settings_page_root),
+            ),
+        ) else emptyList()
+        val profileNavigationItem = FloatingNavigationItem(
+                selected = selectedTab == AppScreenTab.Settings && !desktopSettingsOpen,
+                onClick = ::openProfile,
                 label = stringResource(Res.string.compose_nav_profile),
                 content = {
                     ProfileSwitcherTab(
-                        selected = selectedTab == AppScreenTab.Settings,
-                        onClick = { onTabSelected(AppScreenTab.Settings) },
+                        selected = selectedTab == AppScreenTab.Settings && !desktopSettingsOpen,
+                        onClick = ::openProfile,
                         onProfileSelected = onProfileSelected,
                         onAddProfileRequested = onAddProfileRequested,
                     )
                 },
-            ),
         )
         val bottomNavigationItems = listOf(
             FloatingNavigationItem(
@@ -200,7 +232,12 @@ internal fun MainTabsDestination(
                     LocalNuvioBottomNavigationOverlayPadding provides if (useNativeBottomTabs) 49.dp else if (!isTabletLayout && navBarStyleSetting != NavBarStyle.CLASSIC) 72.dp else 0.dp,
                     LocalNuvioNavBarScrollState provides navBarScrollState,
                 ) {
+                    val sidebarInset = if (!useDesktopSidebar) 0.dp
+                    else if (navBarStyleSetting == NavBarStyle.EXPANDED) DesktopSidebarExpandedWidth
+                    else DesktopSidebarCollapsedWidth
                     AppTabHost(
+                        desktopSettingsOpen = desktopSettingsOpen,
+                        onDesktopSettingsClosed = { desktopSettingsOpen = false },
                         selectedTab = selectedTab,
                         requests = requests,
                         state = state,
@@ -209,7 +246,8 @@ internal fun MainTabsDestination(
                             .fillMaxSize()
                             .then(if (isTabletLayout || navBarStyleSetting != NavBarStyle.CLASSIC) Modifier.hazeSource(state = navBarHazeState) else Modifier)
                             .then(if (navBarStyleSetting == NavBarStyle.ADAPTIVE) Modifier.nestedScroll(navBarScrollState.nestedScrollConnection) else Modifier)
-                            .padding(innerPadding),
+                            .padding(innerPadding)
+                            .padding(start = sidebarInset),
                     )
                 }
 
@@ -255,7 +293,29 @@ internal fun MainTabsDestination(
                     }
                 }
 
-                if (isTabletLayout && !useNativeBottomTabs) {
+                if (useDesktopSidebar) {
+                    DesktopSidebar(
+                        items = floatingNavigationItems,
+                        style = navBarStyleSetting,
+                        onProfileClick = ::openProfile,
+                        onProfileSelected = onProfileSelected,
+                        onAddProfileRequested = onAddProfileRequested,
+                        modifier = Modifier.align(Alignment.CenterStart),
+                    )
+                }
+
+                if (isDesktop && !useDesktopSidebar) {
+                    DesktopNavigationBar(
+                        modifier = Modifier.align(Alignment.TopCenter),
+                        items = floatingNavigationItems + profileNavigationItem,
+                        hazeState = navBarHazeState,
+                        scrollState = navBarScrollState,
+                        navBarStyle = navBarStyleSetting,
+                        isHeroEnabled = selectedTab == AppScreenTab.Home,
+                        windowWidth = windowWidth,
+                        glowEnabled = navBarGlowEnabled,
+                    )
+                } else if (isTabletLayout && !useNativeBottomTabs && !useDesktopSidebar) {
                     FloatingNavigationBar(
                         modifier = Modifier.align(Alignment.TopCenter).widthIn(max = 416.dp),
                         hazeState = navBarHazeState,
@@ -264,7 +324,7 @@ internal fun MainTabsDestination(
                             bottom = 8.dp,
                         ),
                         compactSize = true,
-                        items = floatingNavigationItems,
+                        items = floatingNavigationItems + profileNavigationItem,
                         glowEnabled = navBarGlowEnabled,
                     )
                 }

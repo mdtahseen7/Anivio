@@ -2651,5 +2651,11 @@
     <string name="settings_reader_mode_ltr_description">Swipe pages left to right.</string>
     <string name="settings_reader_mode_rtl">Right to left</string>
     <string name="settings_reader_mode_rtl_description">Classic manga direction, swipe right to left.</string>
+    <string name="settings_desktop_navigation_title">Desktop navigation</string>
+    <string name="settings_desktop_navigation_sidebar">Sidebar</string>
+    <string name="settings_desktop_navigation_top_bar">Top bar</string>
+    <string name="settings_advanced_opengl_renderer">Use OpenGL for the app interface</string>
+    <string name="settings_advanced_opengl_renderer_description">Restart Anivio after changing the renderer.</string>
+    <string name="settings_advanced_opengl_renderer_external_description">The renderer is set by your Windows environment.</string>
 </resources>
 

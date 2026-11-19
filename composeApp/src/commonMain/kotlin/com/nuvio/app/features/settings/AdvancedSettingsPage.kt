@@ -54,6 +54,9 @@ import nuvio.composeapp.generated.resources.settings_advanced_backup_restore
 import nuvio.composeapp.generated.resources.settings_advanced_backup_invalid
 import nuvio.composeapp.generated.resources.settings_advanced_remember_last_profile
 import nuvio.composeapp.generated.resources.settings_advanced_remember_last_profile_description
+import nuvio.composeapp.generated.resources.settings_advanced_opengl_renderer
+import nuvio.composeapp.generated.resources.settings_advanced_opengl_renderer_description
+import nuvio.composeapp.generated.resources.settings_advanced_opengl_renderer_external_description
 import nuvio.composeapp.generated.resources.settings_advanced_section_cache
 import nuvio.composeapp.generated.resources.settings_advanced_section_diagnostics
 import nuvio.composeapp.generated.resources.settings_advanced_section_startup
@@ -90,6 +93,28 @@ internal fun LazyListScope.advancedSettingsContent(
                     checked = rememberLastProfileEnabled,
                     isTablet = isTablet,
                     onCheckedChange = ProfileRepository::setRememberLastProfileEnabled,
+                )
+            }
+        }
+    }
+    if (DesktopRendererSettings.isSupported) {
+        item {
+            var useOpenGl by remember { mutableStateOf(DesktopRendererSettings.useOpenGl) }
+            val externallyControlled = DesktopRendererSettings.isExternallyControlled
+            SettingsGroup(isTablet = isTablet) {
+                SettingsSwitchRow(
+                    title = stringResource(Res.string.settings_advanced_opengl_renderer),
+                    description = stringResource(
+                        if (externallyControlled) Res.string.settings_advanced_opengl_renderer_external_description
+                        else Res.string.settings_advanced_opengl_renderer_description,
+                    ),
+                    checked = useOpenGl,
+                    isTablet = isTablet,
+                    enabled = !externallyControlled,
+                    onCheckedChange = { enabled ->
+                        DesktopRendererSettings.setUseOpenGl(enabled)
+                        useOpenGl = enabled
+                    },
                 )
             }
         }

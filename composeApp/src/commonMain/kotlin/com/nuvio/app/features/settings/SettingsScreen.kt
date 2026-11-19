@@ -1,5 +1,7 @@
 package com.nuvio.app.features.settings
 
+import com.nuvio.app.isDesktop
+
 import com.nuvio.app.core.build.AppFeaturePolicy
 
 import androidx.compose.foundation.background
@@ -402,7 +404,7 @@ fun SettingsScreen(
                 onSaved = ::navigateBack,
                 showHeader = showInternalHeader,
             )
-        } else if (maxWidth >= 768.dp) {
+        } else if (maxWidth >= (if (isDesktop) 700.dp else 768.dp)) {
             TabletSettingsScreen(
                 page = page,
                 scrollToTopRequests = scrollToTopRequests,
@@ -1026,7 +1028,12 @@ private fun TabletSettingsScreen(
     var selectedCategory by rememberSaveable { mutableStateOf(SettingsCategory.General.name) }
     val activeCategory = SettingsCategory.valueOf(selectedCategory)
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val topOffset = max(statusBarPadding + 24.dp, 48.dp) + 64.dp
+    val layout by ThemeSettingsRepository.desktopNavigationLayout.collectAsStateWithLifecycle()
+    val topOffset = if (isDesktop && layout == DesktopNavigationLayout.Sidebar) {
+        statusBarPadding + 24.dp
+    } else {
+        max(statusBarPadding + 24.dp, 48.dp) + 64.dp
+    }
 
     LaunchedEffect(page) {
         if (page.opensInlineOnTablet) {
@@ -1044,7 +1051,7 @@ private fun TabletSettingsScreen(
     Row(modifier = Modifier.fillMaxSize()) {
         Surface(
             modifier = Modifier
-                .width(280.dp)
+                .width(if (isDesktop) 240.dp else 280.dp)
                 .fillMaxSize(),
             color = MaterialTheme.colorScheme.surface,
         ) {
@@ -1058,15 +1065,21 @@ private fun TabletSettingsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 24.dp)
-                        .padding(bottom = 20.dp),
-                    style = MaterialTheme.typography.displayLarge,
+                        .padding(bottom = if (isDesktop) 16.dp else 20.dp),
+                    maxLines = 1,
+                    style = if (isDesktop) MaterialTheme.typography.headlineLarge else MaterialTheme.typography.displayLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Bold,
                 )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                if (!isDesktop) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 Spacer(modifier = Modifier.height(10.dp))
-                SettingsCategory.entries.forEach { category ->
+                val categories = if (isDesktop) {
+                    listOf(SettingsCategory.Account, SettingsCategory.General, SettingsCategory.Advanced, SettingsCategory.About)
+                } else {
+                    SettingsCategory.entries
+                }
+                categories.forEach { category ->
                     SettingsSidebarItem(
                         label = stringResource(category.labelRes),
                         icon = category.icon,

@@ -7,6 +7,10 @@ import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.TaskAction
+import org.gradle.api.tasks.InputDirectory
+import org.gradle.api.tasks.Sync
+import org.gradle.jvm.tasks.Jar
+import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
 import java.util.Properties
@@ -154,6 +158,7 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
                 |
                 |object SentryConfig {
                 |    const val DSN = "${sentryDsn.get()}"
+                |    const val DESKTOP_DSN = ""
                 |    const val ENVIRONMENT = "${sentryEnvironment.get()}"
                 |}
                 """.trimMargin()
@@ -383,6 +388,12 @@ val releaseAppVersionCode = (providers.gradleProperty("anivioVersionCode").orNul
     ?: readXcconfigValue(appVersionConfigFile, "CURRENT_PROJECT_VERSION"))
     ?.toIntOrNull()
     ?: error("CURRENT_PROJECT_VERSION is missing or invalid in ${appVersionConfigFile.path}")
+val desktopEnabled = providers.gradleProperty("anivio.desktop").orNull.toBoolean()
+val isWindowsHost = System.getProperty("os.name").startsWith("Windows", ignoreCase = true)
+require(!desktopEnabled || isWindowsHost) {
+    "The Anivio desktop target currently builds on Windows."
+}
+
 val iosDistribution = (
     providers.gradleProperty("nuvio.ios.distribution").orNull
         ?: System.getenv("NUVIO_IOS_DISTRIBUTION")
@@ -516,6 +527,12 @@ kotlin {
         }
     }
     
+    if (desktopEnabled) {
+        jvm("desktop") {
+            compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
+        }
+    }
+
     val iosTargets = listOf(
         iosArm64(),
         iosSimulatorArm64()
@@ -625,6 +642,26 @@ kotlin {
                 }
             }
         }
+        if (desktopEnabled) {
+            val desktopMain by getting {
+                kotlin.srcDir(fullCommonSourceDir)
+                kotlin.srcDir("src/windowsDesktopMain/kotlin")
+                dependencies {
+                    implementation(compose.desktop.currentOs)
+                    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.10.2")
+                    implementation(libs.ktor.client.okhttp)
+                    implementation("io.ktor:ktor-client-cio:${libs.versions.ktor.get()}")
+                    implementation("io.github.dokar3:quickjs-kt:1.0.15")
+                    implementation(libs.ksoup)
+                    implementation("io.sentry:sentry:${libs.versions.sentry.get()}")
+                }
+            }
+            val desktopTest by getting {
+                dependencies {
+                    implementation(compose.desktop.uiTestJUnit4)
+                }
+            }
+        }
         val androidHostTest by getting {
             dependencies {
                 implementation("org.robolectric:robolectric:4.16")
@@ -691,4 +728,282 @@ tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
 configurations.all {
     exclude(group = "androidx.media3", module = "media3-exoplayer")
     exclude(group = "androidx.media3", module = "media3-ui")
+}
+
+fun cmdQuote(value: String): String = "\"${value.replace("\"", "\"\"")}\""
+
+fun psSingleQuote(value: String): String = "'${value.replace("'", "''")}'"
+
+fun newestDirectory(parent: File): File? = parent.listFiles(File::isDirectory)
+    ?.maxByOrNull(File::lastModified)
+
+abstract class GenerateNativeRuntimeIndexTask : DefaultTask() {
+    @get:InputDirectory
+    abstract val runtimeDir: DirectoryProperty
+
+    @get:OutputFile
+    abstract val indexFile: RegularFileProperty
+
+    @TaskAction
+    fun generate() {
+        val dir = runtimeDir.get().asFile
+        val files = dir
+            .listFiles { file -> file.isFile && file.name != indexFile.get().asFile.name }
+            .orEmpty()
+            .map { it.name }
+            .sorted()
+        indexFile.get().asFile.writeText(files.joinToString(separator = "\n", postfix = "\n"))
+    }
+}
+
+if (desktopEnabled) {
+    val windowsPlayerBridgeArch = when (System.getProperty("os.arch").lowercase()) {
+        "aarch64", "arm64" -> "arm64"
+        "x86" -> "x86"
+        else -> "x64"
+    }
+    val windowsPlayerBridgeSource = layout.projectDirectory.file("src/desktopMain/native/windows/player_bridge.cpp")
+    val windowsPlayerBridgeOutput = layout.buildDirectory.file("native/windows/player_bridge.dll")
+    val windowsPlayerBridgeImportLib = layout.buildDirectory.file("native/windows/player_bridge.lib")
+    val windowsPlayerBridgePdb = layout.buildDirectory.file("native/windows/player_bridge.pdb")
+    val windowsPlayerBridgeObj = layout.buildDirectory.file("native/windows/player_bridge.obj")
+    val windowsPlayerBridgeScript = layout.buildDirectory.file("native/windows/build-player-bridge.bat")
+    val windowsPlayerRuntimeOutput = layout.buildDirectory.dir("native/windows-runtime")
+    if (isWindowsHost) {
+        windowsPlayerBridgeOutput.get().asFile.parentFile.mkdirs()
+    }
+    val windowsWebView2Root = providers.gradleProperty("nuvio.webview2.dir").orNull
+        ?.takeIf { it.isNotBlank() }
+        ?.let(::File)
+        ?: newestDirectory(File(System.getProperty("user.home"), ".nuget/packages/microsoft.web.webview2"))
+        ?: File("__missing_webview2__")
+    val windowsWebView2IncludeDir = File(windowsWebView2Root, "build/native/include")
+    val windowsWebView2NativeDir = File(windowsWebView2Root, "build/native/$windowsPlayerBridgeArch")
+    val windowsWebView2LoaderLib = File(windowsWebView2NativeDir, "WebView2Loader.dll.lib")
+    val windowsWebView2LoaderDll = File(windowsWebView2NativeDir, "WebView2Loader.dll")
+    val bundledWindowsLibmpvRuntimeDir = layout.projectDirectory.dir("src/desktopMain/native/windows/runtime").asFile
+    val windowsLibmpvRuntimeDirOverride = providers.gradleProperty("nuvio.windows.libmpv.runtimeDir").orNull
+        ?.takeIf { it.isNotBlank() }
+        ?.let(::File)
+    val windowsLibmpvRuntimeDir = windowsLibmpvRuntimeDirOverride
+        ?: bundledWindowsLibmpvRuntimeDir.takeIf { File(it, "libmpv-2.dll").exists() }
+    val windowsLibmpvDllOverride = providers.gradleProperty("nuvio.windows.libmpv.dll").orNull
+        ?.takeIf { it.isNotBlank() }
+        ?.let(::File)
+    val windowsLibmpvDll = windowsLibmpvDllOverride
+        ?: windowsLibmpvRuntimeDir?.resolve("libmpv-2.dll")
+        ?: listOf(
+            File("C:/msys64/ucrt64/bin/libmpv-2.dll"),
+            File("C:/msys64/mingw64/bin/libmpv-2.dll"),
+        ).firstOrNull(File::exists)
+    val windowsCppRuntimeDllNames = listOf(
+        "vcruntime140.dll",
+        "vcruntime140_1.dll",
+        "msvcp140.dll",
+        "msvcp140_1.dll",
+        "msvcp140_2.dll",
+        "msvcp140_atomic_wait.dll",
+        "msvcp140_codecvt_ids.dll",
+        "concrt140.dll",
+    )
+    val windowsCppRuntimeDlls = if (isWindowsHost) {
+        windowsCppRuntimeDllNames
+            .map { File("C:/Windows/System32", it) }
+            .filter(File::exists)
+    } else {
+        emptyList()
+    }
+    val windowsVsWhere = File("C:/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe")
+    val windowsVcvarsRelativePath = when (windowsPlayerBridgeArch) {
+        "x86" -> "VC\\Auxiliary\\Build\\vcvars32.bat"
+        "arm64" -> "VC\\Auxiliary\\Build\\vcvarsarm64.bat"
+        else -> "VC\\Auxiliary\\Build\\vcvars64.bat"
+    }
+    val windowsVcvarsPath = providers.gradleProperty("nuvio.windows.vcvars.path").orNull
+        ?.takeIf { it.isNotBlank() }
+    val windowsPlayerBridgeJavaHome = providers.systemProperty("java.home").get()
+    val missingWindowsPlayerBridgeInputs = listOfNotNull(
+        "WebView2.h".takeUnless { windowsWebView2IncludeDir.resolve("WebView2.h").exists() },
+        "WebView2Loader.dll.lib".takeUnless { windowsWebView2LoaderLib.exists() },
+    )
+    val missingWindowsPlayerBridgeMessage = """
+        Windows desktop player bridge inputs are missing: ${missingWindowsPlayerBridgeInputs.joinToString()}.
+        Install the Microsoft.Web.WebView2 NuGet package or pass -Pnuvio.webview2.dir=C:/path/to/microsoft.web.webview2/version.
+        libmpv is loaded at runtime; pass -Pnuvio.windows.libmpv.runtimeDir=C:/path/to/mpv-dlls to bundle it.
+    """.trimIndent()
+    val windowsPlayerBridgeCommand = if (missingWindowsPlayerBridgeInputs.isNotEmpty()) {
+        listOf(
+            "cmd",
+            "/c",
+            "echo ${missingWindowsPlayerBridgeMessage.replace("\n", " ")} 1>&2 && exit /b 1",
+        )
+    } else {
+        val sourceFile = windowsPlayerBridgeSource.asFile
+        val outputFile = windowsPlayerBridgeOutput.get().asFile
+        val importLibFile = windowsPlayerBridgeImportLib.get().asFile
+        val pdbFile = windowsPlayerBridgePdb.get().asFile
+        val objFile = windowsPlayerBridgeObj.get().asFile
+        val javaIncludeDir = File(windowsPlayerBridgeJavaHome, "include")
+        val javaWin32IncludeDir = File(javaIncludeDir, "win32")
+        val compileCommand = listOf(
+            "cl",
+            "/nologo",
+            "/EHsc",
+            "/std:c++17",
+            "/LD",
+            "/DUNICODE",
+            "/D_UNICODE",
+            "/DNOMINMAX",
+            "/DWIN32_LEAN_AND_MEAN",
+            "/permissive-",
+            cmdQuote(sourceFile.absolutePath),
+            "/I${cmdQuote(javaIncludeDir.absolutePath)}",
+            "/I${cmdQuote(javaWin32IncludeDir.absolutePath)}",
+            "/I${cmdQuote(windowsWebView2IncludeDir.absolutePath)}",
+            "/Fo${cmdQuote(objFile.absolutePath)}",
+            "/Fd${cmdQuote(pdbFile.absolutePath)}",
+            "/Fe${cmdQuote(outputFile.absolutePath)}",
+            "/link",
+            "/NOLOGO",
+            "/INCREMENTAL:NO",
+            "/IMPLIB:${cmdQuote(importLibFile.absolutePath)}",
+            cmdQuote(windowsWebView2LoaderLib.absolutePath),
+            "Ole32.lib",
+            "User32.lib",
+            "Gdi32.lib",
+            "Dwmapi.lib",
+            "Shell32.lib",
+        ).joinToString(" ")
+        val powershellCompileCommand = compileCommand.replace("\"", "__DQ__")
+        val powershellCommand = """
+            ${'$'}ErrorActionPreference = 'Stop'
+            ${'$'}dq = [char]34
+            ${'$'}vcvars = ${psSingleQuote(windowsVcvarsPath.orEmpty())}
+            if ([string]::IsNullOrWhiteSpace(${'$'}vcvars)) {
+              ${'$'}vswhere = ${psSingleQuote(windowsVsWhere.absolutePath)}
+              if (Test-Path -LiteralPath ${'$'}vswhere) {
+                ${'$'}vcvars = & ${'$'}vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -find ${psSingleQuote(windowsVcvarsRelativePath)} | Select-Object -First 1
+              }
+            }
+            if ([string]::IsNullOrWhiteSpace(${'$'}vcvars) -or -not (Test-Path -LiteralPath ${'$'}vcvars)) {
+              Write-Error 'Visual Studio C++ toolchain was not found. Install MSVC or pass -Pnuvio.windows.vcvars.path=C:\path\to\vcvars64.bat.'
+              exit 1
+            }
+            ${'$'}vcvars = ([string]${'$'}vcvars).Trim()
+            ${'$'}bat = ${psSingleQuote(windowsPlayerBridgeScript.get().asFile.absolutePath)}
+            ${'$'}compile = ${psSingleQuote(powershellCompileCommand)}.Replace('__DQ__', ${'$'}dq)
+            ${'$'}lines = @(
+              '@echo off',
+              ('set {0}VCVARS={1}{0}' -f ${'$'}dq, ${'$'}vcvars),
+              ('call {0}%VCVARS%{0} >nul' -f ${'$'}dq),
+              'if errorlevel 1 exit /b %errorlevel%',
+              ${'$'}compile,
+              'exit /b %ERRORLEVEL%'
+            )
+            Set-Content -LiteralPath ${'$'}bat -Value ${'$'}lines -Encoding ASCII
+            & cmd.exe /d /c ${'$'}bat
+            ${'$'}code = ${'$'}LASTEXITCODE
+            if (${'$'}code -ne 0) { exit ${'$'}code }
+        """.trimIndent()
+        listOf(
+            "powershell",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            powershellCommand,
+        )
+    }
+    val buildWindowsPlayerBridge = tasks.register<Exec>("buildWindowsPlayerBridge") {
+        notCompatibleWithConfigurationCache("Builds a host-local player bridge against WebView2 and libmpv for Windows.")
+        enabled = isWindowsHost
+        inputs.file(windowsPlayerBridgeSource)
+        if (windowsWebView2IncludeDir.exists()) {
+            inputs.dir(windowsWebView2IncludeDir)
+        }
+        if (windowsWebView2LoaderLib.exists()) {
+            inputs.file(windowsWebView2LoaderLib)
+        }
+        outputs.file(windowsPlayerBridgeOutput)
+        outputs.file(windowsPlayerBridgeImportLib)
+        outputs.file(windowsPlayerBridgePdb)
+        commandLine(windowsPlayerBridgeCommand)
+    }
+
+    val prepareWindowsPlayerRuntime = tasks.register<Sync>("prepareWindowsPlayerRuntime") {
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+        enabled = isWindowsHost
+        into(windowsPlayerRuntimeOutput)
+        if (windowsWebView2LoaderDll.exists()) {
+            from(windowsWebView2LoaderDll)
+        }
+        windowsCppRuntimeDlls.forEach { dllFile ->
+            from(dllFile)
+        }
+        when {
+            windowsLibmpvRuntimeDir?.exists() == true -> {
+                from(windowsLibmpvRuntimeDir) {
+                    include("*.dll")
+                }
+            }
+            windowsLibmpvDll?.exists() == true -> {
+                from(windowsLibmpvDll)
+            }
+        }
+    }
+
+    val generateWindowsPlayerRuntimeIndex = tasks.register<GenerateNativeRuntimeIndexTask>("generateWindowsPlayerRuntimeIndex") {
+        enabled = isWindowsHost
+        dependsOn(prepareWindowsPlayerRuntime)
+        runtimeDir.set(windowsPlayerRuntimeOutput)
+        indexFile.set(windowsPlayerRuntimeOutput.map { it.file("runtime-files.txt") })
+    }
+
+
+    val desktopTorrServer = providers.gradleProperty("anivio.desktop.torrServer").orNull?.let(project::file)
+
+    tasks.withType<Jar>().named("desktopJar") {
+        dependsOn(buildWindowsPlayerBridge, generateWindowsPlayerRuntimeIndex)
+        from(windowsPlayerBridgeOutput) { into("native/windows") }
+        from(windowsPlayerRuntimeOutput) { into("native/windows") }
+        if (desktopTorrServer != null) {
+            from(desktopTorrServer) {
+                into("torrserver/windows-amd64")
+                rename { "TorrServer.exe" }
+            }
+        }
+        from("src/androidMain/assets/video_enhancement") { into("video_enhancement") }
+
+    }
+
+    compose.desktop {
+        application {
+            mainClass = "com.nuvio.app.MainKt"
+            providers.gradleProperty("anivio.desktop.smokePlayer").orNull?.let {
+                jvmArgs += "-Dnuvio.desktop.smokePlayerUrl=$it"
+            }
+            providers.gradleProperty("anivio.desktop.storageRoot").orNull?.let {
+                jvmArgs += "-Danivio.desktop.storageRoot=$it"
+            }
+
+            jvmArgs(
+                "--add-opens=java.desktop/java.awt=ALL-UNNAMED",
+                "--add-opens=java.desktop/sun.awt.windows=ALL-UNNAMED",
+            )
+            nativeDistributions {
+                targetFormats(TargetFormat.Exe)
+                packageName = "Anivio"
+                packageVersion = releaseAppVersionName.substringBefore('-')
+                vendor = "Anivio"
+                modules("java.net.http", "java.management", "java.instrument", "jdk.accessibility", "jdk.httpserver", "jdk.unsupported")
+                windows {
+                    iconFile.set(project.file("src/desktopMain/resources/icons/app-icon-av-transparent.ico"))
+                    upgradeUuid = "395990ee-9b8a-3548-922c-e7a23a495b8d"
+                    shortcut = true
+                    menu = true
+                    menuGroup = "Anivio"
+                }
+            }
+        }
+    }
 }

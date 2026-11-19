@@ -1,5 +1,7 @@
 package com.nuvio.app.features.profiles
 
+import com.nuvio.app.isDesktop
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -246,8 +248,10 @@ fun ProfileSwitcherTab(
         // Floating profile popup (stays composed during exit animation)
         if (popupVisible && profiles.isNotEmpty()) {
             Popup(
-                alignment = Alignment.BottomCenter,
-                offset = IntOffset(0, with(density) { -NuvioTokens.Space.s64.roundToPx() }),
+                alignment = if (isDesktop) Alignment.TopStart else Alignment.BottomCenter,
+                offset = IntOffset(0, with(density) {
+                    (if (isDesktop) NuvioTokens.Space.s64 else -NuvioTokens.Space.s64).roundToPx()
+                }),
                 properties = PopupProperties(focusable = true),
                 onDismissRequest = { showPopup = false },
             ) {

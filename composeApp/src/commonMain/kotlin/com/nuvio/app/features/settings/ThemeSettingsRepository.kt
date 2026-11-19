@@ -37,6 +37,9 @@ object ThemeSettingsRepository {
     private val _selectedAppLanguage = MutableStateFlow(AppLanguage.DEVICE)
     val selectedAppLanguage: StateFlow<AppLanguage> = _selectedAppLanguage.asStateFlow()
 
+    private val _desktopNavigationLayout = MutableStateFlow(DesktopNavigationLayout.Sidebar)
+    internal val desktopNavigationLayout = _desktopNavigationLayout.asStateFlow()
+
     private val _navBarStyle = MutableStateFlow(NavBarStyle.ADAPTIVE)
     val navBarStyle: StateFlow<NavBarStyle> = _navBarStyle.asStateFlow()
 
@@ -71,6 +74,7 @@ object ThemeSettingsRepository {
         NativeTabBridge.publishLiquidGlassEnabled(false)
         _selectedAppLanguage.value = AppLanguage.DEVICE
         _navBarGlowEnabled.value = true
+        _desktopNavigationLayout.value = DesktopNavigationLayout.Sidebar
         _navBarStyle.value = NavBarStyle.ADAPTIVE
         _homeTopBarEnabled.value = true
     }
@@ -98,6 +102,7 @@ object ThemeSettingsRepository {
         ThemeSettingsStorage.applySelectedAppLanguage(appLanguage.code)
         _selectedAppLanguage.value = appLanguage
         _navBarGlowEnabled.value = ThemeSettingsStorage.loadNavBarGlowEnabled() ?: true
+        _desktopNavigationLayout.value = DesktopNavigationLayout.fromName(ThemeSettingsStorage.loadDesktopNavigationLayout())
         _navBarStyle.value = NavBarStyle.fromKey(ThemeSettingsStorage.loadNavBarStyle())
         _homeTopBarEnabled.value = ThemeSettingsStorage.loadHomeTopBarEnabled() ?: true
     }
@@ -144,6 +149,13 @@ object ThemeSettingsRepository {
         ThemeSettingsStorage.saveSelectedAppLanguage(language.code)
         ThemeSettingsStorage.applySelectedAppLanguage(language.code)
         _selectedAppLanguage.value = language
+    }
+
+    internal fun setDesktopNavigationLayout(layout: DesktopNavigationLayout) {
+        ensureLoaded()
+        if (_desktopNavigationLayout.value == layout) return
+        ThemeSettingsStorage.saveDesktopNavigationLayout(layout.name)
+        _desktopNavigationLayout.value = layout
     }
 
     fun setNavBarStyle(style: NavBarStyle) {

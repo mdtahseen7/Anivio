@@ -29,6 +29,7 @@ import com.nuvio.app.core.ui.NuvioModalBottomSheet
 import com.nuvio.app.core.ui.NuvioPrimaryButton
 import com.nuvio.app.core.ui.dismissNuvioBottomSheet
 import com.nuvio.app.core.ui.floatingNavigationGlowSupported
+import com.nuvio.app.isDesktop
 import kotlinx.coroutines.launch
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
@@ -60,8 +61,8 @@ internal fun NavigationBarSettingsSheet(
                 )
                 NavigationBarPreview(selectedStyle, isTablet, glowEnabled)
             }
-            if (!isTablet) {
-                NavBarStyle.entries.forEach { style ->
+            if (!isTablet || isDesktop) {
+                NavBarStyle.entries.filter { !isDesktop || it != NavBarStyle.CLASSIC }.forEach { style ->
                     item(key = style.key) {
                         NuvioBottomSheetActionRow(
                             title = stringResource(style.labelRes),
