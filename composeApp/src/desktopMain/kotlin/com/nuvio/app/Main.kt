@@ -1,6 +1,15 @@
 package com.nuvio.app
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
+import androidx.compose.material3.Text
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import com.nuvio.app.features.player.PlatformPlayerOverlay
+import com.nuvio.app.features.player.PlayerEngineController
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
@@ -226,16 +235,33 @@ fun main(args: Array<String>) {
                     }
                 }
             } else {
-                // The player surface reads LocalNuvioPlatformDensity, which only
-                // NuvioTheme provides — the bare smoke harness must supply it too.
                 NuvioTheme {
-                    PlatformPlayerSurface(
-                        sourceUrl = smokePlayerUrl,
-                        modifier = Modifier.fillMaxSize(),
-                        onControllerReady = {},
-                        onSnapshot = {},
-                        onError = {},
-                    )
+                    var controller by remember { mutableStateOf<PlayerEngineController?>(null) }
+                    var verifiedPlayback by remember { mutableStateOf(false) }
+                    var playing by remember { mutableStateOf(false) }
+                    Box(Modifier.fillMaxSize()) {
+                        PlatformPlayerSurface(
+                            sourceUrl = smokePlayerUrl,
+                            modifier = Modifier.fillMaxSize(),
+                            onControllerReady = { controller = it },
+                            onSnapshot = { snapshot ->
+                                playing = snapshot.isPlaying
+                                if (!verifiedPlayback && snapshot.isPlaying && snapshot.positionMs > 500) {
+                                    verifiedPlayback = true
+                                    println("Windows playback smoke passed at ${snapshot.positionMs} ms")
+                                }
+                            },
+                            onError = { System.err.println("Windows playback smoke failed: $it") },
+                        )
+                        PlatformPlayerOverlay(Modifier) {
+                            Button(
+                                onClick = { if (playing) controller?.pause() else controller?.play() },
+                                modifier = Modifier.align(Alignment.BottomCenter).padding(24.dp),
+                            ) {
+                                Text(if (playing) "Pause" else "Play")
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -88,6 +88,8 @@ import com.nuvio.app.features.watched.WatchedRepository
 import com.nuvio.app.features.watched.episodePlaybackId
 import com.nuvio.app.features.watched.resolveWatchedBadgesBulk
 import com.nuvio.app.features.watched.watchedItemKey
+import com.nuvio.app.isDesktop
+import com.nuvio.app.features.settings.DesktopNavigationLayout
 import com.nuvio.app.features.settings.ThemeSettingsRepository
 import com.nuvio.app.features.watchprogress.CachedInProgressItem
 import com.nuvio.app.features.watchprogress.CachedNextUpItem
@@ -1006,9 +1008,12 @@ fun HomeScreen(
             targetValue = if (homeTopBarEnabled) topBarVisibility else 0f,
             label = "home_top_controls_visibility",
         )
+        val desktopNavigationLayout by ThemeSettingsRepository.desktopNavigationLayout.collectAsStateWithLifecycle()
+        val desktopTopBarInset =
+            if (isDesktop && desktopNavigationLayout == DesktopNavigationLayout.TopBar) 54.dp else 0.dp
         val topBarModifier = Modifier.graphicsLayer {
             alpha = animatedTopBarVisibility
-            translationY = -56.dp.toPx() * (1f - animatedTopBarVisibility)
+            translationY = desktopTopBarInset.toPx() - 56.dp.toPx() * (1f - animatedTopBarVisibility)
         }
         // The bell itself is rendered AFTER NuvioScreen (below) so it floats on top of the content
         // instead of being covered by the scrolling list / hero.

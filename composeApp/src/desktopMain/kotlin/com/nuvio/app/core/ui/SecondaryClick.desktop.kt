@@ -8,7 +8,7 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 
 @OptIn(ExperimentalComposeUiApi::class)
-internal fun Modifier.secondaryClickAt(onClick: ((Offset) -> Unit)?): Modifier {
+internal actual fun Modifier.secondaryClickAt(onClick: ((Offset) -> Unit)?): Modifier {
     if (onClick == null) return this
 
     return pointerInput(onClick) {
