@@ -9,12 +9,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -42,12 +44,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -60,6 +64,8 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.nuvio.app.features.anilist.AniListAuthRepository
@@ -72,6 +78,7 @@ import com.nuvio.app.features.details.MetaDetails
 import com.nuvio.app.features.anilist.parseAniListMediaId
 import com.nuvio.app.core.ui.NuvioSurfaceCard
 import com.nuvio.app.core.ui.nuvio
+import com.nuvio.app.isDesktop
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -84,6 +91,77 @@ enum class DantotsuCommentSort(val apiValue: Int, val label: String) {
 
 @Composable
 fun DantotsuCommentsSection(
+    meta: MetaDetails,
+    modifier: Modifier = Modifier,
+) {
+    if (isDesktop) {
+        key(meta.id) {
+            DesktopCommunityComments(modifier) { DantotsuCommentsContent(meta) }
+        }
+    } else {
+        DantotsuCommentsContent(meta, modifier)
+    }
+}
+
+@Composable
+internal fun DesktopCommunityComments(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+
+    NuvioSurfaceCard(modifier = modifier) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "Community comments",
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            TextButton(onClick = { open = true }) { Text("Open comments") }
+        }
+    }
+
+    if (open) {
+        Dialog(
+            onDismissRequest = { open = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Surface(
+                modifier = Modifier.widthIn(max = 960.dp).fillMaxWidth(0.92f).fillMaxHeight(0.85f),
+                shape = RoundedCornerShape(24.dp),
+            ) {
+                Column(Modifier.padding(20.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "Community comments",
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                        IconButton(onClick = { open = false }) {
+                            Icon(Icons.Rounded.Close, contentDescription = "Close comments")
+                        }
+                    }
+                    Column(
+                        Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(top = 12.dp),
+                    ) {
+                        content()
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DantotsuCommentsContent(
     meta: MetaDetails,
     modifier: Modifier = Modifier,
 ) {
@@ -111,7 +189,9 @@ fun DantotsuCommentsSection(
 
     if (!communityEnabled) {
         NuvioSurfaceCard(modifier = modifier) {
-            Text("Community comments", style = MaterialTheme.typography.titleSmall)
+            if (!isDesktop) {
+                Text("Community comments", style = MaterialTheme.typography.titleSmall)
+            }
             if (account.mode == AniListConnectionMode.CONNECTED) {
                 TextButton(onClick = { showConnect = true }) { Text("Connect to Dantotsu") }
             } else {
@@ -142,11 +222,13 @@ fun DantotsuCommentsSection(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Community",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
+                if (!isDesktop) {
+                    Text(
+                        text = "Community",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
                 Text(
                     text = "Dantotsu community",
                     style = MaterialTheme.typography.bodySmall,

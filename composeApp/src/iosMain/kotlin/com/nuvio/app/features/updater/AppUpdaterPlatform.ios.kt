@@ -14,7 +14,7 @@ actual object AppUpdaterPlatform {
     actual val releaseSource: AppUpdateReleaseSource = AppUpdateReleaseSource(
         owner = "NuvioMedia",
         repo = "NuvioMobile",
-        channelBranch = "cmp-rewrite",
+        channelBranch = "main",
         userAgent = "NuvioMobile",
     )
 

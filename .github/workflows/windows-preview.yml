@@ -2,7 +2,7 @@ name: Build Windows installer
 
 on:
   push:
-    branches: [codex/windows-preview]
+    branches: [windows]
     tags: ['v*windows']
   workflow_dispatch:
 
@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   package:
-    uses: mdtahseen7/Anivio/.github/workflows/windows-package.yml@cmp-rewrite
+    uses: mdtahseen7/Anivio/.github/workflows/windows-package.yml@main
     with:
       source_ref: ${{ github.sha }}
     secrets: inherit
