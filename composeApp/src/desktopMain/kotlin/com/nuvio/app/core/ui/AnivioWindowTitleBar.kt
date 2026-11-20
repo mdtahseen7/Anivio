@@ -42,6 +42,7 @@ import androidx.compose.ui.window.FrameWindowScope
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowState
 import com.nuvio.app.features.settings.AppBrandWordmark
+import java.awt.EventQueue
 import java.awt.event.MouseEvent
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -68,9 +69,12 @@ internal fun FrameWindowScope.AnivioWindowTitleBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         WindowDraggableArea(
-            modifier = Modifier.weight(1f).fillMaxHeight().onPointerEvent(PointerEventType.Press) { event ->
+            modifier = Modifier.weight(1f).fillMaxHeight().onPointerEvent(PointerEventType.Release) { event ->
                 val mouse = event.nativeEvent as? MouseEvent
-                if (mouse?.button == MouseEvent.BUTTON1 && mouse.clickCount == 2) toggleMaximize()
+                if (mouse?.button == MouseEvent.BUTTON1 && mouse.clickCount == 2) {
+                    // Finish the drag gesture before changing the frame's maximized bounds.
+                    EventQueue.invokeLater { toggleMaximize() }
+                }
             },
         ) {
             Box(Modifier.fillMaxHeight().padding(start = 15.dp), contentAlignment = Alignment.CenterStart) {
