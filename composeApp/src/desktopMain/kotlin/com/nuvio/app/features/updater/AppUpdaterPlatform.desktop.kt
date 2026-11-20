@@ -58,6 +58,7 @@ actual object AppUpdaterPlatform {
         channelBranch = null,
         includePrereleases = true,
         userAgent = "AnivioDesktop",
+        stableUsesReleaseList = currentOs == DesktopUpdaterOs.WINDOWS,
     )
 
     actual val assetSelector: AppUpdateAssetSelector

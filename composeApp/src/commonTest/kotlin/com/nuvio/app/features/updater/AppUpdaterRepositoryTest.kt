@@ -24,6 +24,28 @@ class AppUpdaterRepositoryTest {
     }
 
     @Test
+    fun windowsStableFindsItsInstallerAlongsideAndroidReleases() {
+        assertEquals("releases?per_page=100", AppUpdaterRepository.releasePath(UpdateChannel.STABLE, stableUsesReleaseList = true))
+        val response = """[
+            {"tag_name": "v3.0.2", "assets": [
+                {"name": "Anivio.apk", "browser_download_url": "https://example.com/android.apk"}]},
+            {"tag_name": "v0.1.31-beta+windows", "prerelease": true, "assets": [
+                {"name": "Anivio-Windows-x64.exe", "browser_download_url": "https://example.com/beta.exe"}]},
+            {"tag_name": "v0.1.30+windows", "assets": [
+                {"name": "Anivio-Windows-x64.exe", "browser_download_url": "https://example.com/stable.exe"}]}
+        ]"""
+        val update = AppUpdaterRepository.selectUpdate(
+            responseBody = response,
+            channel = UpdateChannel.STABLE,
+            supportedAbis = emptyList(),
+            selector = AppUpdateAssetSelector(fileExtensions = listOf(".msi", ".exe")),
+            stableUsesReleaseList = true,
+        )
+        assertEquals("v0.1.30+windows", update?.tag)
+        assertEquals("https://example.com/stable.exe", update?.assetUrl)
+    }
+
+    @Test
     fun stableRejectsLegacyBetaNamesEvenIfGithubMarksThemStable() {
         val response = """{
             "tag_name": "1.1.0", "name": "Beta 1.1.0 Hotfix",

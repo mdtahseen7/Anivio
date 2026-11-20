@@ -67,7 +67,7 @@ internal object AppUpdaterRepository {
         val source = AppUpdaterPlatform.releaseSource
         val response = httpRequestRaw(
             method = "GET",
-            url = "https://api.github.com/repos/${source.owner}/${source.repo}/${releasePath(channel)}",
+            url = "https://api.github.com/repos/${source.owner}/${source.repo}/${releasePath(channel, source.stableUsesReleaseList)}",
             headers = mapOf(
                 "Accept" to "application/vnd.github+json",
                 "User-Agent" to source.userAgent,
@@ -84,12 +84,13 @@ internal object AppUpdaterRepository {
             channel = channel,
             supportedAbis = AppUpdaterPlatform.getSupportedAbis(),
             selector = AppUpdaterPlatform.assetSelector,
+            stableUsesReleaseList = source.stableUsesReleaseList,
         )
             ?: throw NoChannelReleaseException()
     }
 
-    internal fun releasePath(channel: UpdateChannel): String = when (channel) {
-        UpdateChannel.STABLE -> "releases/latest"
+    internal fun releasePath(channel: UpdateChannel, stableUsesReleaseList: Boolean = false): String = when (channel) {
+        UpdateChannel.STABLE -> if (stableUsesReleaseList) "releases?per_page=100" else "releases/latest"
         UpdateChannel.BETA -> "releases?per_page=100"
         UpdateChannel.ALL_RELEASES -> "releases?per_page=20"
     }
@@ -104,11 +105,12 @@ internal object AppUpdaterRepository {
             preferredNameFragments = supportedAbis,
             fallbackNameFragments = listOf("universal", "all"),
         ),
+        stableUsesReleaseList: Boolean = false,
     ): AppUpdate? {
-        val releases = when (channel) {
-            UpdateChannel.STABLE -> listOf(json.decodeFromString<GitHubReleaseDto>(responseBody))
-            UpdateChannel.BETA, UpdateChannel.ALL_RELEASES ->
-                json.decodeFromString<List<GitHubReleaseDto>>(responseBody)
+        val releases = if (channel == UpdateChannel.STABLE && !stableUsesReleaseList) {
+            listOf(json.decodeFromString<GitHubReleaseDto>(responseBody))
+        } else {
+            json.decodeFromString<List<GitHubReleaseDto>>(responseBody)
         }
         val eligibleReleases = ReleaseSelector.eligibleReleases(releases, channel)
         val releasesToCheck = if (channel == UpdateChannel.ALL_RELEASES) {

@@ -1,8 +1,9 @@
-name: Build Windows preview
+name: Build Windows installer
 
 on:
   push:
     branches: [codex/windows-preview]
+    tags: ['v*+windows']
   workflow_dispatch:
 
 permissions:
@@ -12,7 +13,7 @@ jobs:
   player-bridge:
     runs-on: windows-2022
     timeout-minutes: 35
-    if: github.ref == 'refs/heads/codex/windows-preview'
+    if: github.ref == 'refs/heads/codex/windows-preview' || (github.ref_type == 'tag' && endsWith(github.ref_name, '+windows'))
     steps:
       - uses: actions/checkout@v6
         with:
@@ -21,6 +22,19 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - name: Validate the Windows release tag
+        shell: pwsh
+        run: |
+          $asset = 'Anivio-Windows-Preview-x64.exe'
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            $match = [regex]::Match($env:GITHUB_REF_NAME, '^v(\d+\.\d+\.\d+)\+windows$')
+            $properties = Get-Content composeApp/Configuration/DesktopVersion.properties -Raw | ConvertFrom-StringData
+            if (!$match.Success -or $match.Groups[1].Value -cne $properties.VERSION_NAME) {
+              throw 'Windows release tag and desktop version must match.'
+            }
+            $asset = 'Anivio-Windows-x64.exe'
+          }
+          "WINDOWS_ASSET_NAME=$asset" >> $env:GITHUB_ENV
       - name: Prepare WebView2 SDK
         shell: pwsh
         run: |
@@ -30,7 +44,7 @@ jobs:
           Invoke-WebRequest "https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/$version/microsoft.web.webview2.$version.nupkg" -OutFile $archive
           Expand-Archive $archive $sdk
           "WEBVIEW2_SDK=$sdk" >> $env:GITHUB_ENV
-      - name: Build the preview EXE
+      - name: Build the Windows installer
         shell: pwsh
         env:
           ANIVIO_SUPABASE_URL: ${{ secrets.ANIVIO_SUPABASE_URL }}
@@ -64,9 +78,10 @@ jobs:
           $installers = @(Get-ChildItem composeApp/build/compose/binaries/main/exe -Filter '*.exe' -File)
           if ($installers.Count -ne 1) { throw 'Expected exactly one Windows installer.' }
           New-Item -ItemType Directory -Path preview | Out-Null
-          Copy-Item -LiteralPath $installers[0].FullName -Destination preview/Anivio-Windows-Preview-x64.exe
-          $hash = (Get-FileHash preview/Anivio-Windows-Preview-x64.exe -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  Anivio-Windows-Preview-x64.exe" | Set-Content preview/SHA256SUMS.txt
+          $output = Join-Path preview $env:WINDOWS_ASSET_NAME
+          Copy-Item -LiteralPath $installers[0].FullName -Destination $output
+          $hash = (Get-FileHash $output -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $env:WINDOWS_ASSET_NAME" | Set-Content preview/SHA256SUMS.txt
           "SHA-256: $hash" >> $env:GITHUB_STEP_SUMMARY
 
       - name: Upload the preview
@@ -79,8 +94,19 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+      - name: Stage the stable installer for release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $version = $tag -replace '^v|\+windows$', ''
+          gh release create $tag "preview/$env:WINDOWS_ASSET_NAME" preview/SHA256SUMS.txt --verify-tag --draft --latest=false --title "Anivio for Windows $version" --notes 'Windows x64 installer.'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Attach to an unpublished draft if Actions storage is unavailable
-        if: steps.upload.outcome == 'failure'
+        if: github.ref_type == 'branch' && steps.upload.outcome == 'failure'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
