@@ -500,15 +500,11 @@ internal class NativePlayerController(
     private fun forceHostRelayout() {
         fun relayout() {
             val window = runCatching { SwingUtilities.getWindowAncestor(host) }.getOrNull() ?: return
-            window.validate()
+            (window as? javax.swing.RootPaneContainer)?.rootPane?.revalidate()
             window.repaint()
             host.repaint()
         }
-        if (SwingUtilities.isEventDispatchThread()) {
-            relayout()
-        } else {
-            SwingUtilities.invokeLater { relayout() }
-        }
+        SwingUtilities.invokeLater { relayout() }
         // Timer fires on the EDT.
         Timer(250) { relayout() }.apply { isRepeats = false }.start()
     }
@@ -706,10 +702,10 @@ internal class NativePlayerController(
         NativePlayerBridge.setSpeed(current, next)
     }
 
-    fun snapshot(): PlayerPlaybackSnapshot {
+    fun snapshot(): PlayerPlaybackSnapshot = synchronized(lifecycleLock) {
         val current = handle
-        if (current == 0L) return PlayerPlaybackSnapshot(isLoading = true)
-        return runCatching {
+        if (current == 0L) return@synchronized PlayerPlaybackSnapshot(isLoading = true)
+        runCatching {
             val isLoading = NativePlayerBridge.isLoading(current)
             val isEnded = NativePlayerBridge.isEnded(current)
             PlayerPlaybackSnapshot(

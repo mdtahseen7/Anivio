@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.awt.SwingWindow
 import androidx.compose.ui.configureSwingGlobalsForCompose
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -13,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import org.jetbrains.compose.resources.painterResource
+import androidx.compose.ui.window.LocalWindowExceptionHandlerFactory
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
@@ -37,6 +39,7 @@ import com.nuvio.app.features.player.desktop.installDesktopAppFullscreenShortcut
 import com.nuvio.app.features.player.desktop.preloadNativePlayerBridgeAsync
 import com.nuvio.app.features.player.desktop.registerDesktopAppFullscreenToggle
 import com.nuvio.app.features.player.desktop.trackMaximizedBoundsForCurrentScreen
+import com.nuvio.app.features.player.desktop.WindowsRenderExceptionHandlerFactory
 import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.settings.AppIconRepository
 import com.nuvio.app.features.settings.applyDesktopRendererPreference
@@ -121,113 +124,123 @@ fun main(args: Array<String>) {
         )
         val fullscreenController = remember { DesktopAppFullscreenController() }
 
-        SwingWindow(
-            onCloseRequest = {
-                P2pStreamingEngine.shutdown()
-                DiscordPresenceManager.shutdown()
-                SentryInitializer.close()
-                exitApplication()
-            },
-            title = if (smokePlayerUrl == null) "Anivio" else "Anivio Player Smoke",
-            state = windowState,
-            icon = painterResource(appIconState.selected.transparentPreviewResource),
-            init = ::configureMacosWindowBeforePeer,
-        ) {
-            SideEffect {
-                window.background = NuvioDesktopNativeBackground
-                window.rootPane.background = NuvioDesktopNativeBackground
-                window.contentPane.background = NuvioDesktopNativeBackground
-                (window.contentPane as? JComponent)?.isOpaque = true
-            }
-            LaunchedEffect(window, appIconState.selected) {
-                val backgroundSuffix = "-transparent"
-                val iconPath = "icons/app-icon-${appIconState.selected.key}$backgroundSuffix.png"
-                Thread.currentThread().contextClassLoader.getResourceAsStream(iconPath)?.use { stream ->
-                    ImageIO.read(stream)?.let { image ->
-                        window.iconImages = listOf(image)
-                    }
-                }
-            }
-
-            LaunchedEffect(window) {
-                applyNativeDesktopWindowChrome(window)
-                installLinuxExtendedMouseButtons()
-                // Windows fullscreen is emulated natively and isn't reflected by
-                // WindowPlacement, so it must be re-applied once the window peer exists.
-                fullscreenController.applyRestoredFullscreenState(window, windowState, wasFullscreenOnLastExit)
-            }
-            LaunchedEffect(windowState) {
-                // Covers OS-driven placement changes too (e.g. the native macOS
-                // green-button fullscreen toggle), not just our own shortcuts.
-                if (DesktopHostOs.current != DesktopHostOs.WINDOWS) {
-                    snapshotFlow { windowState.placement }
-                        .collect { placement ->
-                            DesktopWindowModeStorage.saveWasFullscreen(placement == WindowPlacement.Fullscreen)
-                        }
-                }
-            }
-            LaunchedEffect(windowState) {
-                // Only persist geometry while windowed: fullscreen/native-Windows-fullscreen
-                // coordinates aren't a meaningful "windowed position" to restore later.
-                snapshotFlow { Triple(windowState.placement, windowState.position, windowState.size) }
-                    .collect { (placement, position, size) ->
-                        val isFullscreen = fullscreenController.isFullscreen(window, windowState)
-                        if (!isFullscreen && restoresMaximizedWindowPlacement) {
-                            DesktopWindowModeStorage.saveWasMaximized(placement == WindowPlacement.Maximized)
-                        }
-                        val isWindowed = placement == WindowPlacement.Floating && !isFullscreen
-                        if (isWindowed && position.isSpecified) {
-                            DesktopWindowModeStorage.saveWindowedGeometry(
-                                DesktopWindowGeometry(
-                                    x = position.x.value,
-                                    y = position.y.value,
-                                    width = size.width.value,
-                                    height = size.height.value,
-                                ),
-                            )
-                        }
-                    }
-            }
-            DisposableEffect(window, windowState) {
-                val unregisterFullscreenToggle = registerDesktopAppFullscreenToggle(
-                    handler = { targetWindow ->
-                        if (targetWindow == null || targetWindow === window) {
-                            fullscreenController.toggle(window, windowState)
-                            DesktopWindowModeStorage.saveWasFullscreen(
-                                fullscreenController.isFullscreen(window, windowState),
-                            )
-                        }
-                    },
-                    isFullscreen = { targetWindow ->
-                        (targetWindow == null || targetWindow === window) &&
-                            fullscreenController.isFullscreen(window, windowState)
-                    },
-                )
-                val uninstallFullscreenShortcuts = installDesktopAppFullscreenShortcuts(window)
-                val untrackMaximizedBounds = window.trackMaximizedBoundsForCurrentScreen()
-                onDispose {
-                    fullscreenController.dispose(window)
-                    uninstallFullscreenShortcuts()
-                    untrackMaximizedBounds()
-                    unregisterFullscreenToggle()
-                }
-            }
-
-            if (smokePlayerUrl == null) {
-                ProvideDesktopWindowInsets(isFullscreen = windowState.placement == WindowPlacement.Fullscreen) {
-                    App()
-                }
+        val defaultWindowExceptionHandler = LocalWindowExceptionHandlerFactory.current
+        val windowExceptionHandler = remember(defaultWindowExceptionHandler) {
+            if (DesktopHostOs.current == DesktopHostOs.WINDOWS) {
+                WindowsRenderExceptionHandlerFactory(defaultWindowExceptionHandler)
             } else {
-                // The player surface reads LocalNuvioPlatformDensity, which only
-                // NuvioTheme provides — the bare smoke harness must supply it too.
-                NuvioTheme {
-                    PlatformPlayerSurface(
-                        sourceUrl = smokePlayerUrl,
-                        modifier = Modifier.fillMaxSize(),
-                        onControllerReady = {},
-                        onSnapshot = {},
-                        onError = {},
+                defaultWindowExceptionHandler
+            }
+        }
+        CompositionLocalProvider(LocalWindowExceptionHandlerFactory provides windowExceptionHandler) {
+            SwingWindow(
+                onCloseRequest = {
+                    P2pStreamingEngine.shutdown()
+                    DiscordPresenceManager.shutdown()
+                    SentryInitializer.close()
+                    exitApplication()
+                },
+                title = if (smokePlayerUrl == null) "Anivio" else "Anivio Player Smoke",
+                state = windowState,
+                icon = painterResource(appIconState.selected.transparentPreviewResource),
+                init = ::configureMacosWindowBeforePeer,
+            ) {
+                SideEffect {
+                    window.background = NuvioDesktopNativeBackground
+                    window.rootPane.background = NuvioDesktopNativeBackground
+                    window.contentPane.background = NuvioDesktopNativeBackground
+                    (window.contentPane as? JComponent)?.isOpaque = true
+                }
+                LaunchedEffect(window, appIconState.selected) {
+                    val backgroundSuffix = "-transparent"
+                    val iconPath = "icons/app-icon-${appIconState.selected.key}$backgroundSuffix.png"
+                    Thread.currentThread().contextClassLoader.getResourceAsStream(iconPath)?.use { stream ->
+                        ImageIO.read(stream)?.let { image ->
+                            window.iconImages = listOf(image)
+                        }
+                    }
+                }
+
+                LaunchedEffect(window) {
+                    applyNativeDesktopWindowChrome(window)
+                    installLinuxExtendedMouseButtons()
+                    // Windows fullscreen is emulated natively and isn't reflected by
+                    // WindowPlacement, so it must be re-applied once the window peer exists.
+                    fullscreenController.applyRestoredFullscreenState(window, windowState, wasFullscreenOnLastExit)
+                }
+                LaunchedEffect(windowState) {
+                    // Covers OS-driven placement changes too (e.g. the native macOS
+                    // green-button fullscreen toggle), not just our own shortcuts.
+                    if (DesktopHostOs.current != DesktopHostOs.WINDOWS) {
+                        snapshotFlow { windowState.placement }
+                            .collect { placement ->
+                                DesktopWindowModeStorage.saveWasFullscreen(placement == WindowPlacement.Fullscreen)
+                            }
+                    }
+                }
+                LaunchedEffect(windowState) {
+                    // Only persist geometry while windowed: fullscreen/native-Windows-fullscreen
+                    // coordinates aren't a meaningful "windowed position" to restore later.
+                    snapshotFlow { Triple(windowState.placement, windowState.position, windowState.size) }
+                        .collect { (placement, position, size) ->
+                            val isFullscreen = fullscreenController.isFullscreen(window, windowState)
+                            if (!isFullscreen && restoresMaximizedWindowPlacement) {
+                                DesktopWindowModeStorage.saveWasMaximized(placement == WindowPlacement.Maximized)
+                            }
+                            val isWindowed = placement == WindowPlacement.Floating && !isFullscreen
+                            if (isWindowed && position.isSpecified) {
+                                DesktopWindowModeStorage.saveWindowedGeometry(
+                                    DesktopWindowGeometry(
+                                        x = position.x.value,
+                                        y = position.y.value,
+                                        width = size.width.value,
+                                        height = size.height.value,
+                                    ),
+                                )
+                            }
+                        }
+                }
+                DisposableEffect(window, windowState) {
+                    val unregisterFullscreenToggle = registerDesktopAppFullscreenToggle(
+                        handler = { targetWindow ->
+                            if (targetWindow == null || targetWindow === window) {
+                                fullscreenController.toggle(window, windowState)
+                                DesktopWindowModeStorage.saveWasFullscreen(
+                                    fullscreenController.isFullscreen(window, windowState),
+                                )
+                            }
+                        },
+                        isFullscreen = { targetWindow ->
+                            (targetWindow == null || targetWindow === window) &&
+                                fullscreenController.isFullscreen(window, windowState)
+                        },
                     )
+                    val uninstallFullscreenShortcuts = installDesktopAppFullscreenShortcuts(window)
+                    val untrackMaximizedBounds = window.trackMaximizedBoundsForCurrentScreen()
+                    onDispose {
+                        fullscreenController.dispose(window)
+                        uninstallFullscreenShortcuts()
+                        untrackMaximizedBounds()
+                        unregisterFullscreenToggle()
+                    }
+                }
+
+                if (smokePlayerUrl == null) {
+                    ProvideDesktopWindowInsets(isFullscreen = windowState.placement == WindowPlacement.Fullscreen) {
+                        App()
+                    }
+                } else {
+                    // The player surface reads LocalNuvioPlatformDensity, which only
+                    // NuvioTheme provides — the bare smoke harness must supply it too.
+                    NuvioTheme {
+                        PlatformPlayerSurface(
+                            sourceUrl = smokePlayerUrl,
+                            modifier = Modifier.fillMaxSize(),
+                            onControllerReady = {},
+                            onSnapshot = {},
+                            onError = {},
+                        )
+                    }
                 }
             }
         }

@@ -4,6 +4,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.coroutineContext
 import kotlinx.serialization.Serializable
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -61,9 +63,8 @@ internal object DownloadsHlsPipeline {
     suspend fun run(
         playlistUrl: String,
         headers: Map<String, String>,
-        onProgress: (downloadedBytes: Long, totalBytes: Long?) -> Unit,
+        onProgress: suspend (downloadedBytes: Long, totalBytes: Long?) -> Unit,
         appendChunk: (ByteArray) -> Unit,
-        isCancelled: () -> Boolean,
     ) {
         val mediaPlaylistUrl = resolveToMediaPlaylist(
             playlistUrl = playlistUrl,
@@ -80,16 +81,17 @@ internal object DownloadsHlsPipeline {
         if (playlist.encrypted) {
             error("Encrypted HLS streams cannot be downloaded")
         }
+        if (playlistBody.lineSequence().any { it.trimStart().startsWith("#EXT-X-BYTERANGE") }) {
+            error("Byte-range HLS playlists are unsupported")
+        }
 
         var downloadedBytes = 0L
-        val initializedSegmentUris = mutableListOf<String>()
 
         playlist.initializationUri?.let { initUri ->
-            if (isCancelled()) return
+            coroutineContext.ensureActive()
             val uri = resolveSegmentUri(mediaPlaylistUrl, initUri)
             val chunk = downloadSegmentWithRetry(uri, headers)
             appendChunk(chunk)
-            initializedSegmentUris += initUri
             downloadedBytes += chunk.size
             onProgress(downloadedBytes, null)
         }
@@ -107,7 +109,7 @@ internal object DownloadsHlsPipeline {
 
         // Fetch segments in bounded-concurrency windows, then append them strictly in playlist order.
         segments.chunked(SEGMENT_CONCURRENCY).forEach { window ->
-            if (isCancelled()) return
+            coroutineContext.ensureActive()
             val chunks = coroutineScope {
                 window.map { segmentUri ->
                     async {
@@ -116,7 +118,7 @@ internal object DownloadsHlsPipeline {
                     }
                 }.awaitAll()
             }
-            if (isCancelled()) return
+            coroutineContext.ensureActive()
             chunks.forEach { chunk ->
                 appendChunk(chunk)
                 downloadedBytes += chunk.size
@@ -143,7 +145,7 @@ internal object DownloadsHlsPipeline {
                 delay(300L * (attempt + 1))
             }
         }
-        throw lastError ?: IllegalStateException("Segment download failed: $url")
+        throw lastError ?: IllegalStateException("HLS segment download failed")
     }
 
     private suspend fun resolveToMediaPlaylist(

@@ -117,7 +117,6 @@ internal fun PartyPanel(
         onDismiss = onDismiss,
         width = width,
         modal = modal,
-        dockAtStart = !modal,
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val party = state.party

@@ -3,6 +3,7 @@ package com.nuvio.app.features.player.desktop
 import java.awt.Canvas
 import java.awt.Color
 import java.awt.Cursor
+import java.awt.EventQueue
 import java.awt.Graphics
 import java.awt.Point
 import java.awt.Toolkit
@@ -19,6 +20,7 @@ internal class NativePlayerHost : Canvas() {
     var onFirstFullSizePaint: (() -> Unit)? = null
     var onCursorActivity: (() -> Unit)? = null
     private var firstPaintNotified = false
+    private var paintNotificationQueued = false
     private var firstFullSizePaintNotified = false
     private var controlsVisible = true
     private var cursorVisible = true
@@ -100,7 +102,17 @@ internal class NativePlayerHost : Canvas() {
     override fun paint(graphics: Graphics) {
         graphics.color = Color.BLACK
         graphics.fillRect(0, 0, width, height)
-        notifyFirstPaints()
+        if (DesktopHostOs.current == DesktopHostOs.WINDOWS) {
+            if (!firstFullSizePaintNotified && !paintNotificationQueued) {
+                paintNotificationQueued = true
+                EventQueue.invokeLater {
+                    paintNotificationQueued = false
+                    if (isDisplayable) notifyFirstPaints()
+                }
+            }
+        } else {
+            notifyFirstPaints()
+        }
     }
 
     override fun addNotify() {

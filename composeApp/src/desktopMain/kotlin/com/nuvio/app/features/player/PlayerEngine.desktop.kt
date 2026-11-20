@@ -34,7 +34,9 @@ import com.nuvio.app.features.player.desktop.DesktopPlayerPictureInPicture
 import com.nuvio.app.features.player.desktop.NativePlayerController
 import com.nuvio.app.features.player.desktop.NativePlayerHost
 import com.nuvio.app.features.player.desktop.desktopFullscreenChanges
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.drop
 
 @Composable
@@ -130,6 +132,7 @@ private fun NativePlayerSurface(
     val latestOnPlayerControlsScrubFinished = rememberUpdatedState(onPlayerControlsScrubFinished)
     val latestOnInitialPositionHandled = rememberUpdatedState(onInitialPositionHandled)
     val latestOnError = rememberUpdatedState(onError)
+    val latestOnSnapshot = rememberUpdatedState(onSnapshot)
     val latestPlayerControlsState = rememberUpdatedState(playerControlsState)
     val playerSettings by PlayerSettingsRepository.uiState.collectAsState()
     val decoderPriority = playerSettings.decoderPriority
@@ -250,7 +253,12 @@ private fun NativePlayerSurface(
 
     LaunchedEffect(controller) {
         while (true) {
-            onSnapshot(controller.snapshot())
+            val snapshot = if (DesktopHostOs.current == DesktopHostOs.WINDOWS) {
+                withContext(Dispatchers.IO) { controller.snapshot() }
+            } else {
+                controller.snapshot()
+            }
+            latestOnSnapshot.value(snapshot)
             delay(500L)
         }
     }

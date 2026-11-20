@@ -1292,6 +1292,9 @@ fun MetaDetailsScreen(
                                         }) else null,
                                         shuffleEnabled = shuffleSettings.enabled,
                                         onWatchedClick = toggleWatched,
+                                        onDownloadClick = if (hasEpisodes && AppFeaturePolicy.downloadsEnabled) {
+                                            { showDownloadPicker = true }
+                                        } else null,
                                         onSaveClick = toggleSaved,
                                         onSaveLongClick = openLibraryListPicker,
                                     )

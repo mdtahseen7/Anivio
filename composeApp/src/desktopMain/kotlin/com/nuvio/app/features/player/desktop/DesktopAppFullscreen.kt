@@ -39,11 +39,10 @@ private object DesktopAppFullscreen {
 
     fun toggle(window: Window? = null) {
         val handler = toggleHandler ?: return
-        if (SwingUtilities.isEventDispatchThread()) {
-            handler(window)
-            notifyChanged()
-        } else {
-            SwingUtilities.invokeLater {
+        // Native Windows frame changes can pump paint events. Leave the active Compose
+        // frame before changing the window, including when called from the EDT.
+        SwingUtilities.invokeLater {
+            if (toggleHandler === handler) {
                 handler(window)
                 notifyChanged()
             }

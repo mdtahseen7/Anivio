@@ -1,5 +1,6 @@
 package com.nuvio.app.features.player
 
+import com.nuvio.app.isDesktop
 import com.nuvio.app.core.anilist.AniZipClient
 import com.nuvio.app.core.anilist.imdbId
 import com.nuvio.app.features.anilist.parseAniListMediaId
@@ -13,6 +14,7 @@ import com.nuvio.app.features.watchprogress.WatchProgressClock
 import com.nuvio.app.features.watchprogress.WatchProgressPlaybackSession
 import com.nuvio.app.features.watchprogress.WatchProgressRepository
 import com.nuvio.app.features.watchprogress.buildPlaybackVideoId
+import com.nuvio.app.features.watchprogress.shouldStoreWatchProgress
 import com.nuvio.app.features.watching.domain.isShortPlaceholderDuration
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -439,10 +441,14 @@ internal fun PlayerScreenRuntime.scheduleProgressSyncAfterSeek() {
 internal fun PlayerScreenRuntime.persistPlaybackProgressTick() {
     val now = WatchProgressClock.nowEpochMs()
     if (now - lastProgressPersistEpochMs < PlaybackProgressPersistIntervalMs) return
+    val snapshot = playbackSnapshot
+    if (playbackSnapshotKey != activePlaybackKey ||
+        !shouldStoreWatchProgress(snapshot.positionMs, snapshot.durationMs)
+    ) return
     lastProgressPersistEpochMs = now
     WatchProgressRepository.upsertPlaybackProgress(
         session = playbackSession,
-        snapshot = playbackSnapshot,
-        syncRemote = false,
+        snapshot = snapshot,
+        syncRemote = isDesktop,
     )
 }

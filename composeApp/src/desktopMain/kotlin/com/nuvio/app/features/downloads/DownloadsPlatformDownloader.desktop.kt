@@ -3,11 +3,15 @@ package com.nuvio.app.features.downloads
 import com.nuvio.app.core.storage.DesktopStorage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.withContext
 import java.awt.Desktop
 import java.io.File
 import java.io.FileOutputStream
@@ -15,7 +19,11 @@ import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.time.Duration
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.io.path.createDirectories
 
 private val desktopDownloadHttpClient: HttpClient = HttpClient.newBuilder()
@@ -24,6 +32,8 @@ private val desktopDownloadHttpClient: HttpClient = HttpClient.newBuilder()
     .build()
 
 internal actual object DownloadsPlatformDownloader {
+    private val downloadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val transfers = ConcurrentHashMap<String, Job>()
     private val downloadsDir: File
         get() = File(DesktopStorage.rootDir.resolve("downloads").also { it.createDirectories() }.toUri())
 
@@ -41,79 +51,109 @@ internal actual object DownloadsPlatformDownloader {
         onFailure: (message: String) -> Unit,
         onPaused: () -> Unit,
     ): DownloadsTaskHandle {
-        val job = SupervisorJob()
-        val scope = CoroutineScope(job + Dispatchers.IO)
-
-        scope.launch {
-            val destination = File(downloadsDir, request.destinationFileName)
-            val tempFile = File(downloadsDir, "${request.destinationFileName}.part")
+        val fileName = request.destinationFileName
+        lateinit var job: Job
+        var previous: Job? = null
+        job = downloadScope.launch(start = CoroutineStart.LAZY) {
+            val destination = File(downloadsDir, fileName)
+            val tempFile = File(destination.parentFile, "$fileName.part")
 
             try {
-                var resumeFromBytes = tempFile.takeIf { it.exists() }?.length()?.coerceAtLeast(0L) ?: 0L
-                var attemptedRangeRequest = resumeFromBytes > 0L
-                var response = sendDownloadRequest(request, if (attemptedRangeRequest) resumeFromBytes else null)
-
-                if (attemptedRangeRequest && response.statusCode() == 416) {
-                    tempFile.delete()
-                    resumeFromBytes = 0L
-                    attemptedRangeRequest = false
-                    response = sendDownloadRequest(request, null)
-                }
-
-                if (response.statusCode() !in 200..299) {
-                    error("Download failed with HTTP ${response.statusCode()}")
-                }
-
-                val isPartialResume = attemptedRangeRequest && response.statusCode() == 206 && resumeFromBytes > 0L
-                val appendToTemp = isPartialResume
-                val startingBytes = if (appendToTemp) resumeFromBytes else 0L
-                if (!appendToTemp && tempFile.exists()) {
-                    tempFile.delete()
-                }
-
-                val totalBytes = resolveTotalBytes(
-                    startingBytes = startingBytes,
-                    isPartialResume = isPartialResume,
-                    contentRangeHeader = response.headers().firstValue("Content-Range").orElse(null),
-                    contentLength = response.headers().firstValue("Content-Length").orElse(null)?.toLongOrNull(),
-                )
-                var downloadedBytes = startingBytes
-                onProgress(downloadedBytes, totalBytes)
-
-                response.body().use { input ->
-                    FileOutputStream(tempFile, appendToTemp).use { output ->
-                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                        while (true) {
-                            ensureActive()
-                            val read = input.read(buffer)
-                            if (read <= 0) break
-                            output.write(buffer, 0, read)
-                            downloadedBytes += read.toLong()
-                            onProgress(downloadedBytes, totalBytes)
-                        }
-                        output.flush()
+                previous?.join()
+                var lastProgressAt = 0L
+                transferFile(request, tempFile) { bytes, total ->
+                    val now = System.nanoTime()
+                    if (lastProgressAt == 0L || now - lastProgressAt >= 250_000_000L) {
+                        lastProgressAt = now
+                        withContext(Dispatchers.Main) { onProgress(bytes, total) }
                     }
                 }
-
-                if (destination.exists()) {
-                    destination.delete()
+                ensureActive()
+                try {
+                    Files.move(tempFile.toPath(), destination.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+                } catch (_: AtomicMoveNotSupportedException) {
+                    Files.move(tempFile.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING)
                 }
-                if (!tempFile.renameTo(destination)) {
-                    tempFile.copyTo(destination, overwrite = true)
-                    tempFile.delete()
+                withContext(Dispatchers.Main) {
+                    onSuccess(destination.toURI().toString(), destination.length())
                 }
-
-                val finalSize = destination.length()
-                onSuccess(destination.toURI().toString(), totalBytes ?: finalSize)
             } catch (error: CancellationException) {
-                onPaused()
+                withContext(NonCancellable + Dispatchers.Main) {
+                    if (transfers[fileName] === job) onPaused()
+                }
                 throw error
-            } catch (error: Throwable) {
-                onFailure(error.message ?: "Download failed")
+            } catch (error: Exception) {
+                withContext(Dispatchers.Main) { onFailure(error.message ?: "Download failed") }
             }
         }
-
+        previous = transfers.put(fileName, job)
+        previous?.cancel()
+        job.invokeOnCompletion { transfers.remove(fileName, job) }
+        job.start()
         return DesktopDownloadsTaskHandle(job)
+    }
+
+    private suspend fun transferFile(
+        request: DownloadPlatformRequest,
+        tempFile: File,
+        onProgress: suspend (Long, Long?) -> Unit,
+    ) {
+        var startingBytes = tempFile.length()
+        var response = runInterruptible { sendDownloadRequest(request, startingBytes.takeIf { it > 0 }) }
+        if (response.statusCode() == 416 && startingBytes > 0) {
+            response.body().close()
+            startingBytes = 0
+            response = runInterruptible { sendDownloadRequest(request, null) }
+        }
+
+        response.body().use { input ->
+            if (response.statusCode() !in 200..299) {
+                error("Download failed with HTTP ${response.statusCode()}")
+            }
+            val isPlaylist = request.sourceUrl.isHlsPlaylistUrl() ||
+                response.uri().toString().isHlsPlaylistUrl() ||
+                response.headers().firstValue("Content-Type").orElse("").contains("mpegurl", ignoreCase = true)
+            if (isPlaylist) {
+                input.close()
+                FileOutputStream(tempFile).use { output ->
+                    DownloadsHlsPipeline.run(
+                        playlistUrl = response.uri().toString(),
+                        headers = request.sourceHeaders,
+                        onProgress = onProgress,
+                        appendChunk = { output.write(it) },
+                    )
+                }
+                check(tempFile.length() > 0) { "HLS download is empty" }
+                return
+            }
+
+            val range = response.headers().firstValue("Content-Range").orElse(null)
+            val append = response.statusCode() == 206 && startingBytes > 0
+            if (append && range?.substringAfter("bytes ")?.substringBefore('-')?.toLongOrNull() != startingBytes) {
+                tempFile.delete()
+                error("Server returned the wrong download range")
+            }
+            if (!append) startingBytes = 0
+            val total = resolveTotalBytes(
+                startingBytes = startingBytes,
+                isPartialResume = append,
+                contentRangeHeader = range,
+                contentLength = response.headers().firstValue("Content-Length").orElse(null)?.toLongOrNull(),
+            )
+            var bytes = startingBytes
+            onProgress(bytes, total)
+            FileOutputStream(tempFile, append).use { output ->
+                val buffer = ByteArray(64 * 1024)
+                while (true) {
+                    val read = runInterruptible { input.read(buffer) }
+                    if (read < 0) break
+                    output.write(buffer, 0, read)
+                    bytes += read
+                    onProgress(bytes, total)
+                }
+            }
+            check(bytes > 0 && (total == null || bytes == total)) { "Download ended before the file was complete" }
+        }
     }
 
     actual fun removeFile(localFileUri: String?): Boolean {
@@ -168,11 +208,7 @@ internal actual object DownloadsPlatformDownloader {
             .uri(URI(request.sourceUrl))
             .timeout(Duration.ofSeconds(60))
             .GET()
-        request.sourceHeaders.forEach { (key, value) ->
-            if (key.isNotBlank() && value.isNotBlank()) {
-                builder.header(key, value)
-            }
-        }
+        builder.addDownloadRequestHeaders(request.sourceHeaders)
         if (rangeStart != null && rangeStart > 0L) {
             builder.header("Range", "bytes=$rangeStart-")
         }

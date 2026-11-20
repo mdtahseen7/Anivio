@@ -1,6 +1,5 @@
 package com.nuvio.app.features.player
 
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Box
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateDpAsState
@@ -18,6 +17,7 @@ import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -182,11 +182,15 @@ internal fun PlayerScreenContent(args: PlayerScreenArgs) {
         val isInPip = rememberIsInPictureInPicture()
         val dockParty = !isInPip && maxWidth > maxHeight
         val partyPanelWidth = (maxWidth * 0.34f).coerceIn(270.dp, 420.dp)
-        val inset by animateDpAsState(
+        val inset = animateDpAsState(
             targetValue = if (runtime.showPartyPanel && dockParty) partyPanelWidth else 0.dp,
             animationSpec = tween(230),
         )
-        Box(Modifier.fillMaxSize().padding(start = inset)) {
+        Box(Modifier.fillMaxSize().layout { measurable, constraints ->
+            val width = (constraints.maxWidth - inset.value.roundToPx()).coerceAtLeast(1)
+            val player = measurable.measure(constraints.copy(minWidth = width, maxWidth = width))
+            layout(constraints.maxWidth, player.height) { player.placeRelative(0, 0) }
+        }) {
             runtime.RenderPlayerRuntimeUi()
         }
         Box(Modifier.fillMaxSize()) {

@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CheckCircleOutline
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -68,6 +69,7 @@ import com.nuvio.app.features.details.formatRuntimeForDisplay
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.detail_logo_content_description
 import nuvio.composeapp.generated.resources.hero_add_to_library
+import nuvio.composeapp.generated.resources.hero_download_episodes
 import nuvio.composeapp.generated.resources.hero_mark_unwatched
 import nuvio.composeapp.generated.resources.playback_unavailable
 import nuvio.composeapp.generated.resources.random_episode_title
@@ -196,6 +198,7 @@ fun DesktopDetailHero(
     onShuffleClick: (() -> Unit)?,
     shuffleEnabled: Boolean,
     onWatchedClick: () -> Unit,
+    onDownloadClick: (() -> Unit)?,
     onSaveClick: () -> Unit,
     onSaveLongClick: (() -> Unit)?,
 ) {
@@ -299,13 +302,20 @@ fun DesktopDetailHero(
                     onClick = onClick,
                 )
             }
+            val downloadAction = onDownloadClick?.let { onClick ->
+                DetailSecondaryAction(
+                    label = stringResource(Res.string.hero_download_episodes),
+                    icon = Icons.Default.Download,
+                    onClick = onClick,
+                )
+            }
             DetailActionButtons(
                 modifier = Modifier.widthIn(max = 520.dp),
                 playLabel = if (isPrimaryPlayEnabled) playButtonLabel else stringResource(Res.string.playback_unavailable),
                 playEnabled = isPrimaryPlayEnabled,
-                pinnedAction = shuffleAction?.takeIf { shuffleEnabled },
+                pinnedAction = downloadAction ?: shuffleAction?.takeIf { shuffleEnabled },
                 secondaryActions = buildList {
-                    if (!shuffleEnabled) shuffleAction?.let(::add)
+                    if (!shuffleEnabled || downloadAction != null) shuffleAction?.let(::add)
                     add(DetailSecondaryAction(
                         label = if (isWatched) {
                             stringResource(Res.string.hero_mark_unwatched)

@@ -61,6 +61,7 @@ namespace {
 HMODULE gModule = nullptr;
 constexpr UINT WM_NUVIO_TASK = WM_APP + 0x4E50;
 constexpr UINT_PTR NUVIO_TIMER_ID = 0x4E50;
+constexpr UINT_PTR NUVIO_LAYOUT_TIMER_ID = 0x4E51;
 
 // Caps on waiting for the player's own UI thread during teardown. Exceeding these means that
 // thread is wedged; shutdown gives up rather than blocking the caller forever.
@@ -969,10 +970,13 @@ public:
         }
     }
 
-    void onTimer() {
+    void onTimer(UINT_PTR timerId) {
         if (shuttingDown.load()) return;
-        layoutNativeSubviews();
-        syncControls();
+        if (timerId == NUVIO_LAYOUT_TIMER_ID) {
+            layoutNativeSubviews();
+        } else if (timerId == NUVIO_TIMER_ID) {
+            syncControls();
+        }
     }
 
     void updateControlsJson(const std::string &controlsJson) {
@@ -1362,6 +1366,7 @@ private:
     jobject eventSink = nullptr;
     jmethodID eventMethod = nullptr;
 
+    SIZE appliedWebViewSize = {};
     std::atomic_bool controlsWebReady = false;
     std::mutex controlsMutex;
     std::string pendingControlsJson;
@@ -1467,13 +1472,15 @@ private:
         startWebView(controlsUrl);
         startMpv(sourceUrl, headerLines, playWhenReady, initialPositionMs, decoderPriority, nvidiaRtxSuperResolutionEnabled);
         layoutNativeSubviews();
-        if (!SetTimer(messageHwnd, NUVIO_TIMER_ID, 500, nullptr)) {
+        if (!SetTimer(messageHwnd, NUVIO_LAYOUT_TIMER_ID, 32, nullptr) ||
+            !SetTimer(messageHwnd, NUVIO_TIMER_ID, 500, nullptr)) {
             throw std::runtime_error("Unable to start native player timer.");
         }
     }
 
     void cleanupUiResources() {
         if (messageHwnd) {
+            KillTimer(messageHwnd, NUVIO_LAYOUT_TIMER_ID);
             KillTimer(messageHwnd, NUVIO_TIMER_ID);
         }
         if (webView && messageToken.value != 0) {
@@ -1635,6 +1642,7 @@ private:
                                         ).Get(),
                                         &controllerSelf->messageToken
                                     );
+                                    createdController->put_IsVisible(TRUE);
                                     controllerSelf->layoutNativeSubviews();
                                     std::wstring url = toWide(controlsUrl);
                                     controllerSelf->webView->Navigate(url.c_str());
@@ -1760,20 +1768,30 @@ private:
     }
 
     void layoutNativeSubviews() {
-        if (!hostHwnd || !IsWindow(hostHwnd)) {
+        if (!hostHwnd || !IsWindow(hostHwnd) || IsIconic(GetAncestor(hostHwnd, GA_ROOT))) {
             return;
         }
+
         RECT bounds = {};
-        GetClientRect(hostHwnd, &bounds);
-        LONG width = std::max<LONG>(1, bounds.right - bounds.left);
-        LONG height = std::max<LONG>(1, bounds.bottom - bounds.top);
-        if (containerHwnd) {
-            SetWindowPos(containerHwnd, HWND_TOP, 0, 0, width, height, SWP_SHOWWINDOW | SWP_NOACTIVATE);
+        if (!GetClientRect(hostHwnd, &bounds)) return;
+        const LONG width = bounds.right - bounds.left;
+        const LONG height = bounds.bottom - bounds.top;
+        if (width <= 1 || height <= 1) return;
+
+        // Resizing unchanged child windows causes extra paints in the AWT host.
+        // In particular, avoid synchronous WM_SIZE traffic while Compose restores the frame.
+        RECT containerBounds = {};
+        if (containerHwnd &&
+            (!GetClientRect(containerHwnd, &containerBounds) ||
+             containerBounds.right != width || containerBounds.bottom != height)) {
+            SetWindowPos(containerHwnd, nullptr, 0, 0, width, height,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
         }
-        if (controller) {
-            RECT webBounds = {0, 0, width, height};
-            controller->put_Bounds(webBounds);
-            controller->put_IsVisible(TRUE);
+        if (controller && (appliedWebViewSize.cx != width || appliedWebViewSize.cy != height)) {
+            const RECT desiredBounds = {0, 0, width, height};
+            if (SUCCEEDED(controller->put_Bounds(desiredBounds))) {
+                appliedWebViewSize = {width, height};
+            }
         }
     }
 
@@ -2235,7 +2253,7 @@ LRESULT CALLBACK messageWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARA
             if (player) player->processUiTasks();
             return 0;
         case WM_TIMER:
-            if (player && wParam == NUVIO_TIMER_ID) player->onTimer();
+            if (player) player->onTimer(wParam);
             return 0;
         case WM_NCDESTROY:
             SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
