@@ -707,7 +707,9 @@ val desktopReleaseVersionCode = (
     ?.takeIf { it.isNotBlank() }
     ?.toIntOrNull()
     ?: 1
-val desktopReleasePackageVersion = jpackageCompatibleVersion(desktopReleaseVersionName)
+val desktopReleasePackageVersion = jpackageCompatibleVersion(
+    providers.gradleProperty("nuvio.desktop.windowsPackageVersion").orNull ?: desktopReleaseVersionName,
+)
 val windowsMsiUpgradeUuid = "206bcb4c-0fa5-57d9-9415-a8b1270b96b8"
 val iosDistribution = (
     providers.gradleProperty("nuvio.ios.distribution").orNull
