@@ -131,7 +131,11 @@ internal fun DesktopCommunityComments(
             properties = DialogProperties(usePlatformDefaultWidth = false),
         ) {
             Surface(
-                modifier = Modifier.widthIn(max = 960.dp).fillMaxWidth(0.92f).fillMaxHeight(0.85f),
+                modifier = Modifier
+                    .widthIn(max = 960.dp)
+                    .heightIn(max = 740.dp)
+                    .fillMaxWidth(0.92f)
+                    .fillMaxHeight(0.85f),
                 shape = RoundedCornerShape(24.dp),
             ) {
                 Column(Modifier.padding(20.dp)) {
