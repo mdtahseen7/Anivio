@@ -2036,6 +2036,7 @@
     <string name="details_runtime">Runtime</string>
     <string name="details_season_view_posters">Posters</string>
     <string name="details_season_view_text">Text</string>
+    <string name="details_episode_range">Episodes %1$d–%2$d</string>
     <string name="details_show_details">Show Details</string>
     <string name="details_status">Status</string>
     <string name="details_videos">Videos</string>

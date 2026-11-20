@@ -21,6 +21,7 @@ import com.nuvio.app.core.ui.posterCardClickable
 import com.nuvio.app.features.home.HomeDiscoveryContent
 import com.nuvio.app.features.home.HomeDiscoverySection
 import com.nuvio.app.features.home.MetaPreview
+import com.nuvio.app.isDesktop
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
 
@@ -39,6 +40,10 @@ internal fun HomeDiscoverySectionView(
     onItemClick: ((MetaPreview) -> Unit)?,
     onItemLongClick: ((MetaPreview) -> Unit)?,
 ) {
+    if (isDesktop) {
+        DesktopHomeDiscoverySection(section, title, content, sectionPadding, onItemClick, onItemLongClick)
+        return
+    }
     Box(Modifier.fillMaxWidth().padding(horizontal = sectionPadding, vertical = 12.dp), contentAlignment = Alignment.TopCenter) {
         Column(Modifier.widthIn(max = 900.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             when (section) {
@@ -49,7 +54,7 @@ internal fun HomeDiscoverySectionView(
                 HomeDiscoverySection.Shuffle -> HomeShuffleDeck(title, content.shuffle, onItemClick, onItemLongClick)
                 HomeDiscoverySection.Horizon -> {
                     DiscoveryHeading(title)
-                    HorizonTimeline(content.horizon, onItemClick, onItemLongClick)
+                    HorizonTimeline(content.horizon.take(3), onItemClick, onItemLongClick)
                 }
             }
         }

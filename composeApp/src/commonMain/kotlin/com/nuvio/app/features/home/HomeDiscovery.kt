@@ -81,6 +81,6 @@ internal fun buildHomeDiscoveryContent(
         shuffle = candidates.filterNot { it.stableKey() == spotlight?.stableKey() }.take(16),
         horizon = if (hideUnreleased) emptyList() else sections.filter { it.key.endsWith(":upcoming") }
             .flatMap { it.items }.filter { it.isHomeDiscoveryEligible() }.distinctBy { it.stableKey() }
-            .sortedBy { it.rawReleaseDate?.takeIf(String::isNotBlank) ?: "9999" }.take(3),
+            .sortedBy { it.rawReleaseDate?.takeIf(String::isNotBlank) ?: "9999" }.take(12),
     )
 }

@@ -20,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nuvio.app.core.network.NetworkCondition
@@ -48,19 +49,20 @@ internal fun LazyListScope.discoverContent(
     onPosterLongClick: ((MetaPreview) -> Unit)? = null,
     /** False when the host screen already shows a "Discover" title of its own. */
     showHeader: Boolean = true,
+    horizontalPadding: Dp = 16.dp,
     /** Supplied by hosts that page explicitly instead of scrolling endlessly. */
     onPreviousPage: (() -> Unit)? = null,
     onNextPage: (() -> Unit)? = null,
 ) {
     if (showHeader) {
         item {
-            DiscoverSectionHeader(modifier = Modifier.padding(horizontal = 16.dp))
+            DiscoverSectionHeader(modifier = Modifier.padding(horizontal = horizontalPadding))
         }
     }
     item {
         DiscoverFilterRow(
             state = state,
-            modifier = Modifier.padding(horizontal = 16.dp),
+            modifier = Modifier.padding(horizontal = horizontalPadding),
             onTypeSelected = onTypeSelected,
             onCatalogSelected = onCatalogSelected,
             onGenreSelected = onGenreSelected,
@@ -74,7 +76,7 @@ internal fun LazyListScope.discoverContent(
                     selectedCatalog.addonName,
                     selectedCatalog.type.displayTypeLabel(),
                 ),
-                modifier = Modifier.padding(horizontal = 16.dp),
+                modifier = Modifier.padding(horizontal = horizontalPadding),
                 style = MaterialTheme.typography.bodyMedium.copy(
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
@@ -89,7 +91,7 @@ internal fun LazyListScope.discoverContent(
             items(2) {
                 PosterGridSkeletonRow(
                     columns = columns,
-                    modifier = Modifier.padding(horizontal = 16.dp),
+                    modifier = Modifier.padding(horizontal = horizontalPadding),
                 )
             }
         }
@@ -101,7 +103,7 @@ internal fun LazyListScope.discoverContent(
                     errorMessage = state.errorMessage,
                     networkCondition = networkCondition,
                     onRetry = onRetry,
-                    modifier = Modifier.padding(horizontal = 16.dp),
+                    modifier = Modifier.padding(horizontal = horizontalPadding),
                 )
             }
         }
@@ -112,7 +114,7 @@ internal fun LazyListScope.discoverContent(
                 PosterGridRow(
                     items = state.items.subList(firstIndex, minOf(firstIndex + columns, state.items.size)),
                     columns = columns,
-                    modifier = Modifier.padding(horizontal = 16.dp),
+                    modifier = Modifier.padding(horizontal = horizontalPadding),
                     watchedKeys = watchedKeys,
                     fullyWatchedSeriesKeys = fullyWatchedSeriesKeys,
                     onPosterClick = onPosterClick,
@@ -122,7 +124,7 @@ internal fun LazyListScope.discoverContent(
             if (state.isLoading) {
                 item {
                     CatalogLoadingFooter(
-                        modifier = Modifier.padding(horizontal = 16.dp),
+                        modifier = Modifier.padding(horizontal = horizontalPadding),
                     )
                 }
             }

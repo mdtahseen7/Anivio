@@ -273,6 +273,7 @@ internal fun AppTabHost(
             AppScreenTab.Discover -> {
                 DiscoverScreen(
                     modifier = Modifier.fillMaxSize(),
+                    topChromePadding = state.topChromePadding.takeIf { isDesktop },
                     scrollToTopRequests = requests.discoverScrollToTopRequests,
                     onPosterClick = actions.onPosterClick,
                     onPosterLongClick = actions.onPosterLongClick,

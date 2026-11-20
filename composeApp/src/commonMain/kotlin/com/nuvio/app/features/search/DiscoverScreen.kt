@@ -19,9 +19,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.core.network.NetworkStatusRepository
@@ -29,14 +28,12 @@ import com.nuvio.app.core.ui.NuvioScreen
 import com.nuvio.app.core.ui.nuvioConsumePointerEvents
 import com.nuvio.app.features.anilist.AniListDiscoverRepository
 import com.nuvio.app.features.home.MetaPreview
-import com.nuvio.app.features.home.components.homeSectionHorizontalPaddingForWidth
+import com.nuvio.app.core.ui.desktopPageHorizontalPaddingForWidth
+import com.nuvio.app.isDesktop
 import com.nuvio.app.features.home.components.posterGridColumnCountForWidth
 import com.nuvio.app.features.watched.WatchedRepository
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.map
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.compose_search_discover_title
 import org.jetbrains.compose.resources.stringResource
@@ -52,6 +49,7 @@ import org.jetbrains.compose.resources.stringResource
 fun DiscoverScreen(
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState(),
+    topChromePadding: Dp? = null,
     scrollToTopRequests: Flow<Unit> = emptyFlow(),
     onPosterClick: ((MetaPreview) -> Unit)? = null,
     onPosterLongClick: ((MetaPreview) -> Unit)? = null,
@@ -84,11 +82,17 @@ fun DiscoverScreen(
 
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val discoverColumns = remember(maxWidth) { posterGridColumnCountForWidth(maxWidth) }
+        val pagePadding = if (isDesktop) desktopPageHorizontalPaddingForWidth(maxWidth.value) else 16.dp
+        val discoverColumns = if (isDesktop) {
+            ((maxWidth.value - pagePadding.value * 2 + 12f) / 174f).toInt().coerceIn(2, 12)
+        } else {
+            posterGridColumnCountForWidth(maxWidth)
+        }
 
         NuvioScreen(
             horizontalPadding = 0.dp,
             listState = listState,
+            topPadding = if (topChromePadding != null) 0.dp else null,
             modifier = Modifier.fillMaxSize(),
         ) {
             stickyHeader {
@@ -103,10 +107,10 @@ fun DiscoverScreen(
                         Text(
                             text = stringResource(Res.string.compose_search_discover_title),
                             modifier = Modifier
-                                .padding(horizontal = 16.dp)
+                                .padding(horizontal = pagePadding)
                                 .padding(
-                                    top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding(),
-                                    bottom = 4.dp,
+                                    top = topChromePadding ?: WindowInsets.statusBars.asPaddingValues().calculateTopPadding(),
+                                    bottom = if (isDesktop) 10.dp else 4.dp,
                                 ),
                             style = MaterialTheme.typography.headlineLarge,
                             color = MaterialTheme.colorScheme.onBackground,
@@ -133,6 +137,7 @@ fun DiscoverScreen(
                 onPosterLongClick = onPosterLongClick,
                 // The screen header above already says "Discover".
                 showHeader = false,
+                horizontalPadding = pagePadding,
                 onPreviousPage = { scope.launch { AniListDiscoverRepository.previousPage() } },
                 onNextPage = { scope.launch { AniListDiscoverRepository.nextPage() } },
             )

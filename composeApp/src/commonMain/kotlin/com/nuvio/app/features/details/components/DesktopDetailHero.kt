@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -46,7 +45,6 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
@@ -59,19 +57,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nuvio.app.core.build.AppFeaturePolicy
 import com.nuvio.app.core.ui.NuvioAsyncImage as AsyncImage
-import com.nuvio.app.core.ui.NuvioDesktopImageScaling
 import com.nuvio.app.core.ui.NuvioTokens
 import com.nuvio.app.core.ui.DesktopBackdropVerticalBias
-import com.nuvio.app.core.ui.StandardDesktopViewportAspectRatio
 import com.nuvio.app.core.ui.FullscreenActionButton
 import com.nuvio.app.core.ui.desktopPageHorizontalPaddingForWidth
 import com.nuvio.app.core.ui.fullscreenActionHorizontalInsetForWidth
-import com.nuvio.app.core.ui.expandingWideArtworkWidthDp
 import com.nuvio.app.core.ui.isFullscreenActionSupported
-import com.nuvio.app.core.ui.WideDesktopViewportAspectRatio
 import com.nuvio.app.features.details.MetaDetails
 import com.nuvio.app.features.details.formatRuntimeForDisplay
-import com.nuvio.app.features.tmdb.originalTmdbImageUrl
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.detail_logo_content_description
 import nuvio.composeapp.generated.resources.hero_add_to_library
@@ -89,7 +82,6 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 fun DesktopDetailBackdrop(
     meta: MetaDetails,
-    viewportHeight: Dp,
     heroTrailerSourceUrl: String?,
     heroTrailerSourceAudioUrl: String?,
     heroTrailerReady: Boolean,
@@ -116,25 +108,17 @@ fun DesktopDetailBackdrop(
         animationSpec = tween(durationMillis = NuvioTokens.Motion.sheetEnterMillis),
         label = "desktop_detail_hero_gradient_intensity",
     )
-    BoxWithConstraints(
+    val artworkUrls = remember(meta.background, meta.poster) {
+        listOfNotNull(meta.background, meta.poster).filter(String::isNotBlank).distinct()
+    }
+    var artworkIndex by remember(meta.id, artworkUrls) { mutableStateOf(0) }
+    Box(
         modifier = modifier
             .fillMaxSize()
             .background(sideGradientColor),
     ) {
-        val aspectRatio = maxWidth.value / viewportHeight.value
-        val useWideArtworkFrame = aspectRatio > StandardDesktopViewportAspectRatio
-        val cropSideBackdrop = aspectRatio > WideDesktopViewportAspectRatio
-        val backdropWidth = if (useWideArtworkFrame) {
-            expandingWideArtworkWidthDp(maxWidth.value, viewportHeight.value).dp
-        } else {
-            maxWidth
-        }
-        val backdropModifier = Modifier
-            .align(Alignment.CenterEnd)
-            .width(backdropWidth)
-            .fillMaxHeight()
+        val backdropModifier = Modifier.matchParentSize()
         val artworkModifier = if (blurBackdrop) backdropModifier.blur(30.dp) else backdropModifier
-        val bottomSpreadStrength = ((21f / 9f - aspectRatio) / (5f / 9f)).coerceIn(0f, 1f)
         val baseSideFade = Brush.horizontalGradient(
             colorStops = arrayOf(
                 0.00f to sideGradientColor,
@@ -145,15 +129,15 @@ fun DesktopDetailBackdrop(
                 1.00f to Color.Transparent,
             ),
         )
-        val imageUrl = meta.background ?: meta.poster
+        val imageUrl = artworkUrls.getOrNull(artworkIndex)
         if (imageUrl != null) {
             AsyncImage(
-                model = originalTmdbImageUrl(imageUrl),
-                contentDescription = meta.name,
+                model = imageUrl,
+                contentDescription = null,
                 modifier = artworkModifier,
                 alignment = BiasAlignment(0f, DesktopBackdropVerticalBias),
-                contentScale = if (useWideArtworkFrame && !cropSideBackdrop) ContentScale.Fit else ContentScale.Crop,
-                desktopImageScaling = NuvioDesktopImageScaling.Disabled,
+                contentScale = ContentScale.Crop,
+                onError = { artworkIndex = artworkUrls.indexOf(imageUrl) + 1 },
                 onSuccess = { state -> onBackdropLoaded(state.painter) },
             )
         } else {
@@ -177,18 +161,15 @@ fun DesktopDetailBackdrop(
         Box(
             modifier = backdropModifier
                 .drawWithCache {
-                    val bottomSpread = Brush.radialGradient(
-                        colorStops = arrayOf(
-                            0.00f to sideGradientColor.copy(alpha = 0.12f * gradientIntensity * bottomSpreadStrength),
-                            0.55f to sideGradientColor.copy(alpha = 0.12f * gradientIntensity * bottomSpreadStrength),
-                            1.00f to Color.Transparent,
-                        ),
-                        center = Offset(0f, size.height * 1.15f),
-                        radius = size.width * 0.72f,
+                    val verticalFade = Brush.verticalGradient(
+                        0f to sideGradientColor.copy(alpha = 0.28f),
+                        0.18f to Color.Transparent,
+                        0.56f to Color.Transparent,
+                        1f to sideGradientColor,
                     )
                     onDrawBehind {
                         drawRect(baseSideFade)
-                        if (bottomSpreadStrength > 0f) drawRect(bottomSpread)
+                        drawRect(verticalFade)
                     }
                 },
         )
@@ -198,6 +179,7 @@ fun DesktopDetailBackdrop(
 @Composable
 fun DesktopDetailHero(
     meta: MetaDetails,
+    viewportHeight: Dp,
     showOverallRatings: Boolean,
     isMdbListActive: Boolean,
     playButtonLabel: String,
@@ -230,7 +212,7 @@ fun DesktopDetailHero(
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
-            .height(660.dp)
+            .height((viewportHeight * 0.74f).coerceIn(500.dp, 675.dp))
             .onSizeChanged { onHeightChanged(it.height) },
     ) {
         val actionHorizontalInset = fullscreenActionHorizontalInsetForWidth(maxWidth.value)

@@ -15,4 +15,6 @@
     <string name="home_discovery_catalog_score">Catalog score</string>
     <string name="home_discovery_minutes">%1$d min</string>
     <string name="home_spotlight_featured">Featured pick</string>
+    <string name="home_discovery_previous_release">Previous releases</string>
+    <string name="home_discovery_next_release">Next releases</string>
 </resources>

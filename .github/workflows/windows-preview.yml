@@ -39,6 +39,9 @@ jobs:
           ANILIST_CLIENT_ID: ${{ secrets.ANILIST_CLIENT_ID }}
           MAL_CLIENT_ID: ${{ secrets.MAL_CLIENT_ID }}
         run: |
+          if ($env:ANILIST_CLIENT_ID -notmatch '^[0-9]+$') {
+            throw 'Configure ANILIST_CLIENT_ID for the Windows preview.'
+          }
           $address = $null
           if (![Uri]::TryCreate($env:ANIVIO_SUPABASE_URL, [UriKind]::Absolute, [ref]$address) -or $address.Scheme -ne 'https' -or $address.UserInfo) {
             throw 'Configure the HTTPS Anivio Supabase endpoint for this preview.'

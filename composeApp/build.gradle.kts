@@ -78,6 +78,12 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
     abstract val discordAppId: Property<String>
 
     @get:Input
+    abstract val anilistClientId: Property<String>
+
+    @get:Input
+    abstract val anilistRedirectUri: Property<String>
+
+    @get:Input
     abstract val malClientId: Property<String>
 
     @get:Input
@@ -254,10 +260,10 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
                 |
                 |object AniListConfig {
                 |    /** AniList OAuth client id. Blank leaves the tracking card in a "not configured" state. */
-                |    const val CLIENT_ID = "${props.getProperty("ANILIST_CLIENT_ID", "")}"
+                |    const val CLIENT_ID = "${anilistClientId.get()}"
                 |
                 |    /** Must match the redirect URL registered on the AniList developer app exactly. */
-                |    const val REDIRECT_URI = "${props.getProperty("ANILIST_REDIRECT_URI", "nuvio://auth/anilist")}"
+                |    const val REDIRECT_URI = "${anilistRedirectUri.get()}"
                 |
                 |    val isConfigured: Boolean
                 |        get() = CLIENT_ID.isNotBlank()
@@ -805,6 +811,8 @@ val generateRuntimeConfigs = tasks.register<GenerateRuntimeConfigsTask>("generat
     tvdbApiKey.set(runtimeConfigValue("TVDB_API_KEY"))
     tmdbApiKey.set(runtimeConfigValue("TMDB_API_KEY"))
     discordAppId.set(runtimeConfigValue("DISCORD_APP_ID"))
+    anilistClientId.set(runtimeConfigValue("ANILIST_CLIENT_ID"))
+    anilistRedirectUri.set(runtimeConfigValue("ANILIST_REDIRECT_URI", fallback = "nuvio://auth/anilist"))
     malClientId.set(runtimeConfigValue("MAL_CLIENT_ID"))
     malRedirectUri.set(runtimeConfigValue("MAL_REDIRECT_URI", fallback = "nuvio://auth/mal"))
     updateGitHubOwner.set(runtimeConfigValue("ANIVIO_UPDATE_GITHUB_OWNER"))

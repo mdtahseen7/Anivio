@@ -37,11 +37,13 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -99,6 +101,44 @@ import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
 
 private val log = Logger.withTag("SeriesContent")
+
+private const val EpisodesPerRange = 50
+
+internal fun List<MetaVideo>.episodeRangesForDisplay(): List<List<MetaVideo>> =
+    chunked(EpisodesPerRange)
+
+internal fun List<List<MetaVideo>>.preferredEpisodeRange(episodeNumber: Int?): Int =
+    if (episodeNumber == null) 0 else indexOfFirst { range -> range.any { it.episode == episodeNumber } }.coerceAtLeast(0)
+
+@Composable
+internal fun EpisodeRangePills(
+    ranges: List<List<MetaVideo>>,
+    selectedRange: Int,
+    onSelect: (Int) -> Unit,
+) {
+    if (ranges.size <= 1) return
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = selectedRange)
+    LaunchedEffect(selectedRange) {
+        if (listState.layoutInfo.visibleItemsInfo.none { it.index == selectedRange }) {
+            listState.scrollToItem(selectedRange)
+        }
+    }
+    LazyRow(
+        state = listState,
+        modifier = Modifier.fillMaxWidth().nuvioDesktopDragScroll(listState),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        itemsIndexed(ranges) { index, episodes ->
+            val first = episodes.first().episode ?: (index * EpisodesPerRange + 1)
+            val last = episodes.last().episode ?: (index * EpisodesPerRange + episodes.size)
+            FilterChip(
+                selected = index == selectedRange,
+                onClick = { onSelect(index) },
+                label = { Text(stringResource(Res.string.details_episode_range, first, last)) },
+            )
+        }
+    }
+}
 
 /**
  * How much an episode that has not aired yet is faded.
@@ -229,32 +269,41 @@ fun DetailSeriesContent(
                             },
                         )
                     }
-                    val seasonEpisodes = groupedEpisodes.getValue(seasonForContent)
+                    val preferredEpisode = preferredEpisodeNumberForSeason(
+                        displayedSeasonNumber = seasonForContent,
+                        preferredSeasonNumber = preferredSeasonNumber,
+                        preferredEpisodeNumber = preferredEpisodeNumber,
+                    )
+                    val allSeasonEpisodes = groupedEpisodes.getValue(seasonForContent)
+                    val ranges = remember(allSeasonEpisodes) { allSeasonEpisodes.episodeRangesForDisplay() }
+                    var rangeOverride by rememberSaveable(meta.id, seasonForContent) { mutableStateOf<Int?>(null) }
+                    val selectedRange = rangeOverride?.takeIf { it in ranges.indices }
+                        ?: remember(ranges, preferredEpisode) { ranges.preferredEpisodeRange(preferredEpisode) }
+                    val seasonEpisodes = ranges[selectedRange]
+                    EpisodeRangePills(ranges, selectedRange) { rangeOverride = it }
                     // Recomputed here rather than passed in: it is only ever a display concern, and
                     // it has to re-evaluate as the day rolls over while the screen is open.
                     val todayIsoDate = CurrentDateProvider.todayIsoDate()
                     if (episodeCardStyle == MetaEpisodeCardStyle.Horizontal) {
-                        EpisodeHorizontalRow(
-                            episodes = seasonEpisodes,
-                            todayIsoDate = todayIsoDate,
-                            maxWidthDp = containerWidthDp,
-                            horizontalScrollPadding = horizontalScrollPadding,
-                            parentMetaId = meta.id,
-                            metaType = meta.type,
-                            watchedKeys = watchedKeys,
-                            fallbackImage = meta.background ?: meta.poster,
-                            progressByVideoId = progressByVideoId,
-                            episodeRatings = episodeRatings,
-                            episodeRatingsVisibility = episodeRatingsVisibility,
-                            blurUnwatchedEpisodes = blurUnwatchedEpisodes,
-                            preferredEpisodeNumber = preferredEpisodeNumberForSeason(
-                                displayedSeasonNumber = seasonForContent,
-                                preferredSeasonNumber = preferredSeasonNumber,
-                                preferredEpisodeNumber = preferredEpisodeNumber,
-                            ),
-                            onEpisodeClick = onEpisodeClick,
-                            onEpisodeLongPress = onEpisodeLongPress,
-                        )
+                        key(selectedRange) {
+                            EpisodeHorizontalRow(
+                                episodes = seasonEpisodes,
+                                todayIsoDate = todayIsoDate,
+                                maxWidthDp = containerWidthDp,
+                                horizontalScrollPadding = horizontalScrollPadding,
+                                parentMetaId = meta.id,
+                                metaType = meta.type,
+                                watchedKeys = watchedKeys,
+                                fallbackImage = meta.background ?: meta.poster,
+                                progressByVideoId = progressByVideoId,
+                                episodeRatings = episodeRatings,
+                                episodeRatingsVisibility = episodeRatingsVisibility,
+                                blurUnwatchedEpisodes = blurUnwatchedEpisodes,
+                                preferredEpisodeNumber = preferredEpisode,
+                                onEpisodeClick = onEpisodeClick,
+                                onEpisodeLongPress = onEpisodeLongPress,
+                            )
+                        }
                     } else {
                         Column(
                             verticalArrangement = Arrangement.spacedBy(sizing.cardGap),

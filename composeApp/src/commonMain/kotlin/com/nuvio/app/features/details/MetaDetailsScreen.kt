@@ -97,6 +97,7 @@ import com.nuvio.app.core.ui.PosterZoomAnchor
 import com.nuvio.app.core.ui.PosterZoomAnchorHolder
 import com.nuvio.app.core.ui.PosterZoomOverlayAction
 import com.nuvio.app.core.ui.desktopPageHorizontalPaddingForWidth
+import com.nuvio.app.core.ui.windowsSmoothWheelScroll
 import com.nuvio.app.core.ui.nuvioDesktopDragScroll
 import com.nuvio.app.core.ui.ScreenActivityEffect
 import com.nuvio.app.core.ui.TrackingListPickerDialog
@@ -119,6 +120,9 @@ import com.nuvio.app.features.details.components.DesktopDetailBackdrop
 import com.nuvio.app.features.details.components.DesktopDetailHero
 import com.nuvio.app.features.details.components.DetailSeriesListEpisode
 import com.nuvio.app.features.details.components.DetailSeriesListHeader
+import com.nuvio.app.features.details.components.EpisodeRangePills
+import com.nuvio.app.features.details.components.episodeRangesForDisplay
+import com.nuvio.app.features.details.components.preferredEpisodeRange
 import com.nuvio.app.features.details.components.DetailTrailersSection
 import com.nuvio.app.features.details.components.EpisodeDownloadSheet
 import com.nuvio.app.features.details.components.EpisodeWatchedActionSheet
@@ -709,6 +713,13 @@ fun MetaDetailsScreen(
                 val currentEpisodeListSeason = selectedEpisodeListSeason
                     ?.takeIf { it in episodeListGroupedEpisodes }
                     ?: defaultEpisodeListSeason
+                val listEpisodeRanges = remember(episodeListGroupedEpisodes, currentEpisodeListSeason) {
+                    episodeListGroupedEpisodes[currentEpisodeListSeason].orEmpty().episodeRangesForDisplay()
+                }
+                val preferredListEpisode = seriesAction?.takeIf { it.seasonNumber == currentEpisodeListSeason }?.episodeNumber
+                var listRangeOverride by rememberSaveable(meta.id, currentEpisodeListSeason) { mutableStateOf<Int?>(null) }
+                val listEpisodeRange = listRangeOverride?.takeIf { it in listEpisodeRanges.indices }
+                    ?: remember(listEpisodeRanges, preferredListEpisode) { listEpisodeRanges.preferredEpisodeRange(preferredListEpisode) }
                 val hasProductionSection = remember(meta) {
                     meta.productionCompanies.isNotEmpty() || meta.networks.isNotEmpty()
                 }
@@ -1149,7 +1160,7 @@ fun MetaDetailsScreen(
                     ) {
                         when (backgroundMode) {
                             MetaScreenBackgroundMode.Normal -> Unit
-                            MetaScreenBackgroundMode.Cinematic -> if (deferredMetaWorkAllowed && backdropUrl != null) {
+                            MetaScreenBackgroundMode.Cinematic -> if (!useDesktopDetailLayout && deferredMetaWorkAllowed && backdropUrl != null) {
                                 AsyncImage(
                                     model = if (isDesktop) originalTmdbImageUrl(backdropUrl) else backdropUrl,
                                     contentDescription = null,
@@ -1179,7 +1190,6 @@ fun MetaDetailsScreen(
                         if (useDesktopDetailLayout) {
                             DesktopDetailBackdrop(
                                 meta = meta,
-                                viewportHeight = viewportHeight,
                                 heroTrailerSourceUrl = heroTrailerSourceUrl,
                                 heroTrailerSourceAudioUrl = heroTrailerSourceAudioUrl,
                                 heroTrailerReady = heroTrailerReady,
@@ -1203,7 +1213,6 @@ fun MetaDetailsScreen(
                             if (backgroundMode == MetaScreenBackgroundMode.Cinematic) {
                                 DesktopDetailBackdrop(
                                     meta = meta,
-                                    viewportHeight = viewportHeight,
                                     heroTrailerSourceUrl = null,
                                     heroTrailerSourceAudioUrl = null,
                                     heroTrailerReady = false,
@@ -1251,6 +1260,7 @@ fun MetaDetailsScreen(
                             state = listState,
                             modifier = Modifier
                                 .fillMaxSize()
+                                .windowsSmoothWheelScroll(listState)
                                 .nestedScroll(heroStretchState.nestedScrollConnection)
                                 .zIndex(1f),
                         ) {
@@ -1261,6 +1271,7 @@ fun MetaDetailsScreen(
                                 ) {
                                     DesktopDetailHero(
                                         meta = meta,
+                                        viewportHeight = viewportHeight,
                                         showOverallRatings = metaScreenSettingsUiState.showOverallRatings,
                                         isMdbListActive = mdbListSettings.isActive,
                                         playButtonLabel = playButtonLabel,
@@ -1326,6 +1337,9 @@ fun MetaDetailsScreen(
                                     episodeListSeasons = episodeListSeasons,
                                     episodeListCurrentSeason = currentEpisodeListSeason,
                                     onEpisodeListSeasonSelect = { selectedEpisodeListSeason = it },
+                                    episodeListRanges = listEpisodeRanges,
+                                    episodeListRange = listEpisodeRange,
+                                    onEpisodeListRangeSelect = { listRangeOverride = it },
                                     onTrailerClick = resolveTrailer,
                                     progressByVideoId = progressByVideoId,
                                     watchedKeys = watchedUiState.watchedKeys,
@@ -1422,6 +1436,9 @@ fun MetaDetailsScreen(
                                     episodeListSeasons = episodeListSeasons,
                                     episodeListCurrentSeason = currentEpisodeListSeason,
                                     onEpisodeListSeasonSelect = { selectedEpisodeListSeason = it },
+                                    episodeListRanges = listEpisodeRanges,
+                                    episodeListRange = listEpisodeRange,
+                                    onEpisodeListRangeSelect = { listRangeOverride = it },
                                     onTrailerClick = resolveTrailer,
                                     progressByVideoId = progressByVideoId,
                                     watchedKeys = watchedUiState.watchedKeys,
@@ -2059,6 +2076,9 @@ private fun LazyListScope.configuredMetaSectionItems(
     episodeListSeasons: List<Int>,
     episodeListCurrentSeason: Int?,
     onEpisodeListSeasonSelect: (Int) -> Unit,
+    episodeListRanges: List<List<MetaVideo>>,
+    episodeListRange: Int,
+    onEpisodeListRangeSelect: (Int) -> Unit,
     onTrailerClick: (MetaTrailer) -> Unit,
     progressByVideoId: Map<String, WatchProgressEntry>,
     watchedKeys: Set<String>,
@@ -2149,7 +2169,7 @@ private fun LazyListScope.configuredMetaSectionItems(
 
     fun addLazyEpisodeListItems(key: String) {
         val currentSeason = episodeListCurrentSeason ?: return
-        val episodes = episodeListGroupedEpisodes[currentSeason].orEmpty()
+        val episodes = episodeListRanges.getOrNull(episodeListRange).orEmpty()
         if (episodes.isEmpty()) return
 
         item(
@@ -2161,15 +2181,18 @@ private fun LazyListScope.configuredMetaSectionItems(
                 contentMaxWidth = contentMaxWidth,
                 bottomPadding = 12.dp,
             ) {
-                DetailSeriesListHeader(
-                    meta = meta,
-                    groupedEpisodes = episodeListGroupedEpisodes,
-                    seasons = episodeListSeasons,
-                    currentSeason = currentSeason,
-                    horizontalScrollPadding = contentHorizontalPadding,
-                    onSeasonSelect = onEpisodeListSeasonSelect,
-                    onSeasonLongPress = onSeasonLongPress,
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    DetailSeriesListHeader(
+                        meta = meta,
+                        groupedEpisodes = episodeListGroupedEpisodes,
+                        seasons = episodeListSeasons,
+                        currentSeason = currentSeason,
+                        horizontalScrollPadding = contentHorizontalPadding,
+                        onSeasonSelect = onEpisodeListSeasonSelect,
+                        onSeasonLongPress = onSeasonLongPress,
+                    )
+                    EpisodeRangePills(episodeListRanges, episodeListRange, onEpisodeListRangeSelect)
+                }
             }
         }
         itemsIndexed(
