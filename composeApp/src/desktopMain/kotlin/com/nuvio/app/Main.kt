@@ -44,12 +44,14 @@ import com.nuvio.app.features.player.desktop.installDesktopAppFullscreenShortcut
 import com.nuvio.app.features.player.desktop.preloadNativePlayerBridgeAsync
 import com.nuvio.app.features.player.desktop.registerDesktopAppFullscreenToggle
 import com.nuvio.app.features.player.desktop.trackMaximizedBoundsForCurrentScreen
+import com.nuvio.app.features.player.desktop.workArea
 import com.nuvio.app.features.player.desktop.WindowsRenderExceptionHandlerFactory
 import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.settings.AppIconRepository
 import com.nuvio.app.features.settings.applyDesktopRendererPreference
 import com.nuvio.app.features.settings.transparentPreviewResource
 import java.awt.Desktop
+import java.awt.GraphicsEnvironment
 import javax.imageio.ImageIO
 import java.awt.Color as AwtColor
 import javax.swing.JComponent
@@ -108,12 +110,35 @@ fun main(args: Array<String>) {
                 java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
             }.getOrNull()
         }
+        val windowsRestoreBounds = remember(savedGeometry) {
+            if (DesktopHostOs.current != DesktopHostOs.WINDOWS) null else runCatching {
+                val displays = GraphicsEnvironment.getLocalGraphicsEnvironment()
+                val display = savedGeometry?.let { geometry ->
+                    displays.screenDevices.firstOrNull {
+                        it.defaultConfiguration.bounds.contains(geometry.x.toDouble(), geometry.y.toDouble())
+                    }
+                } ?: displays.defaultScreenDevice
+                val area = display.defaultConfiguration.workArea()
+                val width = (savedGeometry?.width ?: 1280f).coerceIn(1f, area.width.toFloat())
+                val height = (savedGeometry?.height ?: 820f).coerceIn(1f, area.height.toFloat())
+                DesktopWindowGeometry(
+                    x = (savedGeometry?.x ?: (area.centerX - width / 2).toFloat())
+                        .coerceIn(area.x.toFloat(), area.x + area.width - width),
+                    y = (savedGeometry?.y ?: (area.centerY - height / 2).toFloat())
+                        .coerceIn(area.y.toFloat(), area.y + area.height - height),
+                    width = width,
+                    height = height,
+                )
+            }.getOrNull()
+        }
         val initialWidth = when {
+            windowsRestoreBounds != null -> windowsRestoreBounds.width.dp
             isStartingMaximizedOrFullscreen && maxScreenBounds != null -> maxScreenBounds.width.dp
             savedGeometry != null -> savedGeometry.width.dp
             else -> 1280.dp
         }
         val initialHeight = when {
+            windowsRestoreBounds != null -> windowsRestoreBounds.height.dp
             isStartingMaximizedOrFullscreen && maxScreenBounds != null -> maxScreenBounds.height.dp
             savedGeometry != null -> savedGeometry.height.dp
             else -> 820.dp
@@ -121,7 +146,8 @@ fun main(args: Array<String>) {
         val windowState = rememberWindowState(
             width = initialWidth,
             height = initialHeight,
-            position = savedGeometry?.let { WindowPosition.Absolute(x = it.x.dp, y = it.y.dp) }
+            position = (windowsRestoreBounds ?: savedGeometry)
+                ?.let { WindowPosition.Absolute(x = it.x.dp, y = it.y.dp) }
                 ?: WindowPosition.PlatformDefault,
             // Windows fullscreen is emulated natively (see DesktopAppFullscreenController)
             // rather than driven by WindowPlacement, so it's restored separately below.

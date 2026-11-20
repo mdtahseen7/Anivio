@@ -51,7 +51,7 @@ internal fun Window.trackMaximizedBoundsForCurrentScreen(): () -> Unit {
  * In the same user space `setMaximizedBounds` is documented to take. A JDK
  * exhibiting JDK-8187616 would need `defaultTransform` applied here.
  */
-private fun GraphicsConfiguration.workArea(): Rectangle {
+internal fun GraphicsConfiguration.workArea(): Rectangle {
     val screen = bounds
     val insets = runCatching {
         Toolkit.getDefaultToolkit().getScreenInsets(this)
