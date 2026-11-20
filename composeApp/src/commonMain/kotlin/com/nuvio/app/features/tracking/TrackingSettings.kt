@@ -19,6 +19,7 @@ data class TrackingSettingsUiState(
     val librarySourceMode: LibrarySourceMode = DEFAULT_LIBRARY_SOURCE_MODE,
     val watchProgressSource: WatchProgressSource = DEFAULT_WATCH_PROGRESS_SOURCE,
     val continueWatchingDaysCap: Int = CONTINUE_WATCHING_DAYS_CAP_ALL,
+    val hasLibrarySourcePreference: Boolean = false,
 )
 
 /**
@@ -55,7 +56,7 @@ object TrackingSettingsRepository {
     fun setLibrarySourceMode(source: LibrarySourceMode) {
         ensureLoaded()
         TrackingSettingsStorage.saveLibrarySourceMode(source.name)
-        _uiState.value = _uiState.value.copy(librarySourceMode = source)
+        _uiState.value = _uiState.value.copy(librarySourceMode = source, hasLibrarySourcePreference = true)
     }
 
     fun setWatchProgressSource(source: WatchProgressSource, profileId: Int) {
@@ -72,10 +73,10 @@ object TrackingSettingsRepository {
     }
 
     private fun reload() {
+        val savedLibrarySource = TrackingSettingsStorage.loadLibrarySourceMode()
         _uiState.value = TrackingSettingsUiState(
-            librarySourceMode = librarySourceModeFromStorage(
-                TrackingSettingsStorage.loadLibrarySourceMode(),
-            ),
+            librarySourceMode = librarySourceModeFromStorage(savedLibrarySource),
+            hasLibrarySourcePreference = savedLibrarySource != null,
             watchProgressSource = WatchProgressSource.fromStorage(
                 TrackingSettingsStorage.loadWatchProgressSource(),
             ),

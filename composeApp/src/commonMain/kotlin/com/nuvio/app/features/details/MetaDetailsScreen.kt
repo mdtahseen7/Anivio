@@ -110,6 +110,9 @@ import com.nuvio.app.features.details.components.DetailSecondaryAction
 import com.nuvio.app.features.details.components.DetailAdditionalInfoSection
 import com.nuvio.app.features.details.components.DetailCastSection
 import com.nuvio.app.features.details.components.DetailCommentsSection
+import com.nuvio.app.features.details.components.DantotsuCommentsSection
+import com.nuvio.app.features.anilist.aniListReviewMediaArgument
+import com.nuvio.app.features.anilist.parseAniListMediaId
 import com.nuvio.app.features.details.components.DetailFloatingHeader
 import com.nuvio.app.features.details.components.DetailHero
 import com.nuvio.app.features.details.components.DetailMetaInfo
@@ -180,7 +183,7 @@ import org.jetbrains.compose.resources.stringResource
 
 private val watchedMarkerDiagnosticLog = Logger.withTag("WatchedMarkerDiag")
 private const val DetailScrolledBackgroundDefaultMaxAlpha = 0.86f
-private const val DetailScrolledBackgroundCinematicMaxAlpha = 0.36f
+private const val DetailScrolledBackgroundCinematicMaxAlpha = 0.70f
 private const val DetailScrolledBackgroundFadeHeroFraction = 0.75f
 
 internal fun detailScrolledBackgroundProgress(scrollOffsetPx: Float, heroHeightPx: Int): Float {
@@ -2333,7 +2336,7 @@ private fun metaSectionHasContent(
         MetaScreenSectionKey.OVERVIEW -> true
         MetaScreenSectionKey.PRODUCTION -> hasProductionSection
         MetaScreenSectionKey.CAST -> meta.cast.isNotEmpty()
-        MetaScreenSectionKey.COMMENTS -> meta.animeReviews.isNotEmpty()
+        MetaScreenSectionKey.COMMENTS -> meta.animeReviews.isNotEmpty() || aniListReviewMediaArgument(meta.id) != null
         MetaScreenSectionKey.TRAILERS -> hasTrailersSection
         MetaScreenSectionKey.EPISODES -> hasEpisodes
         MetaScreenSectionKey.DETAILS -> hasAdditionalInfoSection
@@ -2397,7 +2400,7 @@ private fun ConfiguredMetaSections(
             MetaScreenSectionKey.OVERVIEW -> true
             MetaScreenSectionKey.PRODUCTION -> hasProductionSection
             MetaScreenSectionKey.CAST -> meta.cast.isNotEmpty()
-            MetaScreenSectionKey.COMMENTS -> meta.animeReviews.isNotEmpty()
+            MetaScreenSectionKey.COMMENTS -> meta.animeReviews.isNotEmpty() || aniListReviewMediaArgument(meta.id) != null
             MetaScreenSectionKey.TRAILERS -> hasTrailersSection
             MetaScreenSectionKey.EPISODES -> hasEpisodes
             MetaScreenSectionKey.DETAILS -> hasAdditionalInfoSection
@@ -2515,9 +2518,13 @@ private fun ConfiguredMetaSections(
                 )
             }
             MetaScreenSectionKey.COMMENTS -> {
-                if (meta.animeReviews.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    if (parseAniListMediaId(meta.id) != null) {
+                        DantotsuCommentsSection(meta)
+                    }
                     DetailCommentsSection(
-                        reviews = meta.animeReviews,
+                        mediaId = meta.id,
+                        initialReviews = meta.animeReviews,
                         showHeader = showHeader,
                         horizontalScrollPadding = horizontalScrollPadding,
                     )

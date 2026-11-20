@@ -3,6 +3,7 @@ package com.nuvio.app.features.downloads
 import com.nuvio.app.features.player.SubtitleAddonRequest
 import com.nuvio.app.features.streams.StreamSubtitle
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import kotlinx.coroutines.runBlocking
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.downloads_enqueue_missing_url
@@ -51,6 +52,7 @@ data class DownloadItem(
     val errorMessage: String? = null,
     val createdAtEpochMs: Long,
     val updatedAtEpochMs: Long,
+    @Transient val bytesPerSecond: Long = 0,
 ) {
     val isEpisode: Boolean
         get() = seasonNumber != null && episodeNumber != null

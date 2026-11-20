@@ -1,6 +1,12 @@
 package com.nuvio.app.features.home.components
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -8,6 +14,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
@@ -40,6 +47,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -49,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import com.nuvio.app.core.anilist.stripAniListMarkup
 import com.nuvio.app.core.format.formatReleaseDateForDisplay
 import com.nuvio.app.core.ui.NuvioAsyncImage
+import com.nuvio.app.core.ui.ScreenActivityEffect
 import com.nuvio.app.core.ui.nuvio
 import com.nuvio.app.core.ui.nuvioDesktopDragScroll
 import com.nuvio.app.core.ui.posterCardClickable
@@ -57,6 +66,7 @@ import com.nuvio.app.features.home.HomeDiscoverySection
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.home.stableKey
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
 
@@ -65,6 +75,7 @@ internal fun DesktopHomeDiscoverySection(
     section: HomeDiscoverySection,
     title: String,
     content: HomeDiscoveryContent,
+    autoAdvance: Boolean,
     sectionPadding: Dp,
     onOpen: ((MetaPreview) -> Unit)?,
     onLongClick: ((MetaPreview) -> Unit)?,
@@ -78,6 +89,7 @@ internal fun DesktopHomeDiscoverySection(
                 title = title,
                 candidates = listOfNotNull(content.spotlight) + content.shuffle.take(3),
                 shuffle = false,
+                autoAdvance = autoAdvance,
                 onOpen = onOpen,
                 onLongClick = onLongClick,
             )
@@ -85,6 +97,7 @@ internal fun DesktopHomeDiscoverySection(
                 title = title,
                 candidates = content.shuffle,
                 shuffle = true,
+                autoAdvance = autoAdvance,
                 onOpen = onOpen,
                 onLongClick = onLongClick,
             )
@@ -98,21 +111,33 @@ private fun DesktopDiscoveryPicks(
     title: String,
     candidates: List<MetaPreview>,
     shuffle: Boolean,
+    autoAdvance: Boolean,
     onOpen: ((MetaPreview) -> Unit)?,
     onLongClick: ((MetaPreview) -> Unit)?,
 ) {
-    var selectedKey by remember(candidates.firstOrNull()?.stableKey()) {
-        mutableStateOf(if (shuffle) candidates.randomOrNull()?.stableKey() else null)
+    val firstKey = candidates.firstOrNull()?.stableKey()
+    var shuffledKey by remember(firstKey) { mutableStateOf(if (shuffle) candidates.randomOrNull()?.stableKey() else null) }
+    var selectedKey by remember(firstKey) { mutableStateOf(shuffledKey ?: firstKey) }
+    val picks = remember(candidates, shuffledKey) {
+        val shuffled = candidates.firstOrNull { it.stableKey() == shuffledKey }
+        (listOfNotNull(shuffled) + candidates.filterNot { it.stableKey() == shuffledKey }).take(4)
     }
-    val selected = candidates.firstOrNull { it.stableKey() == selectedKey } ?: candidates.firstOrNull() ?: return
-    val picks = remember(candidates, selected) {
-        if (selected in candidates.take(4)) candidates.take(4) else listOf(selected) + candidates.take(3)
+    val selected = picks.firstOrNull { it.stableKey() == selectedKey } ?: picks.firstOrNull() ?: return
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    var focused by remember { mutableStateOf(false) }
+
+    ScreenActivityEffect(picks, selectedKey, autoAdvance, hovered, focused) { active ->
+        if (!active || !autoAdvance || hovered || focused || picks.size < 2) return@ScreenActivityEffect
+        delay(8_000)
+        selectedKey = picks[(picks.indexOf(selected) + 1) % picks.size].stableKey()
     }
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
         if (shuffle) {
             OutlinedButton(onClick = {
-                selectedKey = candidates.filterNot { it.stableKey() == selected.stableKey() }.randomOrNull()?.stableKey()
+                shuffledKey = candidates.filterNot { it.stableKey() == selected.stableKey() }.randomOrNull()?.stableKey()
+                selectedKey = shuffledKey
             }) {
                 Icon(Icons.Default.Shuffle, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
                 Text(stringResource(Res.string.home_discovery_shuffle_action))
@@ -120,26 +145,36 @@ private fun DesktopDiscoveryPicks(
         }
     }
 
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    BoxWithConstraints(
+        Modifier.fillMaxWidth()
+            .hoverable(interaction)
+            .onFocusChanged { focused = it.hasFocus }
+            .focusGroup(),
+    ) {
         if (maxWidth >= 860.dp && picks.size > 1) {
             val featureHeight = (maxWidth * 0.35f).coerceIn(370.dp, 490.dp)
             val picksWidth = (maxWidth * 0.28f).coerceIn(255.dp, 350.dp)
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                DesktopDiscoveryFeature(
-                    selected, onOpen, onLongClick, Modifier.weight(1f).height(featureHeight),
-                )
-                Column(Modifier.width(picksWidth), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Crossfade(
+                    targetState = selected,
+                    modifier = Modifier.weight(1f).height(featureHeight),
+                    animationSpec = tween(340),
+                ) { item ->
+                    DesktopDiscoveryFeature(item, onOpen, onLongClick, Modifier.fillMaxSize())
+                }
+                Column(Modifier.width(picksWidth).height(featureHeight), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     picks.forEach { pick ->
                         val isSelected = pick.stableKey() == selected.stableKey()
                         val colors = MaterialTheme.nuvio.colors
                         Surface(
+                            modifier = Modifier.weight(1f),
                             onClick = { selectedKey = pick.stableKey() },
                             shape = RoundedCornerShape(14.dp),
                             color = if (isSelected) colors.surfaceElevated else colors.surface,
                             border = if (isSelected) BorderStroke(1.dp, colors.accent.copy(alpha = 0.65f)) else null,
                         ) {
                             Row(
-                                Modifier.fillMaxWidth().padding(10.dp),
+                                Modifier.fillMaxSize().padding(10.dp),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
@@ -163,7 +198,13 @@ private fun DesktopDiscoveryPicks(
             }
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                DesktopDiscoveryFeature(selected, onOpen, onLongClick, Modifier.fillMaxWidth().height(330.dp))
+                Crossfade(
+                    targetState = selected,
+                    modifier = Modifier.fillMaxWidth().height(330.dp),
+                    animationSpec = tween(340),
+                ) { item ->
+                    DesktopDiscoveryFeature(item, onOpen, onLongClick, Modifier.fillMaxSize())
+                }
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(picks, key = { it.stableKey() }) { pick ->
                         FilterChip(

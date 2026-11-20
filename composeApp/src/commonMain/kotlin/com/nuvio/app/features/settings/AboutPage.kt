@@ -32,6 +32,7 @@ import com.nuvio.app.core.ui.NuvioScreenHeader
 import com.nuvio.app.core.ui.NuvioSurfaceCard
 import coil3.compose.AsyncImage
 import nuvio.composeapp.generated.resources.*
+import nuvio.composeapp.generated.resources.about_author_title
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -138,7 +139,7 @@ private fun CreatorSpotlight() {
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = "MT",
+                        text = "S",
                         style = MaterialTheme.typography.titleLarge,
                         color = colors.primary,
                         fontWeight = FontWeight.Bold,
@@ -153,7 +154,7 @@ private fun CreatorSpotlight() {
                 Spacer(modifier = Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(
-                        text = "Md Tahseen Hussain",
+                        text = stringResource(Res.string.about_author_title),
                         style = MaterialTheme.typography.titleLarge,
                         color = colors.onSurface,
                         fontWeight = FontWeight.Bold,

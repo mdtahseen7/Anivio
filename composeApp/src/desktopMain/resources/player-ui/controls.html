@@ -258,12 +258,24 @@
         <div class="track-panel audio-rail-panel">
           <div class="track-header">Video enhancement</div>
           <div class="style-section">
-            <label class="style-label" for="videoEnhancementMode">Processing mode</label>
-            <select class="panel-button subtitle-font-picker" id="videoEnhancementMode"></select>
+            <span class="style-label" id="videoEnhancementModeLabel">Processing mode</span>
+            <details class="enhancement-picker" id="videoEnhancementMode">
+              <summary class="panel-button" tabindex="0" aria-labelledby="videoEnhancementModeLabel videoEnhancementModeChoice">
+                <span id="videoEnhancementModeChoice" data-choice></span>
+                <span class="enhancement-picker-chevron" aria-hidden="true"></span>
+              </summary>
+              <div class="enhancement-options" role="group" aria-labelledby="videoEnhancementModeLabel" data-options></div>
+            </details>
           </div>
           <div class="style-section">
-            <label class="style-label" for="videoEnhancementResolution">Output ceiling</label>
-            <select class="panel-button subtitle-font-picker" id="videoEnhancementResolution"></select>
+            <span class="style-label" id="videoEnhancementResolutionLabel">Output ceiling</span>
+            <details class="enhancement-picker" id="videoEnhancementResolution">
+              <summary class="panel-button" tabindex="0" aria-labelledby="videoEnhancementResolutionLabel videoEnhancementResolutionChoice">
+                <span id="videoEnhancementResolutionChoice" data-choice></span>
+                <span class="enhancement-picker-chevron" aria-hidden="true"></span>
+              </summary>
+              <div class="enhancement-options" role="group" aria-labelledby="videoEnhancementResolutionLabel" data-options></div>
+            </details>
           </div>
           <p class="enhancement-message" id="videoEnhancementMessage" role="status"></p>
           <div class="style-section" id="chapterSection" hidden>

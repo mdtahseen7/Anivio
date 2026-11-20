@@ -78,14 +78,14 @@ object AniListListRepository {
      * connected.
      */
     suspend fun ensureLoaded() {
+        val token = AniListAuthRepository.accessTokenOrNull() ?: return
         if (!cacheHydrated.compareAndSet(expect = false, update = true)) return
-        if (AniListAuthRepository.accessTokenOrNull() == null) return
 
         val accountId = AniListAuthRepository.snapshot().accountId
         val cached = withContext(Dispatchers.Default) { AniListListCache.load(accountId) } ?: return
 
         refreshMutex.withLock {
-            if (_uiState.value.snapshot.isEmpty) {
+            if (AniListAuthRepository.accessTokenOrNull() == token && _uiState.value.snapshot.isEmpty) {
                 _uiState.value = _uiState.value.copy(snapshot = cached)
             }
         }
@@ -102,27 +102,44 @@ object AniListListRepository {
         val userId = AniListAuthRepository.snapshot().accountId ?: run {
             // The viewer lookup is what fills accountId in; without it there is nothing to query.
             AniListAuthRepository.refreshViewer()
-            AniListAuthRepository.snapshot().accountId ?: return
+            AniListAuthRepository.snapshot().accountId ?: run {
+                if (AniListAuthRepository.accessTokenOrNull() == token) {
+                    _uiState.value = _uiState.value.copy(isLoading = false, errorMessage = "Unable to load the AniList account")
+                }
+                return
+            }
         }
 
         refreshMutex.withLock {
+            if (AniListAuthRepository.accessTokenOrNull() != token) return@withLock
             val previous = _uiState.value.snapshot
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
             try {
                 val snapshot = withContext(Dispatchers.Default) {
                     coroutineScope {
                         val animeDeferred = async { entries(userId, "ANIME", token, forceRefresh) }
-                        val mangaDeferred = async { entries(userId, "MANGA", token, forceRefresh) }
+                        val mangaDeferred = async {
+                            try {
+                                entries(userId, "MANGA", token, forceRefresh)
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (error: Exception) {
+                                log.w(error) { "AniList manga lists did not refresh" }
+                                previous.manga
+                            }
+                        }
                         // Continue Watching and every anime library row read the anime list only, so
                         // publish it the moment it lands instead of holding it behind the manga
                         // request. The previous manga entries stay until the new ones arrive.
                         val anime = animeDeferred.await()
-                        _uiState.value = _uiState.value.copy(
-                            snapshot = previous.copy(
-                                anime = anime,
-                                loadedAtEpochMs = EpisodeReleaseDatePlatform.nowEpochMs(),
-                            ),
-                        )
+                        if (AniListAuthRepository.accessTokenOrNull() == token) {
+                            _uiState.value = _uiState.value.copy(
+                                snapshot = previous.copy(
+                                    anime = anime,
+                                    loadedAtEpochMs = EpisodeReleaseDatePlatform.nowEpochMs(),
+                                ),
+                            )
+                        }
                         AniListListsSnapshot(
                             anime = anime,
                             manga = mangaDeferred.await(),
@@ -130,16 +147,19 @@ object AniListListRepository {
                         )
                     }
                 }
-                _uiState.value = AniListListsUiState(snapshot = snapshot, isLoading = false)
-                withContext(Dispatchers.Default) { AniListListCache.save(snapshot, userId) }
+                if (AniListAuthRepository.accessTokenOrNull() == token) {
+                    _uiState.value = AniListListsUiState(snapshot = snapshot, isLoading = false)
+                    withContext(Dispatchers.Default) {
+                        if (AniListAuthRepository.accessTokenOrNull() == token) AniListListCache.save(snapshot, userId)
+                    }
+                }
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
                 log.w(error) { "AniList list refresh failed" }
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    errorMessage = error.message,
-                )
+                if (AniListAuthRepository.accessTokenOrNull() == token) {
+                    _uiState.value = _uiState.value.copy(isLoading = false, errorMessage = error.message)
+                }
             }
         }
     }

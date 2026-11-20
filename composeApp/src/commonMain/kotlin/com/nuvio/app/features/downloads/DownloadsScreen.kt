@@ -492,7 +492,11 @@ private fun statusText(item: DownloadItem): String {
     }
 
     return when (item.status) {
-        DownloadStatus.Downloading -> stringResource(Res.string.downloads_status_downloading, size)
+        DownloadStatus.Downloading -> if (item.bytesPerSecond > 0) {
+            stringResource(Res.string.downloads_status_with_speed, size, formatBytes(item.bytesPerSecond))
+        } else {
+            stringResource(Res.string.downloads_status_downloading, size)
+        }
         DownloadStatus.Paused -> stringResource(Res.string.downloads_status_paused, size)
         DownloadStatus.Completed -> stringResource(
             Res.string.downloads_status_completed,

@@ -245,6 +245,7 @@ object DownloadsRepository {
             errorMessage = null,
             localFileUri = null,
             updatedAtEpochMs = DownloadsClock.nowEpochMs(),
+            bytesPerSecond = 0,
         )
 
         replaceItem(reset)
@@ -311,6 +312,7 @@ object DownloadsRepository {
 
     private fun startDownload(item: DownloadItem, attempt: Int = 1) {
         val request = DownloadPlatformRequest(item)
+        val speed = DownloadSpeedSampler()
 
         val handle = DownloadsPlatformDownloader.start(
             request = request,
@@ -319,10 +321,12 @@ object DownloadsRepository {
                     if (current.status != DownloadStatus.Downloading) {
                         current
                     } else {
+                        val now = DownloadsClock.nowEpochMs()
                         current.copy(
                             downloadedBytes = downloadedBytes.coerceAtLeast(0L),
+                            bytesPerSecond = speed.sample(downloadedBytes, now),
                             totalBytes = totalBytes?.takeIf { it > 0L },
-                            updatedAtEpochMs = DownloadsClock.nowEpochMs(),
+                            updatedAtEpochMs = now,
                             errorMessage = null,
                         )
                     }
@@ -581,4 +585,29 @@ private fun String.isSupportedDownloadUrl(): Boolean {
     if (normalized.endsWith(".mpd") || normalized.contains(".mpd?")) return false
     if (normalized.endsWith(".torrent") || normalized.contains(".torrent?")) return false
     return normalized.startsWith("http://") || normalized.startsWith("https://")
+}
+
+/** Measures transferred bytes, skipping the initial byte count restored from a partial file. */
+internal class DownloadSpeedSampler {
+    private var sampleTime: Long? = null
+    private var sampleBytes = 0L
+    private var rate = 0L
+
+    fun sample(bytes: Long, nowMs: Long): Long {
+        val previousTime = sampleTime
+        if (previousTime == null || bytes < sampleBytes || nowMs < previousTime) {
+            sampleTime = nowMs
+            sampleBytes = bytes
+            rate = 0L
+            return rate
+        }
+        val elapsed = nowMs - previousTime
+        if (elapsed < 500) return rate
+
+        val currentRate = ((bytes - sampleBytes) * (1000.0 / elapsed)).toLong()
+        rate = if (rate == 0L || currentRate == 0L) currentRate else (rate * 0.4 + currentRate * 0.6).toLong()
+        sampleTime = nowMs
+        sampleBytes = bytes
+        return rate
+    }
 }

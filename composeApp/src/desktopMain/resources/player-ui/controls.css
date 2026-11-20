@@ -3437,6 +3437,52 @@ svg {
   color-scheme: dark;
 }
 
+select.subtitle-font-picker option {
+  color: var(--theme-text-primary);
+  background-color: var(--theme-surface-elevated);
+}
+
+.enhancement-picker summary {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.enhancement-picker summary::-webkit-details-marker {
+  display: none;
+}
+
+.enhancement-picker-chevron {
+  width: 7px;
+  height: 7px;
+  margin-right: 4px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.enhancement-picker[open] .enhancement-picker-chevron {
+  transform: rotate(225deg);
+}
+
+.enhancement-options {
+  max-height: 210px;
+  overflow-y: auto;
+  margin-top: 5px;
+  padding: 4px;
+  border: 1px solid var(--theme-border-default);
+  border-radius: 13px;
+  background: var(--theme-surface-elevated);
+}
+
+.enhancement-options .track-row[aria-pressed="true"] {
+  background: var(--theme-selected-surface);
+}
+
 .enhancement-message {
   margin: 0 0 8px;
   font-size: 13px;

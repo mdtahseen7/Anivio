@@ -8,6 +8,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.layout.width
 import com.nuvio.app.features.anilist.AniListAuthRepository
+import com.nuvio.app.features.anilist.AniListConnectionMode
 import com.nuvio.app.features.anilist.ANILIST_ID_PREFIX
 import com.nuvio.app.features.schedule.ScheduleScreen
 import androidx.compose.animation.Crossfade
@@ -54,6 +55,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -105,6 +107,7 @@ import com.nuvio.app.features.home.components.HomeSkeletonRow
 import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.stats.StatsScreen
 import com.nuvio.app.features.tracking.TrackingRefreshIntent
+import com.nuvio.app.features.tracking.TrackingSettingsRepository
 import com.nuvio.app.features.watched.WatchedRepository
 import com.nuvio.app.features.watching.application.WatchingState
 import kotlinx.coroutines.flow.Flow
@@ -155,6 +158,17 @@ fun LibraryScreen(
         AniListAuthRepository.ensureLoaded()
         AniListAuthRepository.uiState
     }.collectAsStateWithLifecycle()
+    val trackingSettings by remember {
+        TrackingSettingsRepository.ensureLoaded()
+        TrackingSettingsRepository.uiState
+    }.collectAsStateWithLifecycle()
+    LaunchedEffect(aniListAuth.mode, trackingSettings.hasLibrarySourcePreference) {
+        if (isDesktop && aniListAuth.mode == AniListConnectionMode.CONNECTED &&
+            !trackingSettings.hasLibrarySourcePreference
+        ) {
+            TrackingSettingsRepository.setLibrarySourceMode(LibrarySourceMode.ANILIST)
+        }
+    }
     val networkStatusUiState by NetworkStatusRepository.uiState.collectAsStateWithLifecycle()
     var observedOfflineState by remember { mutableStateOf(false) }
     var sourceModeName by rememberSaveable { mutableStateOf(LibraryViewMode.Saved.name) }
@@ -475,8 +489,17 @@ fun LibraryScreen(
                         )
                         LibrarySourceSwitch(
                             selectedMode = sourceMode,
+                            aniListConnected = aniListAuth.mode == AniListConnectionMode.CONNECTED,
+                            usingAniList = uiState.sourceMode == LibrarySourceMode.ANILIST,
+                            onAniListSelected = {
+                                sourceModeName = LibraryViewMode.Saved.name
+                                TrackingSettingsRepository.setLibrarySourceMode(LibrarySourceMode.ANILIST)
+                            },
                             onModeSelected = { mode ->
                                 sourceModeName = mode.name
+                                if (mode == LibraryViewMode.Saved && uiState.sourceMode == LibrarySourceMode.ANILIST) {
+                                    TrackingSettingsRepository.setLibrarySourceMode(LibrarySourceMode.LOCAL)
+                                }
                             },
                             modifier = Modifier.padding(horizontal = 16.dp),
                         )
@@ -846,6 +869,9 @@ private fun LazyListScope.cloudLibrarySkeletonItems() {
 @Composable
 private fun LibrarySourceSwitch(
     selectedMode: LibraryViewMode,
+    aniListConnected: Boolean,
+    usingAniList: Boolean,
+    onAniListSelected: () -> Unit,
     onModeSelected: (LibraryViewMode) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -855,9 +881,16 @@ private fun LibrarySourceSwitch(
     ) {
         LibraryChip(
             label = stringResource(Res.string.library_source_saved),
-            selected = selectedMode == LibraryViewMode.Saved,
+            selected = selectedMode == LibraryViewMode.Saved && !usingAniList,
             onClick = { onModeSelected(LibraryViewMode.Saved) },
         )
+        if (aniListConnected) {
+            LibraryChip(
+                label = stringResource(Res.string.anilist_source_name),
+                selected = selectedMode == LibraryViewMode.Saved && usingAniList,
+                onClick = onAniListSelected,
+            )
+        }
         LibraryChip(
             label = stringResource(Res.string.library_source_cloud),
             selected = selectedMode == LibraryViewMode.Cloud,

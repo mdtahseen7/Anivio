@@ -75,8 +75,6 @@ const videoEnhancementModal = document.getElementById("videoEnhancementModal");
 const videoEnhancementMode = document.getElementById("videoEnhancementMode");
 const videoEnhancementResolution = document.getElementById("videoEnhancementResolution");
 const videoEnhancementMessage = document.getElementById("videoEnhancementMessage");
-videoEnhancementMode.addEventListener("change", () => send("videoEnhancementMode", Number(videoEnhancementMode.value)));
-videoEnhancementResolution.addEventListener("change", () => send("videoEnhancementResolution", Number(videoEnhancementResolution.value)));
 const audioModal = document.getElementById("audioModal");
 const subtitleModal = document.getElementById("subtitleModal");
 const speedModal = document.getElementById("speedModal");
@@ -995,6 +993,10 @@ const setModalVisibility = (modal, visible, animated = true) => {
 
 const closePlayerModal = (notifyDismiss = false, animated = true) => {
   const closingModal = activeModal;
+  if (closingModal === "videoEnhancement") {
+    videoEnhancementMode.open = false;
+    videoEnhancementResolution.open = false;
+  }
   activeModal = "";
   modalElements.forEach(modal => {
     setModalVisibility(modal, false, animated);
@@ -1965,9 +1967,37 @@ const renderEnhancementOptions = (select, labels, selected) => {
   select.value = String(selected || 0);
 };
 
+const renderEnhancementPicker = (picker, labels, selected) => {
+  const values = Array.isArray(labels) ? labels : [];
+  const options = picker.querySelector("[data-options]");
+  const summary = picker.querySelector("summary");
+  const activeChoice = Number(selected) || 0;
+  picker.querySelector("[data-choice]").textContent = values[activeChoice] || "—";
+  if (options.children.length !== values.length ||
+      values.some((label, index) => options.children[index].textContent !== label)) {
+    options.replaceChildren(...values.map((label, index) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "track-row";
+      button.textContent = label;
+      button.addEventListener("click", () => {
+        picker.open = false;
+        send(picker.id, index);
+        summary.focus();
+      });
+      return button;
+    }));
+  }
+  Array.from(options.children).forEach((button, index) => {
+    const current = index === activeChoice;
+    button.classList.toggle("selected", current);
+    button.setAttribute("aria-pressed", current ? "true" : "false");
+  });
+};
+
 const renderVideoEnhancementModal = () => {
-  renderEnhancementOptions(videoEnhancementMode, state.videoEnhancementChoices, state.videoEnhancementChoice);
-  renderEnhancementOptions(videoEnhancementResolution, state.enhancementOutputChoices, state.enhancementOutputChoice);
+  renderEnhancementPicker(videoEnhancementMode, state.videoEnhancementChoices, state.videoEnhancementChoice);
+  renderEnhancementPicker(videoEnhancementResolution, state.enhancementOutputChoices, state.enhancementOutputChoice);
   videoEnhancementMessage.textContent = state.videoEnhancementMessage || "";
   const chapters = Array.isArray(state.chapters) ? state.chapters : [];
   setVisible(chapterSection, chapters.length > 0);

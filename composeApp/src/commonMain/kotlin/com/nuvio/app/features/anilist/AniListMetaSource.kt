@@ -29,7 +29,6 @@ import com.nuvio.app.features.anime.AnimeEnrichment
 import com.nuvio.app.features.anime.buildEnrichedEpisodes
 import com.nuvio.app.features.anime.loadAnimeEnrichment
 import com.nuvio.app.features.details.MetaCompany
-import com.nuvio.app.features.details.AnimeReview
 import com.nuvio.app.features.details.MetaDetails
 import com.nuvio.app.features.details.MetaLink
 import com.nuvio.app.features.details.MetaPerson
@@ -371,7 +370,7 @@ object AniListMetaSource {
             moreLikeThis = recommendedTitles,
             moreLikeThisSource = MoreLikeThisSource.ANILIST.takeIf { recommendedTitles.isNotEmpty() },
             relatedTitles = aniListRelations(),
-            animeReviews = aniListReviews(),
+            animeReviews = reviews.toAnimeReviews(),
             hasScheduledVideos = nextAiringEpisode != null,
             trailers = trailerOrNull(),
             links = externalLinks.mapNotNull { link ->
@@ -434,25 +433,6 @@ object AniListMetaSource {
             .filterNot { it.format?.uppercase() in MANGA_FORMATS }
             .distinctBy { it.id }
             .mapNotNull { it.toMetaPreview() }
-
-    /**
-     * AniList community reviews, sorted by how many users found them helpful. A review needs both a
-     * summary and a body to be worth showing — an empty card helps no one.
-     */
-    private fun AniListMediaDetail.aniListReviews(): List<AnimeReview> =
-        reviews?.nodes.orEmpty()
-            .mapNotNull { node ->
-                val summary = node.summary?.trim()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                val body = node.body?.stripAniListMarkup()?.trim()?.takeIf { it.isNotBlank() } ?: summary
-                AnimeReview(
-                    id = node.id?.toString() ?: return@mapNotNull null,
-                    author = node.user?.name?.takeIf { it.isNotBlank() } ?: return@mapNotNull null,
-                    avatar = node.user.avatar?.large ?: node.user.avatar?.medium,
-                    score = node.score?.takeIf { it in 1..100 },
-                    summary = summary,
-                    body = body,
-                )
-            }
 
     /**
      * One [MetaVideo] per AniList episode, enriched from ani.zip where it has a matching entry.

@@ -74,8 +74,10 @@ internal actual object DownloadsPlatformDownloader {
                 } catch (_: AtomicMoveNotSupportedException) {
                     Files.move(tempFile.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING)
                 }
+                val localUri = destination.toURI().toString()
+                DownloadSubtitles.prepareAvailable(request.item, localUri)
                 withContext(Dispatchers.Main) {
-                    onSuccess(destination.toURI().toString(), destination.length())
+                    onSuccess(localUri, destination.length())
                 }
             } catch (error: CancellationException) {
                 withContext(NonCancellable + Dispatchers.Main) {
@@ -159,7 +161,11 @@ internal actual object DownloadsPlatformDownloader {
     actual fun removeFile(localFileUri: String?): Boolean {
         if (localFileUri.isNullOrBlank()) return false
         val file = localFileUri.toLocalFileOrNull() ?: return false
-        return runCatching { file.delete() }.getOrDefault(false)
+        return runCatching {
+            val removed = file.delete()
+            DownloadSubtitleStorage(file.toURI().toString()).remove()
+            removed
+        }.getOrDefault(false)
     }
 
     actual fun removePartialFile(destinationFileName: String): Boolean {

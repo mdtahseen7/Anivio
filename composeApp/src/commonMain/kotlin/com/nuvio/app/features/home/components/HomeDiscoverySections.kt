@@ -36,12 +36,13 @@ internal fun HomeDiscoverySectionView(
     section: HomeDiscoverySection,
     title: String,
     content: HomeDiscoveryContent,
+    autoAdvance: Boolean,
     sectionPadding: Dp,
     onItemClick: ((MetaPreview) -> Unit)?,
     onItemLongClick: ((MetaPreview) -> Unit)?,
 ) {
     if (isDesktop) {
-        DesktopHomeDiscoverySection(section, title, content, sectionPadding, onItemClick, onItemLongClick)
+        DesktopHomeDiscoverySection(section, title, content, autoAdvance, sectionPadding, onItemClick, onItemLongClick)
         return
     }
     Box(Modifier.fillMaxWidth().padding(horizontal = sectionPadding, vertical = 12.dp), contentAlignment = Alignment.TopCenter) {

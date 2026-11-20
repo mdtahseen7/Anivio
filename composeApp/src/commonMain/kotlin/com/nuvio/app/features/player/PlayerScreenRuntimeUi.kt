@@ -1098,12 +1098,12 @@ private fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value: D
         "openWatchParty" -> openPartyPanel()
         "audioDelayDelta" -> {
             if (!isWindows) return false
-            val delay = if (value == 0.0) 0 else playerSettingsUiState.audioDelayMs + value.toInt().coerceIn(-100, 100)
+            val delay = if (value == 0.0) 0 else PlayerSettingsRepository.uiState.value.audioDelayMs + value.toInt().coerceIn(-100, 100)
             PlayerSettingsRepository.setAudioDelayMs(delay)
         }
         "audioGainDelta" -> {
             if (!isWindows) return false
-            val gain = if (value == 0.0) 0f else playerSettingsUiState.audioAmplificationDb + value.toFloat().coerceIn(-1f, 1f)
+            val gain = if (value == 0.0) 0f else PlayerSettingsRepository.uiState.value.audioAmplificationDb + value.toFloat().coerceIn(-1f, 1f)
             PlayerSettingsRepository.setAudioAmplificationDb(gain)
         }
         "seekChapter" -> {

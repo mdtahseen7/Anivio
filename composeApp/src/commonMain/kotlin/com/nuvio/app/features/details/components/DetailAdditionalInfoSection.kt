@@ -3,12 +3,15 @@ package com.nuvio.app.features.details.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -20,6 +23,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.nuvio.app.core.format.formatReleaseDateForDisplay
+import com.nuvio.app.core.ui.nuvio
 import com.nuvio.app.core.i18n.localizedMediaStatusLabel
 import com.nuvio.app.features.details.MetaDetails
 import com.nuvio.app.features.details.formatRuntimeForDisplay
@@ -63,24 +67,26 @@ fun DetailAdditionalInfoSection(
         showHeader = showHeader,
     ) {
         if (isDesktop) {
-            BoxWithConstraints(Modifier.fillMaxWidth()) {
-                val columns = (maxWidth.value / 230).toInt().coerceIn(1, 3)
-                Surface(
-                    shape = MaterialTheme.shapes.large,
-                    color = MaterialTheme.colorScheme.surfaceContainer,
-                ) {
-                    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        rows.chunked(columns).forEach { row ->
-                            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                                row.forEach { (label, value) ->
-                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        Text(value, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                    }
-                                }
-                                repeat(columns - row.size) { Box(Modifier.weight(1f)) }
-                            }
+            val colors = MaterialTheme.nuvio.colors
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                rows.forEach { (label, value) ->
+                    Surface(
+                        modifier = Modifier.widthIn(min = 125.dp, max = 240.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        color = colors.surface,
+                        border = BorderStroke(1.dp, colors.textMuted.copy(alpha = 0.20f)),
+                    ) {
+                        Column(
+                            Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(3.dp),
+                        ) {
+                            Text(label, style = MaterialTheme.typography.labelMedium, color = colors.textMuted)
+                            Text(value, style = MaterialTheme.typography.titleSmall, color = colors.textPrimary,
+                                maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 }

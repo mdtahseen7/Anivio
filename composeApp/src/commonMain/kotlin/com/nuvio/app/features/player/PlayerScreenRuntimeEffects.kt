@@ -38,6 +38,8 @@ import com.nuvio.app.features.streams.hasLikelyExpiringPlaybackCredentials
 import com.nuvio.app.features.tracking.TrackingScrobbleAction
 import com.nuvio.app.features.watchprogress.WatchProgressRepository
 import com.nuvio.app.isDesktop
+import com.nuvio.app.features.downloads.DownloadSubtitles
+import com.nuvio.app.features.downloads.DownloadsRepository
 import com.nuvio.app.features.watchprogress.buildPlaybackVideoId
 import com.nuvio.app.features.watching.application.WatchingState
 import kotlinx.coroutines.CancellationException
@@ -305,6 +307,16 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
         val controller = playerController ?: return@LaunchedEffect
         if (playerControllerSourceUrl != activeSourceUrl) return@LaunchedEffect
         controller.updateNowPlayingMetadata(buildNowPlayingInfo())
+    }
+
+    LaunchedEffect(activeSourceUrl) {
+        val source = activeSourceUrl
+        if (!isDesktop || !source.startsWith("file:")) return@LaunchedEffect
+        val item = DownloadsRepository.findPlayableDownloadByVideoId(activeVideoId)
+            ?.takeIf { DownloadsRepository.playableLocalFileUri(it) == source }
+            ?: return@LaunchedEffect
+        DownloadSubtitles.prepareAvailable(item, source)
+        if (activeSourceUrl == source) activeExternalSubtitles = DownloadSubtitles.localSubtitles(source)
     }
 
     LaunchedEffect(

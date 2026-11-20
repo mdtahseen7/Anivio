@@ -67,9 +67,20 @@ internal object DownloadSubtitles {
         }
         currentCoroutineContext().ensureActive()
         runCatching {
-            storage.write("manifest.json", json.encodeToString(SubtitleManifest(complete = true, tracks = saved)))
+            val complete = pending.all { subtitle -> saved.any { it.sourceUrl == subtitle.url } }
+            storage.write("manifest.json", json.encodeToString(SubtitleManifest(complete = complete, tracks = saved)))
         }
         Unit
+    }
+
+    suspend fun prepareAvailable(item: DownloadItem, localVideoUri: String) {
+        try {
+            withTimeoutOrNull(45_000) { prepare(item, localVideoUri) }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // Subtitle providers can fail independently of the saved video.
+        }
     }
 
     fun localSubtitles(localVideoUri: String): List<StreamSubtitle> {

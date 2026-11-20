@@ -52,7 +52,7 @@ private object DesktopAppFullscreen {
     fun isFullscreen(window: Window? = null): Boolean =
         fullscreenStateProvider?.invoke(window) == true
 
-    private fun notifyChanged() {
+    fun notifyChanged() {
         _changes.value += 1
     }
 }
@@ -124,6 +124,7 @@ internal class DesktopAppFullscreenController {
         if (DesktopHostOs.current == DesktopHostOs.WINDOWS) {
             SwingUtilities.invokeLater {
                 enterWindowsFullscreen(window, windowState)
+                DesktopAppFullscreen.notifyChanged()
             }
         } else {
             restoreWindowPlacement = windowState.placement

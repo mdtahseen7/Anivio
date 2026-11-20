@@ -26,6 +26,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,21 +44,42 @@ import com.nuvio.app.core.ui.NuvioModalBottomSheet
 import com.nuvio.app.core.ui.nuvioHorizontalScrollBleed
 import com.nuvio.app.core.ui.nuvioSafeBottomPadding
 import com.nuvio.app.features.details.AnimeReview
+import com.nuvio.app.features.anilist.loadAniListReviews
+import com.nuvio.app.core.ui.NuvioLoadingIndicator
+import kotlinx.coroutines.CancellationException
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.detail_comments_badge_rating
 import nuvio.composeapp.generated.resources.detail_comments_title
+import nuvio.composeapp.generated.resources.detail_comments_empty
+import nuvio.composeapp.generated.resources.details_comments_load_failed
+import nuvio.composeapp.generated.resources.action_retry
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
 fun DetailCommentsSection(
-    reviews: List<AnimeReview>,
+    mediaId: String,
+    initialReviews: List<AnimeReview>,
     modifier: Modifier = Modifier,
     showHeader: Boolean = true,
     horizontalScrollPadding: Dp = 0.dp,
 ) {
-    if (reviews.isEmpty()) return
+    var loadedReviews by remember(mediaId) { mutableStateOf<List<AnimeReview>?>(null) }
+    var failed by remember(mediaId) { mutableStateOf(false) }
+    var retryCount by remember(mediaId) { mutableStateOf(0) }
+    val reviews = initialReviews.ifEmpty { loadedReviews.orEmpty() }
+    var expanded by remember(mediaId) { mutableStateOf<AnimeReview?>(null) }
 
-    var expanded by remember { mutableStateOf<AnimeReview?>(null) }
+    LaunchedEffect(mediaId, initialReviews, retryCount) {
+        if (initialReviews.isNotEmpty() || loadedReviews != null) return@LaunchedEffect
+        failed = false
+        try {
+            loadedReviews = loadAniListReviews(mediaId, forceRefresh = retryCount > 0)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            failed = true
+        }
+    }
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -66,7 +89,17 @@ fun DetailCommentsSection(
             DetailSectionTitle(title = stringResource(Res.string.detail_comments_title))
         }
 
-        LazyRow(
+        if (reviews.isEmpty()) {
+            when {
+                failed -> {
+                    Text(stringResource(Res.string.details_comments_load_failed), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    TextButton(onClick = { retryCount++ }) { Text(stringResource(Res.string.action_retry)) }
+                }
+                loadedReviews == null -> NuvioLoadingIndicator(modifier = Modifier.size(24.dp))
+                else -> Text(stringResource(Res.string.detail_comments_empty), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        } else LazyRow(
+            state = androidx.compose.foundation.lazy.rememberLazyListState(),
             modifier = Modifier
                 .nuvioHorizontalScrollBleed(horizontalScrollPadding)
                 .fillMaxWidth(),

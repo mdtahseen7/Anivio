@@ -71,7 +71,10 @@ fun AniListListsScreen(
     modifier: Modifier = Modifier,
 ) {
     val listsState by AniListListRepository.uiState.collectAsStateWithLifecycle()
-    LaunchedEffect(Unit) { AniListListRepository.ensureLoaded() }
+    LaunchedEffect(Unit) {
+        AniListListRepository.ensureLoaded()
+        if (AniListListRepository.snapshot().loadedAtEpochMs == null) AniListListRepository.refresh()
+    }
     val watchedKeys by remember { WatchedRepository.uiState }.collectAsStateWithLifecycle()
     val fullyWatchedSeriesKeys by WatchedRepository.fullyWatchedSeriesKeys.collectAsStateWithLifecycle()
 

@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -1221,10 +1222,23 @@ fun HomeScreen(
                         if (discoverySection != null) {
                             if (discoveryContent.hasContent(discoverySection)) {
                                 item(key = keyedSettingsItem.lazyKey, contentType = "discovery") {
+                                    val sectionVisible by remember(keyedSettingsItem.lazyKey, homeListState) {
+                                        derivedStateOf {
+                                            homeListState.layoutInfo.let { layout ->
+                                                layout.visibleItemsInfo.any { item ->
+                                                    item.key == keyedSettingsItem.lazyKey &&
+                                                        minOf(item.offset + item.size, layout.viewportEndOffset) -
+                                                        maxOf(item.offset, layout.viewportStartOffset) >=
+                                                        minOf(item.size / 2, layout.viewportSize.height / 2)
+                                                }
+                                            }
+                                        }
+                                    }
                                     HomeDiscoverySectionView(
                                         section = discoverySection,
                                         title = settingsItem.displayTitle,
                                         content = discoveryContent,
+                                        autoAdvance = sectionVisible,
                                         sectionPadding = homeSectionPadding,
                                         onItemClick = onPosterClick,
                                         onItemLongClick = onPosterLongClick,

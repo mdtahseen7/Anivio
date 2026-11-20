@@ -1,5 +1,7 @@
 package com.nuvio.app
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.awt.SwingWindow
@@ -15,6 +17,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import org.jetbrains.compose.resources.painterResource
 import androidx.compose.ui.window.LocalWindowExceptionHandlerFactory
+import androidx.compose.ui.window.WindowDecoration
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
@@ -22,6 +25,7 @@ import androidx.compose.ui.window.rememberWindowState
 import androidx.compose.ui.unit.dp
 import com.nuvio.app.core.deeplink.handleAppUrl
 import com.nuvio.app.core.diagnostics.SentryInitializer
+import com.nuvio.app.core.ui.AnivioWindowTitleBar
 import com.nuvio.app.core.ui.NuvioTheme
 import com.nuvio.app.core.ui.ProvideDesktopWindowInsets
 import com.nuvio.app.features.discordrpc.DiscordPresenceManager
@@ -29,6 +33,7 @@ import com.nuvio.app.features.p2p.P2pStreamingEngine
 import com.nuvio.app.features.plugins.configureDesktopQuickJsLibrary
 import com.nuvio.app.features.player.PlatformPlayerSurface
 import com.nuvio.app.features.player.desktop.DesktopAppFullscreenController
+import com.nuvio.app.features.player.desktop.desktopFullscreenChanges
 import com.nuvio.app.features.player.desktop.DesktopHostOs
 import com.nuvio.app.features.player.desktop.DesktopWindowGeometry
 import com.nuvio.app.features.player.desktop.DesktopWindowModeStorage
@@ -132,14 +137,17 @@ fun main(args: Array<String>) {
                 defaultWindowExceptionHandler
             }
         }
+        val customWindowChrome = DesktopHostOs.current == DesktopHostOs.WINDOWS
+        val closeApp = {
+            P2pStreamingEngine.shutdown()
+            DiscordPresenceManager.shutdown()
+            SentryInitializer.close()
+            exitApplication()
+        }
         CompositionLocalProvider(LocalWindowExceptionHandlerFactory provides windowExceptionHandler) {
             SwingWindow(
-                onCloseRequest = {
-                    P2pStreamingEngine.shutdown()
-                    DiscordPresenceManager.shutdown()
-                    SentryInitializer.close()
-                    exitApplication()
-                },
+                onCloseRequest = closeApp,
+                decoration = if (customWindowChrome) WindowDecoration.Undecorated() else WindowDecoration.SystemDefault,
                 title = if (smokePlayerUrl == null) "Anivio" else "Anivio Player Smoke",
                 state = windowState,
                 icon = painterResource(appIconState.selected.transparentPreviewResource),
@@ -225,21 +233,32 @@ fun main(args: Array<String>) {
                     }
                 }
 
-                if (smokePlayerUrl == null) {
-                    ProvideDesktopWindowInsets(isFullscreen = windowState.placement == WindowPlacement.Fullscreen) {
-                        App()
+                val fullscreenChange by desktopFullscreenChanges.collectAsState()
+                val isWindowsFullscreen = remember(window, fullscreenChange) {
+                    customWindowChrome && fullscreenController.isFullscreen(window, windowState)
+                }
+                Column(Modifier.fillMaxSize()) {
+                    if (customWindowChrome && !isWindowsFullscreen) {
+                        AnivioWindowTitleBar(windowState = windowState, onClose = closeApp)
                     }
-                } else {
-                    // The player surface reads LocalNuvioPlatformDensity, which only
-                    // NuvioTheme provides — the bare smoke harness must supply it too.
-                    NuvioTheme {
-                        PlatformPlayerSurface(
-                            sourceUrl = smokePlayerUrl,
-                            modifier = Modifier.fillMaxSize(),
-                            onControllerReady = {},
-                            onSnapshot = {},
-                            onError = {},
-                        )
+                    Box(Modifier.weight(1f).fillMaxSize()) {
+                        if (smokePlayerUrl == null) {
+                            ProvideDesktopWindowInsets(isFullscreen = windowState.placement == WindowPlacement.Fullscreen) {
+                                App()
+                            }
+                        } else {
+                            // The player surface reads LocalNuvioPlatformDensity, which only
+                            // NuvioTheme provides — the bare smoke harness must supply it too.
+                            NuvioTheme {
+                                PlatformPlayerSurface(
+                                    sourceUrl = smokePlayerUrl,
+                                    modifier = Modifier.fillMaxSize(),
+                                    onControllerReady = {},
+                                    onSnapshot = {},
+                                    onError = {},
+                                )
+                            }
+                        }
                     }
                 }
             }

@@ -1077,7 +1077,12 @@ internal class NativePlayerController(
         log.d { "setSubtitleUri ${url.toPlaybackLogKey()} handle=$handle" }
         handle.takeIf { it != 0L }?.let { current ->
             NativePlayerBridge.clearExternalSubtitles(current)
-            NativePlayerBridge.addSubtitleUrl(current, url)
+            val source = if (url.startsWith("file:", ignoreCase = true)) {
+                runCatching { java.io.File(java.net.URI(url)).absolutePath }.getOrDefault(url)
+            } else {
+                url
+            }
+            NativePlayerBridge.addSubtitleUrl(current, source)
         }
     }
 
@@ -1317,7 +1322,7 @@ private data class NativeControlsStructureKey(
     val isInPip: Boolean,
 )
 
-private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean): String =
+internal fun PlayerControlsState.toControlsJson(isFullscreen: Boolean): String =
     buildString {
         append('{')
         appendJsonField("title", title)
@@ -1607,7 +1612,7 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean): String =
         append(',')
         appendJsonField("audioDelayMs", audioDelayMs)
         append(',')
-        appendJsonField("audioGainDb", audioGainDb)
+        appendJsonField("audioGainDb", audioGainDb.toDouble())
         append(',')
         appendJsonArrayField("chapters", chapters) { chapter ->
             append('{')
@@ -1753,6 +1758,10 @@ private fun StringBuilder.appendJsonField(name: String, value: Float?) {
     } else {
         append(value.coerceIn(0f, 1f))
     }
+}
+
+private fun StringBuilder.appendJsonField(name: String, value: Double) {
+    append('"').append(name).append("\":").append(if (value.isFinite()) value else 0.0)
 }
 
 private fun StringBuilder.appendJsonField(name: String, value: Int) {

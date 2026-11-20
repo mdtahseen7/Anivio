@@ -338,6 +338,9 @@
     <string name="collections_tab_all">All</string>
     <string name="collections_your_collections">Your Collections</string>
     <string name="compose_about_based_on_version_format">Based on Nuvio %1$s</string>
+    <string name="anivio_creator_credit">Made with ♥ by Stella</string>
+    <string name="anivio_upstream_credit">Tapframe and friends</string>
+    <string name="downloads_status_with_speed">%1$s · %2$s/s</string>
     <string name="compose_about_made_with">Made with ❤️ by Tapframe and friends</string>
     <string name="compose_about_version_format">Version %1$s (%2$s)</string>
     <string name="compose_action_off">Off</string>
