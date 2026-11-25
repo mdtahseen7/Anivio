@@ -52,6 +52,7 @@ data class ProfileState(
     val isLoaded: Boolean = false,
     val hasEverSelectedProfile: Boolean = false,
     val rememberLastProfileEnabled: Boolean = false,
+    val startupSetupPending: Boolean? = null,
 )
 
 @Serializable

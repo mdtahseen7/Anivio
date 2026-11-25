@@ -66,6 +66,7 @@ private data class StoredProfilePayload(
     val hasEverSelectedProfile: Boolean = false,
     val rememberLastProfileEnabled: Boolean = false,
     val profiles: List<NuvioProfile> = emptyList(),
+    val startupSetupPending: Boolean? = null,
 )
 
 object ProfileRepository {
@@ -168,6 +169,8 @@ object ProfileRepository {
         _state.value = _state.value.copy(
             activeProfile = selectedProfile,
             hasEverSelectedProfile = selectedProfile != null || _state.value.hasEverSelectedProfile,
+            startupSetupPending = _state.value.startupSetupPending
+                ?: (selectedProfile != null && !_state.value.hasEverSelectedProfile),
         )
         persist()
         WatchedRepository.onProfileChanged(profileIndex)
@@ -202,6 +205,11 @@ object ProfileRepository {
         CollectionMobileSettingsRepository.onProfileChanged()
         DownloadsRepository.onProfileChanged()
         ProfileSettingsSync.onProfileChanged()
+    }
+
+    internal fun finishStartupSetup() {
+        _state.value = _state.value.copy(startupSetupPending = false)
+        persist()
     }
 
     suspend fun pushProfiles(profiles: List<ProfilePushPayload>) {
@@ -464,6 +472,7 @@ object ProfileRepository {
             activeProfile = profiles.find { it.profileIndex == activeProfileIndex } ?: profiles.firstOrNull(),
             isLoaded = profiles.isNotEmpty(),
             hasEverSelectedProfile = stored.hasEverSelectedProfile,
+            startupSetupPending = stored.startupSetupPending,
             rememberLastProfileEnabled = stored.rememberLastProfileEnabled,
         )
         _state.value.activeProfile?.let { activeProfileIndex = it.profileIndex }
@@ -560,6 +569,7 @@ object ProfileRepository {
                     userId = authState.userId,
                     activeProfileIndex = activeProfileIndex,
                     hasEverSelectedProfile = state.hasEverSelectedProfile,
+                    startupSetupPending = state.startupSetupPending,
                     rememberLastProfileEnabled = state.rememberLastProfileEnabled,
                     profiles = state.profiles,
                 ),

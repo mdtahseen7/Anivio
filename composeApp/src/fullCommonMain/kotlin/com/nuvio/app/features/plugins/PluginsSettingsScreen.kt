@@ -45,7 +45,6 @@ import com.nuvio.app.core.ui.NuvioPrimaryButton
 import com.nuvio.app.core.ui.NuvioSectionLabel
 import com.nuvio.app.core.ui.NuvioSurfaceCard
 import com.nuvio.app.features.plugins.runtime.PluginRuntime
-import com.nuvio.app.features.tmdb.TmdbSettingsRepository
 import kotlinx.coroutines.launch
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.plugins_badge_disabled
@@ -90,17 +89,16 @@ fun PluginsSettingsPageContent(
 ) {
     LaunchedEffect(Unit) {
         PluginRepository.initialize()
-        TmdbSettingsRepository.ensureLoaded()
     }
 
     val uiState by PluginRepository.uiState.collectAsStateWithLifecycle()
-    val tmdbSettings by TmdbSettingsRepository.uiState.collectAsStateWithLifecycle()
-    val hasTmdbApiKey = tmdbSettings.apiKey.isNotBlank()
     val coroutineScope = rememberCoroutineScope()
 
     var repositoryUrl by rememberSaveable { mutableStateOf("") }
     var message by rememberSaveable { mutableStateOf<String?>(null) }
     var isAdding by remember { mutableStateOf(false) }
+    var installingOfficial by remember { mutableStateOf<OfficialPluginRepository?>(null) }
+    var officialMessage by remember { mutableStateOf<String?>(null) }
 
     var testingScraperId by remember { mutableStateOf<String?>(null) }
     val testResults = remember { mutableStateMapOf<String, List<PluginRuntimeResult>>() }
@@ -208,6 +206,40 @@ fun PluginsSettingsPageContent(
             }
         }
 
+        NuvioSectionLabel("Official repositories")
+        OfficialPluginRepository.entries.forEach { entry ->
+            val installed = sortedRepos.any { officialPluginRepositoryFor(it.manifestUrl) == entry }
+            OfficialRepositoryCard(
+                repository = entry,
+                actionLabel = when {
+                    installingOfficial == entry -> "Installing…"
+                    installed -> "Installed"
+                    else -> "Install"
+                },
+                busy = installingOfficial == entry,
+                enabled = installingOfficial == null && !isAdding,
+                onAction = if (installed) null else {
+                    {
+                        installingOfficial = entry
+                        officialMessage = null
+                        coroutineScope.launch {
+                            try {
+                                officialMessage = when (val result = PluginRepository.addRepository(entry.manifestUrl)) {
+                                    is AddPluginRepositoryResult.Success -> "Repository installed. Enable the providers you want to use below."
+                                    is AddPluginRepositoryResult.Error -> result.message
+                                }
+                            } finally {
+                                installingOfficial = null
+                            }
+                        }
+                    }
+                },
+            )
+        }
+        officialMessage?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
         NuvioSectionLabel(stringResource(Res.string.plugins_section_add_repo))
         NuvioSurfaceCard {
             NuvioInputField(
@@ -225,7 +257,7 @@ fun PluginsSettingsPageContent(
                 } else {
                     stringResource(Res.string.plugins_button_install_repo)
                 },
-                enabled = repositoryUrl.isNotBlank() && !isAdding,
+                enabled = repositoryUrl.isNotBlank() && !isAdding && installingOfficial == null,
                 onClick = {
                     val requested = repositoryUrl.trim()
                     if (requested.isBlank()) {
@@ -326,6 +358,9 @@ fun PluginsSettingsPageContent(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
+                        if (officialPluginRepositoryFor(repo.manifestUrl) != null) {
+                            OfficialRepositoryBadge()
+                        }
                         NuvioInfoBadge(text = stringResource(Res.string.plugins_badge_providers, repo.scraperCount))
                         if (repo.isRefreshing) {
                             NuvioInfoBadge(text = stringResource(Res.string.plugins_badge_refreshing))
@@ -364,6 +399,10 @@ fun PluginsSettingsPageContent(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    if (officialPluginRepositoryFor(repoUrl) != null) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        OfficialRepositoryBadge()
+                    }
                     Spacer(modifier = Modifier.height(12.dp))
                     ReorderableColumn(
                         list = scrapers,
@@ -389,7 +428,7 @@ fun PluginsSettingsPageContent(
                                         scraper = scraper,
                                         results = testResults[scraper.id],
                                         isTesting = testingScraperId == scraper.id,
-                                        testEnabled = hasTmdbApiKey,
+                                        testEnabled = !scraper.manga && scraper.enabled && scraper.code.isNotBlank(),
                                         onTest = {
                                             testingScraperId = scraper.id
                                             coroutineScope.launch {

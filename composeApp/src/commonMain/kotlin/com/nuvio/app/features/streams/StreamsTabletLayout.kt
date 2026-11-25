@@ -80,6 +80,7 @@ internal fun TabletStreamsLayout(
     resumePositionMs: Long?,
     resumeProgressFraction: Float?,
     dominantColorEnabled: Boolean,
+    onSetupSources: (() -> Unit)?,
     onStreamSelected: (stream: StreamItem, resumePositionMs: Long?, resumeProgressFraction: Float?) -> Unit,
     onStreamLongPress: (StreamItem) -> Unit,
     onStreamSecondaryClick: (StreamItem, Offset) -> Unit,
@@ -106,6 +107,7 @@ internal fun TabletStreamsLayout(
             onStreamLongPress = onStreamLongPress,
             onStreamSecondaryClick = onStreamSecondaryClick,
             onRefresh = onRefresh,
+            onSetupSources = onSetupSources,
             modifier = modifier,
         )
         return
@@ -287,6 +289,7 @@ internal fun TabletStreamsLayout(
                         resumePositionMs = resumePositionMs,
                         resumeProgressFraction = resumeProgressFraction,
                         modifier = Modifier.weight(1f),
+                        onSetupSources = onSetupSources,
                     )
                 }
             }
@@ -314,6 +317,7 @@ private fun LegacyTabletStreamsLayout(
     onStreamLongPress: (StreamItem) -> Unit,
     onStreamSecondaryClick: (StreamItem, Offset) -> Unit,
     onRefresh: () -> Unit,
+    onSetupSources: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     val hazeState = rememberHazeState()
@@ -461,6 +465,7 @@ private fun LegacyTabletStreamsLayout(
                             resumePositionMs = resumePositionMs,
                             resumeProgressFraction = resumeProgressFraction,
                             modifier = Modifier.weight(1f),
+                            onSetupSources = onSetupSources,
                         )
                     }
                 }

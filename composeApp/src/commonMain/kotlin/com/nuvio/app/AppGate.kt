@@ -54,6 +54,7 @@ import com.nuvio.app.features.profiles.ProfileEditScreen
 import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.profiles.ProfileSelectionScreen
 import com.nuvio.app.features.profiles.profileAvatarImageUrl
+import com.nuvio.app.features.setup.StartupSetupScreen
 import com.nuvio.app.features.watched.WatchedRepository
 import com.nuvio.app.features.watchprogress.ContinueWatchingPreferencesRepository
 import com.nuvio.app.features.watchprogress.ContinueWatchingEnrichmentCache
@@ -88,6 +89,7 @@ private enum class AppGateScreen {
     Auth,
     ProfileSelection,
     ProfileEdit,
+    Setup,
     Main,
 }
 
@@ -220,6 +222,13 @@ internal fun AppGate(
         } finally {
             switchingProfile = null
         }
+        if (ProfileRepository.state.value.startupSetupPending == true) {
+            profileSelectionLoading = false
+            profileSelectionTransitionActive = false
+            gateScreen = AppGateScreen.Setup.name
+        } else {
+            gateScreen = AppGateScreen.Main.name
+        }
     }
 
 
@@ -271,8 +280,7 @@ internal fun AppGate(
             profileSelectionTransitionActive = true
             skipProfileSelectionEnterAnimation = true
             selectProfile(profile, sync = true)
-            gateScreen = AppGateScreen.Main.name
-            onActivate?.invoke(AppScreenTab.Home)
+            if (gateScreen == AppGateScreen.Main.name) onActivate?.invoke(AppScreenTab.Home)
         }
     }
 
@@ -320,7 +328,6 @@ internal fun AppGate(
 
         rememberedStartupProfile(profiles)?.let { profile ->
             selectProfile(profile, sync = syncOnEnter)
-            gateScreen = AppGateScreen.Main.name
             autoSkipProfileSelection = false
             return
         }
@@ -333,7 +340,6 @@ internal fun AppGate(
                 return
             }
             selectProfile(onlyProfile, sync = syncOnEnter)
-            gateScreen = AppGateScreen.Main.name
             autoSkipProfileSelection = false
         } else {
             gateScreen = AppGateScreen.ProfileSelection.name
@@ -351,6 +357,10 @@ internal fun AppGate(
                     networkStatusUiState.condition != NetworkCondition.Online ||
                         gateScreen != AppGateScreen.Auth.name
                 )
+
+        if (gateScreen == AppGateScreen.Setup.name && allowCachedProfileAccess) {
+            return@LaunchedEffect
+        }
 
         when (authState) {
             is AuthState.Loading -> {
@@ -401,7 +411,6 @@ internal fun AppGate(
         ) {
             rememberedStartupProfile(profileState.profiles)?.let { profile ->
                 selectProfile(profile, sync = true)
-                gateScreen = AppGateScreen.Main.name
                 autoSkipProfileSelection = false
                 return@LaunchedEffect
             }
@@ -412,7 +421,6 @@ internal fun AppGate(
             if (onlyProfile.pinEnabled) return@LaunchedEffect
 
             selectProfile(onlyProfile, sync = true)
-            gateScreen = AppGateScreen.Main.name
             autoSkipProfileSelection = false
         }
     }
@@ -497,6 +505,23 @@ internal fun AppGate(
                         onSaved = { gateScreen = AppGateScreen.ProfileSelection.name },
                         modifier = Modifier.fillMaxSize(),
                     )
+                }
+                AppGateScreen.Setup.name -> {
+                    val profile = profileState.activeProfile
+                    if (profile != null) {
+                        StartupSetupScreen(
+                            profileId = profile.profileIndex,
+                            onFinish = {
+                                if (gateScreen == AppGateScreen.Setup.name) {
+                                    ProfileRepository.finishStartupSetup()
+                                    gateScreen = AppGateScreen.Main.name
+                                    if (!renderMainContent) onActivate?.invoke(AppScreenTab.Home)
+                                }
+                            },
+                        )
+                    } else {
+                        AppLoadingContent(modifier = Modifier.fillMaxSize())
+                    }
                 }
                 AppGateScreen.Main.name -> {
                     if (renderMainContent) {
@@ -589,8 +614,7 @@ internal fun AppGate(
                                     profile = profile,
                                     sync = authState is AuthState.Authenticated,
                                 )
-                                gateScreen = AppGateScreen.Main.name
-                                if (!renderMainContent) {
+                                if (!renderMainContent && gateScreen == AppGateScreen.Main.name) {
                                     onActivate?.invoke(AppScreenTab.Home)
                                 }
                             }

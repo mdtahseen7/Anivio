@@ -426,9 +426,11 @@ actual object PluginRepository {
             val payload = httpGetText(manifestUrl)
             val manifest = PluginManifestParser.parse(payload)
             val baseUrl = manifestUrl.substringBefore("?").removeSuffix("/manifest.json")
+            val officialRepository = officialPluginRepositoryFor(manifestUrl)
 
             val scrapers = manifest.scrapers
                 .filter { scraper -> scraper.isSupportedOnCurrentPlatform() }
+                .filter { scraper -> officialRepository == null || scraper.isSuitableForOfficialCatalog() }
                 .mapNotNull { info ->
                     val codeUrl = if (info.filename.startsWith("http://") || info.filename.startsWith("https://")) {
                         info.filename
@@ -451,7 +453,7 @@ actual object PluginRepository {
                         val enabled = when {
                             !info.enabled -> false
                             previous != null -> previous.enabled
-                            else -> info.enabled
+                            else -> officialRepository == null
                         }
 
                         PluginScraper(
@@ -464,6 +466,7 @@ actual object PluginRepository {
                             supportedTypes = info.supportedTypes,
                             enabled = enabled,
                             manifestEnabled = info.enabled,
+                            manga = info.manga,
                             hasSettings = info.hasSettings,
                             logo = info.logo,
                             contentLanguage = info.contentLanguage ?: emptyList(),
@@ -675,6 +678,7 @@ actual object PluginRepository {
     private fun normalizeManifestUrl(rawUrl: String): String {
         val trimmed = rawUrl.trim()
         require(trimmed.isNotEmpty()) { runBlocking { getString(Res.string.plugins_error_enter_repo_url) } }
+        officialPluginRepositoryFor(trimmed)?.let { return it.manifestUrl }
 
         val normalizedScheme = when {
             trimmed.startsWith("http://") || trimmed.startsWith("https://") -> trimmed

@@ -250,6 +250,15 @@ internal class ProfileSyncRequestGate {
         return result
     }
 
+    suspend fun awaitFullPull(profileId: Int) {
+        val job = synchronized(lock) {
+            activeJob?.takeIf {
+                activeProfileId == profileId && activeKind == ProfileSyncRequestKind.Full
+            }
+        }
+        job?.join()
+    }
+
     fun cancel() {
         val job = synchronized(lock) {
             activeJob.also {
@@ -305,6 +314,10 @@ object SyncManager {
 
     fun pullAllForProfile(profileId: Int) {
         startFullProfilePull(profileId = profileId, reason = "requested")
+    }
+
+    internal suspend fun awaitFullProfilePull(profileId: Int) {
+        syncRequestGate.awaitFullPull(profileId)
     }
 
     internal fun cancelAccountSync() {

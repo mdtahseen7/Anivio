@@ -40,6 +40,7 @@ import androidx.compose.material.icons.rounded.SearchOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -145,6 +146,7 @@ fun StreamsScreen(
     ) -> Unit = { _, _, _, _ -> },
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    onSetupSources: (() -> Unit)? = null,
 ) {
     val uiState by StreamsRepository.uiState.collectAsStateWithLifecycle()
     val streamDisplaySettings by remember {
@@ -358,6 +360,7 @@ fun StreamsScreen(
                     streamActionsTarget = StreamActionsTarget(stream = stream, anchorInRoot = position)
                 },
                 onRefresh = reloadStreams,
+                onSetupSources = onSetupSources,
             )
         } else {
             MobileStreamsLayout(
@@ -385,6 +388,7 @@ fun StreamsScreen(
                     streamActionsTarget = StreamActionsTarget(stream = stream, anchorInRoot = position)
                 },
                 onRefresh = reloadStreams,
+                onSetupSources = onSetupSources,
             )
         }
 
@@ -489,6 +493,7 @@ private fun MobileStreamsLayout(
     onStreamLongPress: (StreamItem) -> Unit,
     onStreamSecondaryClick: (StreamItem, Offset) -> Unit,
     onRefresh: () -> Unit,
+    onSetupSources: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier.fillMaxSize()) {
@@ -575,6 +580,7 @@ private fun MobileStreamsLayout(
                         resumePositionMs = resumePositionMs,
                         resumeProgressFraction = resumeProgressFraction,
                         modifier = Modifier.weight(1f),
+                        onSetupSources = onSetupSources,
                     )
                 }
             }
@@ -827,6 +833,7 @@ internal fun StreamList(
     resumePositionMs: Long?,
     resumeProgressFraction: Float?,
     modifier: Modifier = Modifier,
+    onSetupSources: (() -> Unit)?,
 ) {
     val filteredGroups = uiState.filteredGroups
     val hasGroups = filteredGroups.isNotEmpty()
@@ -872,7 +879,7 @@ internal fun StreamList(
                         key = "streams_empty",
                         contentType = STREAM_CONTENT_TYPE_EMPTY,
                     ) {
-                        EmptyStateBlock(reason = uiState.emptyStateReason)
+                        EmptyStateBlock(reason = uiState.emptyStateReason, onSetupSources = onSetupSources)
                     }
                 }
 
@@ -1518,6 +1525,7 @@ private fun LoadingStateBlock(
 private fun EmptyStateBlock(
     reason: StreamsEmptyStateReason?,
     modifier: Modifier = Modifier,
+    onSetupSources: (() -> Unit)? = null,
 ) {
     val title: String
     val message: String
@@ -1568,6 +1576,12 @@ private fun EmptyStateBlock(
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
             textAlign = TextAlign.Center,
         )
+        if (
+            onSetupSources != null &&
+            (reason == StreamsEmptyStateReason.NoAddonsInstalled || reason == StreamsEmptyStateReason.NoCompatibleAddons)
+        ) {
+            TextButton(onClick = onSetupSources) { Text("Set up playback") }
+        }
     }
 }
 

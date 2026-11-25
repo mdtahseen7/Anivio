@@ -29,6 +29,7 @@ data class PluginManifestScraper(
     val filename: String,
     @SerialName("supportedTypes") val supportedTypes: List<String> = listOf("movie", "tv"),
     val enabled: Boolean = true,
+    val manga: Boolean = false,
     val hasSettings: Boolean = false,
     val logo: String? = null,
     @SerialName("contentLanguage") val contentLanguage: List<String>? = null,
@@ -61,6 +62,7 @@ data class PluginScraper(
     val supportedTypes: List<String>,
     val enabled: Boolean,
     val manifestEnabled: Boolean,
+    val manga: Boolean = false,
     val hasSettings: Boolean = false,
     val logo: String? = null,
     val contentLanguage: List<String> = emptyList(),
@@ -68,6 +70,7 @@ data class PluginScraper(
     val code: String,
 ) {
     fun supportsType(type: String): Boolean {
+        if (manga) return false
         val normalizedType = normalizePluginType(type)
         return supportedTypes.map { normalizePluginType(it) }.contains(normalizedType)
     }
@@ -138,6 +141,7 @@ internal data class StoredPluginScraper(
     val supportedTypes: List<String>,
     val enabled: Boolean,
     val manifestEnabled: Boolean,
+    val manga: Boolean = false,
     val hasSettings: Boolean = false,
     val logo: String? = null,
     val contentLanguage: List<String> = emptyList(),
@@ -178,6 +182,7 @@ internal fun PluginScraper.toStoredPluginScraper(): StoredPluginScraper =
         supportedTypes = supportedTypes,
         enabled = enabled,
         manifestEnabled = manifestEnabled,
+        manga = manga,
         hasSettings = hasSettings,
         logo = logo,
         contentLanguage = contentLanguage,
@@ -201,6 +206,7 @@ internal fun StoredPluginScraper.restorePluginScraper(
             supportedTypes = supportedTypes,
             enabled = enabled,
             manifestEnabled = manifestEnabled,
+            manga = manga || officialPluginRepositoryFor(repositoryUrl) == OfficialPluginRepository.Manga,
             hasSettings = hasSettings,
             logo = logo,
             contentLanguage = contentLanguage,
