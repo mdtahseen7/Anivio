@@ -149,7 +149,7 @@ fun ContinueWatchingSettingsScreen(
 fun AddonsSettingsScreen(
     onBack: () -> Unit,
 ) {
-    ContentSourcesSettingsScreen(onBack = onBack)
+    ContentSourcesSettingsScreen(onBack = onBack, startOnAddons = true)
 }
 
 @Composable

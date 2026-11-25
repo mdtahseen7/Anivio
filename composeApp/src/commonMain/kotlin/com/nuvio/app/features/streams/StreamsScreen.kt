@@ -53,6 +53,7 @@ import com.nuvio.app.features.cloudflare.buildCfCaptchaProviders
 import com.nuvio.app.features.plugins.PluginRepository
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -140,6 +141,7 @@ fun StreamsScreen(
     ) -> Unit = { _, _, _, _ -> },
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    onSetupSources: (() -> Unit)? = null,
 ) {
     val useNativeNavigation = LocalUseNativeNavigation.current
     val uiState by StreamsRepository.uiState.collectAsStateWithLifecycle()
@@ -381,6 +383,7 @@ fun StreamsScreen(
                 onDownloadStream = ::handleDownloadStream,
                 downloadedVideoIds = downloadedVideoIds,
                 onRefresh = reloadStreams,
+                onSetupSources = onSetupSources,
             )
         } else {
             MobileStreamsLayout(
@@ -404,6 +407,7 @@ fun StreamsScreen(
                 onDownloadStream = ::handleDownloadStream,
                 downloadedVideoIds = downloadedVideoIds,
                 onRefresh = reloadStreams,
+                onSetupSources = onSetupSources,
             )
         }
 
@@ -534,6 +538,7 @@ private fun MobileStreamsLayout(
     onDownloadStream: (StreamItem) -> Unit,
     downloadedVideoIds: Set<String>,
     onRefresh: () -> Unit,
+    onSetupSources: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier.fillMaxSize()) {
@@ -621,6 +626,7 @@ private fun MobileStreamsLayout(
                         resumePositionMs = resumePositionMs,
                         resumeProgressFraction = resumeProgressFraction,
                         modifier = Modifier.weight(1f),
+                        onSetupSources = onSetupSources,
                     )
                 }
             }
@@ -950,6 +956,7 @@ internal fun StreamList(
     resumePositionMs: Long?,
     resumeProgressFraction: Float?,
     modifier: Modifier = Modifier,
+    onSetupSources: (() -> Unit)?,
 ) {
     val filteredGroups = uiState.filteredGroups
     val hasGroups = filteredGroups.isNotEmpty()
@@ -1001,7 +1008,7 @@ internal fun StreamList(
 
             !hasAnyStreams && !uiState.isAnyLoading -> {
                 item {
-                    EmptyStateBlock(reason = uiState.emptyStateReason)
+                    EmptyStateBlock(reason = uiState.emptyStateReason, onSetupSources = onSetupSources)
                 }
             }
 
@@ -1366,6 +1373,7 @@ private fun LoadingStateBlock(modifier: Modifier = Modifier) {
 private fun EmptyStateBlock(
     reason: StreamsEmptyStateReason?,
     modifier: Modifier = Modifier,
+    onSetupSources: (() -> Unit)? = null,
 ) {
     val title: String
     val message: String
@@ -1420,6 +1428,12 @@ private fun EmptyStateBlock(
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
             textAlign = TextAlign.Center,
         )
+        if (
+            onSetupSources != null &&
+            (reason == StreamsEmptyStateReason.NoAddonsInstalled || reason == StreamsEmptyStateReason.NoCompatibleAddons)
+        ) {
+            TextButton(onClick = onSetupSources) { Text("Set up playback") }
+        }
     }
 }
 

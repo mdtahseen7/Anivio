@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nuvio.app.core.build.AppFeaturePolicy
 import com.nuvio.app.core.ui.NuvioLoadingIndicator
 import com.nuvio.app.core.ui.NuvioToastController
 import com.nuvio.app.core.ui.nuvio
@@ -736,6 +737,10 @@ internal fun StreamDestination(
                 },
                 onBack = onBack,
                 modifier = Modifier.fillMaxSize(),
+                onSetupSources = {
+                    val sourcesRoute = if (AppFeaturePolicy.pluginsEnabled) PluginsSettingsRoute() else AddonsSettingsRoute()
+                    navController.navigate(sourcesRoute)
+                },
             )
         }
         pendingP2pStreamOpen?.let { pending ->

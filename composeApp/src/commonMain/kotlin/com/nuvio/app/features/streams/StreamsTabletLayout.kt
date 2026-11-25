@@ -70,6 +70,7 @@ internal fun TabletStreamsLayout(
     onDownloadStream: (StreamItem) -> Unit,
     downloadedVideoIds: Set<String>,
     onRefresh: () -> Unit,
+    onSetupSources: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     val hazeState = rememberHazeState()
@@ -218,6 +219,7 @@ internal fun TabletStreamsLayout(
                             resumePositionMs = resumePositionMs,
                             resumeProgressFraction = resumeProgressFraction,
                             modifier = Modifier.weight(1f),
+                            onSetupSources = onSetupSources,
                         )
                     }
                 }

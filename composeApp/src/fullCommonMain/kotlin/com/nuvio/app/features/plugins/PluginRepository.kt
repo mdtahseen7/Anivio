@@ -616,9 +616,11 @@ actual object PluginRepository {
         return withContext(Dispatchers.Default) {
             val payload = httpGetText(manifestUrl)
             val manifest = PluginManifestParser.parse(payload)
+            val officialRepository = officialPluginRepositoryFor(manifestUrl)
 
             val scrapers = manifest.scrapers
                 .filter { scraper -> scraper.isSupportedOnCurrentPlatform() }
+                .filter { scraper -> officialRepository == null || scraper.isSuitableForOfficialCatalog() }
                 .mapNotNull { info ->
                     val scraperId = "${manifestUrl.lowercase()}:${info.id}"
                     val previous = previousScrapers[scraperId]
@@ -867,6 +869,7 @@ actual object PluginRepository {
     private fun normalizeManifestUrl(rawUrl: String): String {
         val trimmed = rawUrl.trim()
         require(trimmed.isNotEmpty()) { runBlocking { getString(Res.string.plugins_error_enter_repo_url) } }
+        officialPluginRepositoryFor(trimmed)?.let { return it.manifestUrl }
 
         val normalizedScheme = when {
             trimmed.startsWith("http://") || trimmed.startsWith("https://") -> trimmed

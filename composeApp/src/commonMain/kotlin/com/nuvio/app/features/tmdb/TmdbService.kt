@@ -2,11 +2,16 @@ package com.nuvio.app.features.tmdb
 
 import co.touchlab.kermit.Logger
 import com.nuvio.app.features.addons.httpGetText
+import com.nuvio.app.features.addons.httpRequestRaw
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+
+internal enum class TmdbKeyCheck { Valid, Rejected, Unavailable }
 
 object TmdbService {
     private val log = Logger.withTag("TmdbService")
@@ -14,6 +19,29 @@ object TmdbService {
     private val imdbToTmdbCache = linkedMapOf<String, String>()
     private val tmdbToImdbCache = linkedMapOf<String, String>()
     private val cacheMutex = Mutex()
+
+    internal suspend fun checkApiKey(apiKey: String): TmdbKeyCheck {
+        val status = withTimeoutOrNull(10_000L) {
+            try {
+                httpRequestRaw(
+                    method = "GET",
+                    url = buildTmdbUrl("authentication", apiKey.trim()),
+                    headers = mapOf("Accept" to "application/json"),
+                    body = "",
+                    followRedirects = false,
+                ).status
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                null
+            }
+        }
+        return when (status) {
+            200 -> TmdbKeyCheck.Valid
+            401, 403 -> TmdbKeyCheck.Rejected
+            else -> TmdbKeyCheck.Unavailable
+        }
+    }
 
     suspend fun ensureTmdbId(videoId: String, mediaType: String): String? {
         val apiKey = currentApiKey() ?: return null
