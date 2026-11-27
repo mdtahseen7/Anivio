@@ -9,6 +9,8 @@ package com.nuvio.app.features.anilist
  * key is profile-scoped by the platform implementation.
  */
 internal expect object AniListCacheStorage {
+    fun loadCooldown(): Long
+    fun saveCooldown(untilEpochMs: Long)
     fun loadPayload(key: String): String?
     fun savePayload(key: String, payload: String)
     fun removePayload(key: String)

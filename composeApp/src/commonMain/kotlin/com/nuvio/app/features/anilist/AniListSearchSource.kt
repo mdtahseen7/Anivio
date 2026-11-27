@@ -31,47 +31,53 @@ internal object AniListSearchSource {
         page: Int,
         perPage: Int,
         forceRefresh: Boolean,
-    ): CatalogPage = withContext(Dispatchers.Default) {
-        val formatFilter = if (contentType.equals(ANILIST_SEARCH_MOVIE_TYPE, ignoreCase = true)) {
-            ", format_in: [MOVIE]"
-        } else {
-            ", format_not_in: [MOVIE]"
-        }
-        val adultFilter = aniListAdultFilter(AniListCatalogSource.adultContentEnabled())
+    ): CatalogPage = searchPages(query, listOf(contentType), page, perPage, forceRefresh)
+        .getValue(contentType)
+
+    suspend fun searchPages(
+        query: String,
+        contentTypes: List<String>,
+        page: Int,
+        perPage: Int,
+        forceRefresh: Boolean,
+    ): Map<String, CatalogPage> = withContext(Dispatchers.Default) {
         val boundedPerPage = perPage.coerceIn(1, ANILIST_MAX_PER_PAGE)
-
-        val document = """
-            query (${'$'}search: String) {
-                Page(page: $page, perPage: $boundedPerPage) {
-                    pageInfo { currentPage hasNextPage }
-                    media(
-                        type: ANIME,
-                        search: ${'$'}search,
-                        sort: SEARCH_MATCH$formatFilter$adultFilter
-                    ) {
-                        $ANILIST_MEDIA_FIELDS
-                    }
-                }
-            }
-        """.trimIndent()
-
+        val adultFilter = aniListAdultFilter(AniListCatalogSource.adultContentEnabled())
+        val selections = contentTypes.mapIndexed { index, type ->
+            searchSelection(index, type, page, boundedPerPage, adultFilter)
+        }
         val data = AniListClient.query(
-            query = document,
+            query = "query (${'$'}search: String) {\n" + selections.joinToString("\n") + "\n}",
             variables = buildJsonObject { put("search", query) },
             forceRefresh = forceRefresh,
         )
 
-        val pageObject = data["Page"] as? JsonObject
-            ?: return@withContext CatalogPage(items = emptyList(), rawItemCount = 0, nextSkip = null)
-        val parsed = AniListClient.json.decodeFromJsonElement(AniListPage.serializer(), pageObject)
-        val items = dedupeCatalogItems(parsed.media.mapNotNull { it.toMetaPreview() })
+        contentTypes.mapIndexed { index, type ->
+            val parsed = (data["result$index"] as? JsonObject)?.let {
+                AniListClient.json.decodeFromJsonElement(AniListPage.serializer(), it)
+            }
+            val media = parsed?.media.orEmpty()
+            type to CatalogPage(
+                items = dedupeCatalogItems(media.mapNotNull { it.toMetaPreview() }),
+                rawItemCount = media.size,
+                nextSkip = (page + 1).takeIf { parsed?.pageInfo?.hasNextPage == true && media.isNotEmpty() },
+            )
+        }.toMap()
+    }
 
-        CatalogPage(
-            items = items,
-            rawItemCount = parsed.media.size,
-            nextSkip = (page + 1).takeIf {
-                parsed.pageInfo?.hasNextPage == true && parsed.media.isNotEmpty()
-            },
-        )
+    private fun searchSelection(index: Int, type: String, page: Int, perPage: Int, adultFilter: String): String {
+        val formatFilter = if (type.equals(ANILIST_SEARCH_MOVIE_TYPE, ignoreCase = true)) {
+            ", format_in: [MOVIE]"
+        } else {
+            ", format_not_in: [MOVIE]"
+        }
+        return """
+            result$index: Page(page: $page, perPage: $perPage) {
+                pageInfo { currentPage hasNextPage }
+                media(type: ANIME, search: ${'$'}search, sort: SEARCH_MATCH$formatFilter$adultFilter) {
+                    $ANILIST_MEDIA_FIELDS
+                }
+            }
+        """.trimIndent()
     }
 }

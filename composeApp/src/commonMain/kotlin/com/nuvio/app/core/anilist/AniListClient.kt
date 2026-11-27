@@ -4,13 +4,16 @@ import co.touchlab.kermit.Logger
 import com.nuvio.app.core.time.EpisodeReleaseDatePlatform
 import com.nuvio.app.features.addons.RawHttpResponse
 import com.nuvio.app.features.addons.httpRequestRaw
-import kotlinx.coroutines.CompletableDeferred
+import com.nuvio.app.features.anilist.AniListCacheStorage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.atomicfu.atomic
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
@@ -55,30 +58,6 @@ object AniListClient {
     private const val FALLBACK_RETRY_DELAY_MS = 2_000L
     private const val MAX_RETRY_DELAY_MS = 15_000L
 
-    /**
-     * Caps how many requests are in the air at once.
-     *
-     * Opening a details screen while the home rows and hero artwork are still resolving used to fire
-     * every query simultaneously. AniList answered most of them with 429, each one then retried on
-     * its own 2s/4s backoff, and because the details pipeline is a serial chain those delays stacked
-     * into the 10-20s stall. Queuing instead of bursting is what stops the 429s happening at all.
-     */
-    private const val MAX_CONCURRENT_REQUESTS = 3
-
-    /** Minimum gap between two outgoing requests, smoothing bursts without feeling sluggish. */
-    private const val MIN_REQUEST_SPACING_MS = 120L
-
-    /**
-     * Hard budget, measured from the live API: `X-RateLimit-Limit: 30` per 60s window.
-     *
-     * Held slightly under 30 because the window is the server's, not ours, and a retry spends budget
-     * like any other request — which was the actual trap. Six requests each retrying three times is
-     * eighteen against a thirty budget, so the retries were causing the rate limit they were
-     * reacting to. Queuing under the cap avoids 429 entirely instead of recovering from it.
-     */
-    private const val BUDGET_WINDOW_MS = 60_000L
-    private const val BUDGET_MAX_REQUESTS = 25
-
     internal val json = Json { ignoreUnknownKeys = true }
 
     private val log = Logger.withTag("AniListClient")
@@ -87,23 +66,14 @@ object AniListClient {
     private val cacheMutex = Mutex()
     private val cache = linkedMapOf<String, CachedResponse>()
     private val inflightMutex = Mutex()
-    private val inflight = mutableMapOf<String, CompletableDeferred<JsonObject>>()
-
-    private val requestSemaphore = Semaphore(MAX_CONCURRENT_REQUESTS)
-    private val throttleMutex = Mutex()
-    private var nextEarliestSendAtMs = 0L
-
-    /** Reserved send times inside the current window, oldest first. Guarded by [throttleMutex]. */
-    private val reservedSendTimes = ArrayDeque<Long>()
-
-    /**
-     * Shared 429 backoff. Previously every request discovered the rate limit independently and kept
-     * retrying into it; one request being throttled now pauses all of them, so the limit is respected
-     * once rather than per-caller.
-     */
-    private val cooldownUntilMsRef = atomic(0L)
-    private val _rateLimitUntilMs = kotlinx.coroutines.flow.MutableStateFlow(0L)
-    val rateLimitUntilMs: kotlinx.coroutines.flow.StateFlow<Long> = _rateLimitUntilMs
+    private val inflight = mutableMapOf<String, InflightQuery>()
+    private val requestSemaphore = Semaphore(2)
+    private val throttle = AniListRequestThrottle(
+        nowMs = ::nowMs,
+        loadCooldown = AniListCacheStorage::loadCooldown,
+        saveCooldown = AniListCacheStorage::saveCooldown,
+    )
+    val rateLimitUntilMs = throttle.rateLimitUntilMs
 
     /** Runs [query] and returns the GraphQL `data` object. Throws when AniList returns no data. */
     suspend fun query(
@@ -122,26 +92,29 @@ object AniListClient {
             readFromCache(cacheKey, cacheTtlMs)?.let { return it }
         }
 
-        val deferred = inflightMutex.withLock {
-            inflight[cacheKey] ?: CompletableDeferred<JsonObject>().also { created ->
-                inflight[cacheKey] = created
-                requestScope.launch {
-                    try {
-                        val data = execute(query, variables, accessToken)
-                        writeToCache(cacheKey, data)
-                        created.complete(data)
-                    } catch (error: Throwable) {
-                        created.completeExceptionally(error)
-                    } finally {
-                        inflightMutex.withLock {
-                            if (inflight[cacheKey] === created) inflight.remove(cacheKey)
-                        }
+        val request = inflightMutex.withLock {
+            val active = inflight[cacheKey] ?: InflightQuery(
+                requestScope.async(start = CoroutineStart.LAZY) {
+                    execute(query, variables, accessToken).also { writeToCache(cacheKey, it) }
+                },
+            ).also { inflight[cacheKey] = it }
+            active.waiters++
+            active
+        }
+
+        try {
+            return request.deferred.await()
+        } finally {
+            withContext(NonCancellable) {
+                inflightMutex.withLock {
+                    request.waiters--
+                    if (request.waiters == 0) {
+                        if (inflight[cacheKey] === request) inflight.remove(cacheKey)
+                        request.deferred.cancel()
                     }
                 }
             }
         }
-
-        return deferred.await()
     }
 
     /**
@@ -171,16 +144,13 @@ object AniListClient {
         }.toString()
 
         var lastError: Throwable? = null
-        // Which status exhausted the retries, so 429 can be told apart from 5xx below.
         var lastRetryStatus: Int? = null
         // Catalog, Discover and search queries carry no token; only tracking reads and mutations do.
         val unauthenticated = accessToken.isNullOrBlank()
 
-        // A `for` rather than `repeat`, because the 429 branch needs to abandon the remaining
-        // attempts outright. `return@repeat` only ends one iteration, so it would have kept going.
         for (attempt in 0 until MAX_ATTEMPTS) {
-            awaitSendSlot()
             val response = requestSemaphore.withPermit {
+                throttle.awaitSendSlot()
                 httpRequestRaw(
                 method = "POST",
                 url = ENDPOINT,
@@ -202,28 +172,20 @@ object AniListClient {
                 },
                 body = body,
                 maxResponseBodyBytes = MAX_RESPONSE_BYTES,
-                )
+                ).also { withContext(NonCancellable) { throttle.record(it) } }
             }
 
             when {
-                response.status == 429 || response.status >= 500 -> {
+                response.status == 429 -> {
+                    log.w { "AniList requested a cooldown; stopping this request" }
+                    throw AniListRateLimitedException()
+                }
+
+                response.status >= 500 -> {
                     lastError = IllegalStateException("AniList responded ${response.status}")
                     lastRetryStatus = response.status
                     val waitMs = (response.retryAfterMs() ?: (FALLBACK_RETRY_DELAY_MS * (attempt + 1)))
                         .coerceAtMost(MAX_RETRY_DELAY_MS)
-
-                    if (response.status == 429) {
-                        // Hold every other pending request back too, otherwise they walk into the
-                        // same limit and each pays its own backoff.
-                        applySharedCooldown(waitMs)
-                        // Only one retry for a rate limit. A second attempt spends budget we do not
-                        // have and pushes the window further out, which is how a brief throttle grew
-                        // into a 15s stall.
-                        if (attempt >= 1) {
-                            log.w { "AniList 429 after ${attempt + 1} attempts; giving up on this call" }
-                            break
-                        }
-                    }
 
                     if (attempt < MAX_ATTEMPTS - 1) {
                         log.w { "AniList ${response.status}; retrying in ${waitMs}ms" }
@@ -270,15 +232,6 @@ object AniListClient {
                     return response.body.toGraphQlData()
                 }
             }
-        }
-
-        // A 429 is backpressure, not an outage. AniList allows ~30 requests/minute while degraded,
-        // and one details screen plus the home hero can exhaust that in a burst — reporting it as an
-        // outage flipped the entire app over to MAL for the whole probe window, which is why a
-        // details page could come back to MAL-sourced rows. Fail this one call and stay on AniList.
-        if (lastRetryStatus == 429) {
-            log.w { "AniList rate limited after $MAX_ATTEMPTS attempts; not failing over" }
-            throw AniListRateLimitedException(lastError?.message)
         }
 
         // 5xx that survived every retry is a genuine server-side outage.
@@ -337,59 +290,9 @@ object AniListClient {
         }
     }
 
-    /**
-     * Blocks until this request is allowed out: first any shared 429 cooldown, then its own spacing
-     * slot. The slot is reserved under the lock but waited on outside it, so callers queue rather
-     * than serialising on the mutex itself.
-     */
-    private suspend fun awaitSendSlot() {
-        while (true) {
-            val cooldownUntil = cooldownUntilMsRef.value
-            val remaining = cooldownUntil - nowMs()
-            if (remaining <= 0L) break
-            delay(remaining.coerceAtMost(MAX_RETRY_DELAY_MS))
-        }
-
-        val waitMs = throttleMutex.withLock {
-            val now = nowMs()
-
-            // Drop reservations that have aged out of the rolling window.
-            while (reservedSendTimes.isNotEmpty() && now - reservedSendTimes.first() >= BUDGET_WINDOW_MS) {
-                reservedSendTimes.removeFirst()
-            }
-
-            var sendAt = maxOf(now, nextEarliestSendAtMs)
-            // At the cap, the next slot cannot open until the oldest reservation leaves the window.
-            if (reservedSendTimes.size >= BUDGET_MAX_REQUESTS) {
-                sendAt = maxOf(sendAt, reservedSendTimes.first() + BUDGET_WINDOW_MS)
-            }
-
-            // Reserving a future timestamp rather than "now" is what makes concurrent callers stack
-            // correctly instead of all seeing the same free slot.
-            nextEarliestSendAtMs = sendAt + MIN_REQUEST_SPACING_MS
-            reservedSendTimes.addLast(sendAt)
-            sendAt - now
-        }
-        if (waitMs > 0L) {
-            log.d { "AniList budget reached; holding request for ${waitMs}ms" }
-            delay(waitMs)
-        }
-    }
-
-    /** Pauses every pending request, not just this one. */
-    private fun applySharedCooldown(waitMs: Long) {
-        val until = nowMs() + waitMs
-        while (true) {
-            val current = cooldownUntilMsRef.value
-            if (current >= until) return
-            if (cooldownUntilMsRef.compareAndSet(current, until)) {
-                _rateLimitUntilMs.value = until
-                return
-            }
-        }
-    }
-
     private fun nowMs(): Long = EpisodeReleaseDatePlatform.nowEpochMs()
+
+    private class InflightQuery(val deferred: Deferred<JsonObject>, var waiters: Int = 0)
 
     private data class CachedResponse(val data: JsonObject, val storedAtMs: Long)
 }

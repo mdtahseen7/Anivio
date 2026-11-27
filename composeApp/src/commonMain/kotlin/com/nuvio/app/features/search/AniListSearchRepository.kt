@@ -4,7 +4,6 @@ import co.touchlab.kermit.Logger
 import com.nuvio.app.features.anime.PublicAnimeSource
 import com.nuvio.app.features.anilist.ANILIST_ADDON_ID
 import com.nuvio.app.features.anilist.ANILIST_SEARCH_MOVIE_TYPE
-import com.nuvio.app.features.anilist.ANILIST_SEARCH_SERIES_TYPE
 import com.nuvio.app.features.anilist.AniListCatalogSource
 import com.nuvio.app.features.catalog.CatalogPage
 import com.nuvio.app.features.catalog.CatalogTarget
@@ -18,13 +17,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.anilist_row_movies
 import nuvio.composeapp.generated.resources.anilist_source_name
@@ -37,8 +34,7 @@ private const val SEARCH_PER_PAGE = 30
 /**
  * Text search backed by AniList instead of installed addons.
  *
- * Series and films are fetched concurrently and published as two rows, which keeps the existing
- * row-based search layout intact while making the results anime-first. Both rows carry a paginating
+ * Series and movies share one AniList request and keep separate rows. Both rows carry a paginating
  * [CatalogTarget.AniList] so "see all" continues through AniList rather than dead-ending.
  */
 object AniListSearchRepository {
@@ -69,16 +65,11 @@ object AniListSearchRepository {
 
         activeJob = scope.launch {
             try {
-                val sections = coroutineScope {
-                    val series = async {
-                        fetchSection(normalizedQuery, ANILIST_SEARCH_SERIES_TYPE, forceRefresh)
-                    }
-                    val movies = async {
-                        fetchSection(normalizedQuery, ANILIST_SEARCH_MOVIE_TYPE, forceRefresh)
-                    }
-                    listOfNotNull(series.await(), movies.await())
+                val pages = PublicAnimeSource.searchAnime(normalizedQuery, SEARCH_PER_PAGE, forceRefresh)
+                val sections = pages.mapNotNull { (type, page) ->
+                    page.withUnreleasedFilter().toSection(normalizedQuery, type)
                 }
-
+                ensureActive()
                 _uiState.value = SearchUiState(
                     isLoading = false,
                     sections = sections,
@@ -104,35 +95,23 @@ object AniListSearchRepository {
         _uiState.value = SearchUiState()
     }
 
-    private suspend fun fetchSection(
-        query: String,
-        contentType: String,
-        forceRefresh: Boolean,
-    ): HomeCatalogSection? {
-        val page = PublicAnimeSource.catalog(
-            catalogId = contentType,
-            contentType = contentType,
-            page = 1,
-            maxItems = SEARCH_PER_PAGE,
-            forceRefresh = forceRefresh,
-            searchQuery = query,
-        ).withUnreleasedFilter()
-
-        if (page.items.isEmpty()) return null
+    private suspend fun CatalogPage.toSection(query: String, contentType: String): HomeCatalogSection? {
+        if (items.isEmpty()) return null
+        val sourceName = getString(Res.string.anilist_source_name)
 
         return HomeCatalogSection(
             key = "$ANILIST_ADDON_ID:search:$contentType:${query.lowercase()}",
-            title = runBlocking { getString(contentType.searchSectionTitle()) },
-            subtitle = runBlocking { getString(Res.string.anilist_source_name) },
-            addonName = runBlocking { getString(Res.string.anilist_source_name) },
+            title = getString(contentType.searchSectionTitle()),
+            subtitle = sourceName,
+            addonName = sourceName,
             target = CatalogTarget.AniList(
                 catalogId = contentType,
                 contentType = contentType,
                 searchQuery = query,
             ),
-            items = page.items,
-            availableItemCount = page.items.size,
-            hasMore = page.nextSkip != null,
+            items = items,
+            availableItemCount = items.size,
+            hasMore = nextSkip != null,
         )
     }
 

@@ -6,11 +6,18 @@ import com.nuvio.app.core.storage.ProfileScopedKey
 
 internal actual object AniListCacheStorage {
     private const val preferencesName = "nuvio_anilist_cache"
+    private const val cooldownKey = "request_cooldown_until"
 
     private var preferences: SharedPreferences? = null
 
     fun initialize(context: Context) {
         preferences = context.getSharedPreferences(preferencesName, Context.MODE_PRIVATE)
+    }
+
+    actual fun loadCooldown(): Long = preferences?.getLong(cooldownKey, 0L) ?: 0L
+
+    actual fun saveCooldown(untilEpochMs: Long) {
+        preferences?.edit()?.putLong(cooldownKey, untilEpochMs)?.apply()
     }
 
     actual fun loadPayload(key: String): String? =
