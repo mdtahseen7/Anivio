@@ -45,6 +45,22 @@ object AnivioClient {
         return cached("media:$anilistId", forceRefresh) { requestMedia(anilistId) }
     }
 
+    internal suspend fun previewArtwork(ids: List<Int>): Map<Int, AnivioMedia> {
+        val batches = ids.filter { it > 0 }.distinct().sorted().chunked(MAX_LIST_ITEMS)
+        return buildMap {
+            for (batch in batches) {
+                val media = cached("preview-artwork:${batch.joinToString(",")}", forceRefresh = false) {
+                    graphQl<PageData>(PREVIEW_ARTWORK_QUERY, buildJsonObject {
+                        put("ids", buildJsonArray { batch.forEach { add(JsonPrimitive(it)) } })
+                        put("size", batch.size)
+                    })?.media.orEmpty()
+                }
+                media.forEach { put(it.id, it) }
+            }
+        }
+    }
+
+
     /** Alias for future fallback providers that want an explicit core-detail name. */
     suspend fun mediaDetailsByAniListId(anilistId: Int, forceRefresh: Boolean = false): AnivioMedia? =
         mediaByAniListId(anilistId, forceRefresh)
@@ -304,6 +320,18 @@ object AnivioClient {
     private const val LIST_FIELDS = """
         id idMal title { romaji english native } type format status seasonYear averageScore episodes
         coverImage { large medium color }
+    """
+
+    private const val PREVIEW_ARTWORK_QUERY = """
+        query PreviewArtwork(${"$"}ids: [Int!]!, ${"$"}size: Int!) {
+          Page(page: 1, perPage: ${"$"}size) {
+            media(id_in: ${"$"}ids) {
+              id countryOfOrigin format duration
+              coverImage { extraLarge large medium color }
+              images { id url small medium large type source }
+            }
+          }
+        }
     """
 
     private const val MEDIA_QUERY = """

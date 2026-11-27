@@ -53,7 +53,6 @@ object HomeRepository {
     val reloadGeneration: StateFlow<Int> = _reloadGeneration.asStateFlow()
 
     private var activeJob: Job? = null
-    private var mangaWarmJob: Job? = null
     private var activeRequestKey: String? = null
     private var currentRequestKey: String? = null
     private var currentDefinitions: List<HomeCatalogDefinition> = emptyList()
@@ -208,62 +207,6 @@ object HomeRepository {
                 requestKey = requestKey,
             )
             persistCache()
-            if (ContentModeRepository.mode.value == ContentMode.Anime) {
-                prefetchMangaRows(activeAddons)
-            }
-        }
-    }
-
-    /**
-     * Background-warms the manga home rows while the user browses anime, so the first
-     * Anime → Manga toggle paints instantly instead of paying a cold fetch plus a
-     * hero-artwork storm. Never touches [_uiState], jobs or request keys: it only fills
-     * [cachedSections], the hero-artwork cache and the disk cache. No-op once warm.
-     */
-    fun prefetchMangaRows(addons: List<ManagedAddon>) {
-        if (ContentModeRepository.mode.value != ContentMode.Anime) return
-        val mangaDefinitions = buildAllHomeCatalogDefinitions(addons.enabledAddons(), ContentMode.Manga)
-        val missing = mangaDefinitions.filter { !cachedSections.containsKey(it.cacheKey) }
-        if (missing.isEmpty()) return
-        mangaWarmJob?.cancel()
-        mangaWarmJob = scope.launch {
-            val pages = try {
-                AniListCatalogSource.resolveHomeRows(
-                    missing.map(HomeCatalogDefinition::catalogId),
-                    HOME_CATALOG_PREVIEW_FETCH_LIMIT,
-                    false,
-                )
-            } catch (_: Throwable) {
-                return@launch
-            }
-            val warmedItems = mutableListOf<MetaPreview>()
-            missing.forEach { definition ->
-                val page = pages[definition.catalogId] ?: return@forEach
-                if (page.items.isEmpty()) return@forEach
-                warmedItems += page.items
-                cachedSections = cachedSections + (definition.cacheKey to HomeCatalogSection(
-                    key = definition.key,
-                    title = definition.defaultTitle,
-                    subtitle = definition.addonName,
-                    addonName = definition.addonName,
-                    target = CatalogTarget.AniList(
-                        catalogId = definition.catalogId,
-                        contentType = definition.type,
-                        supportsPagination = definition.supportsPagination,
-                    ),
-                    items = page.items,
-                    availableItemCount = page.rawItemCount.takeIf { it > 0 } ?: page.items.size,
-                    hasMore = page.items.isNotEmpty() && definition.supportsPagination && page.nextSkip != null,
-                ))
-            }
-            if (warmedItems.isEmpty()) return@launch
-            // Move the toggle-time artwork storm earlier. Misses are only timestamped, so a
-            // failed lookup is retried on the next launch instead of being cached for a week.
-            try {
-                AniListHeroArtwork.resolve(warmedItems)
-            } catch (_: Throwable) {
-            }
-            persistCache()
         }
     }
 
@@ -283,8 +226,6 @@ object HomeRepository {
     fun clear() {
         activeJob?.cancel()
         activeJob = null
-        mangaWarmJob?.cancel()
-        mangaWarmJob = null
         activeRequestKey = null
         currentRequestKey = null
         currentDefinitions = emptyList()

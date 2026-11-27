@@ -1,13 +1,18 @@
 package com.nuvio.app.features.anime
 
 import com.nuvio.app.core.anilist.AniListUnavailableException
+import com.nuvio.app.features.anilist.ANILIST_SEARCH_MOVIE_TYPE
+import com.nuvio.app.features.anilist.ANILIST_SEARCH_SERIES_TYPE
 import com.nuvio.app.features.anilist.AniListCatalogSource
 import com.nuvio.app.features.anilist.AniListMetaSource
+import com.nuvio.app.features.anilist.AniListSearchSource
 import com.nuvio.app.features.anilist.isAniListMangaId
 import com.nuvio.app.features.anivio.AnivioMetaSource
 import com.nuvio.app.features.anivio.AnivioPublicAnimeProvider
 import com.nuvio.app.features.catalog.CatalogPage
 import com.nuvio.app.features.details.MetaDetails
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 
 /** Provider-neutral entry point used by public anime screens and repositories. */
 object PublicAnimeSource {
@@ -29,18 +34,36 @@ object PublicAnimeSource {
                 searchQuery = searchQuery,
             )
         },
-        fallback = { provider ->
-            AnivioPublicAnimeProvider.catalog(
-                catalogId = catalogId,
-                contentType = contentType,
-                page = page,
-                maxItems = maxItems,
-                searchQuery = searchQuery,
-                forceRefresh = forceRefresh,
-            ) ?: provider?.catalog(catalogId, contentType, page, maxItems, searchQuery, forceRefresh)
-                ?: throw AniListUnavailableException(503)
-        },
+        fallback = { fallbackCatalog(it, catalogId, contentType, page, maxItems, searchQuery, forceRefresh) },
     )
+
+    internal suspend fun searchAnime(query: String, perPage: Int, forceRefresh: Boolean): Map<String, CatalogPage> {
+        val types = listOf(ANILIST_SEARCH_SERIES_TYPE, ANILIST_SEARCH_MOVIE_TYPE)
+        return PublicAnimeRouter.routeWithOptionalFallback(
+            forceProbe = forceRefresh,
+            aniList = { AniListSearchSource.searchPages(query, types, 1, perPage, forceRefresh) },
+            fallback = { provider ->
+                coroutineScope {
+                    types.associateWith { type ->
+                        async { fallbackCatalog(provider, type, type, 1, perPage, query, forceRefresh) }
+                    }.mapValues { (_, page) -> page.await() }
+                }
+            },
+        )
+    }
+
+    private suspend fun fallbackCatalog(
+        provider: PublicAnimeFallbackProvider?,
+        catalogId: String,
+        contentType: String,
+        page: Int,
+        maxItems: Int?,
+        searchQuery: String?,
+        forceRefresh: Boolean,
+    ): CatalogPage =
+        AnivioPublicAnimeProvider.catalog(catalogId, contentType, page, maxItems, searchQuery, forceRefresh)
+            ?: provider?.catalog(catalogId, contentType, page, maxItems, searchQuery, forceRefresh)
+            ?: throw AniListUnavailableException(503)
 
     suspend fun homeRows(
         catalogIds: List<String>,

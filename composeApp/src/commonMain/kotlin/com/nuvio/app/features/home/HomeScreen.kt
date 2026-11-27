@@ -1204,6 +1204,7 @@ fun HomeScreen(
             val bellNotificationsUiState by AniListNotificationsRepository.uiState
                 .collectAsStateWithLifecycle()
             LaunchedEffect(Unit) {
+                delay(2_000L)
                 AniListNotificationsRepository.refresh()
             }
             Box(modifier = topBarModifier) {

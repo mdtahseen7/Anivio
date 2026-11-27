@@ -68,12 +68,13 @@ fun AniListRateLimitNotifier(
 
     val remainingMs = (untilMs - nowMs).coerceAtLeast(0L)
     val isActive = remainingMs > 0L && untilMs != 0L
-    val remainingSec = ((remainingMs + 999) / 1000).toInt().coerceAtLeast(0)
+    val remainingSec = (remainingMs / 1_000L + if (remainingMs % 1_000L == 0L) 0L else 1L)
+        .coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
 
     // capture total duration when a new rate-limit starts or extends
     LaunchedEffect(untilMs, isActive) {
         if (isActive && untilMs != lastUntilMs) {
-            val wait = remainingMs.coerceAtMost(15_000L).coerceAtLeast(1000L)
+            val wait = remainingMs.coerceAtLeast(1_000L)
             // keep the max seen for this session so progress doesn't jump
             if (wait > totalDurationMs) totalDurationMs = wait
             lastUntilMs = untilMs
